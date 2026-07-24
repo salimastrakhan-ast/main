@@ -1,0 +1,1333 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Ревью кода и дизайна Khadamni (salimastrakhan-ast/khedma @ 1d95107): 31 находка по фронтенду, бэкенду, безопасности и архитектуре.">
+<title>Khadamni · Ревью кода и дизайна</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; padding: 0; }
+img, svg { display: block; max-width: 100%; }
+table { border-collapse: collapse; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+/* ─────────────────────────────────────────────────────────────
+   Палитра взята из самого проекта (app/src/theme.ts «Souk Modern»):
+   глубокий зелёный Алжира, терракота, кремовый, золото знака.
+   Своих цветов не вводим — ревью говорит на языке продукта.
+   ───────────────────────────────────────────────────────────── */
+:root {
+  --bg:        #F6EFE0;
+  --surface:   #FFFFFF;
+  --surface-2: #F1E7D6;
+  --ink:       #221A12;
+  --ink-2:     #675844;
+  --ink-3:     #6E5E49;
+  --line:      #E9DEC8;
+  --line-2:    #F2E9D7;
+  --accent:    #0B4436;
+  --accent-soft:#D9E7DF;
+  --gold:      #D4B258;
+
+  /* Семантика важности — отдельно от акцента */
+  --sev-crit:  #C6402E;
+  --sev-high:  #C6552E;
+  --sev-med:   #B08A2E;
+  --sev-low:   #6E5E49;
+  --sev-good:  #1A7D45;
+
+  --crit-bg:   #FBE7E3;
+  --high-bg:   #F9E8DF;
+  --med-bg:    #F7EFD9;
+  --low-bg:    #F1E7D6;
+  --good-bg:   #E4F5EA;
+
+  --shadow-sm: 0 3px 10px rgba(43,32,19,.06);
+  --shadow-md: 0 8px 20px rgba(43,32,19,.10);
+
+  --display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --body:    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono:    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --arabic:  "Noto Naskh Arabic", "Geeza Pro", "Segoe UI", serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:        #16120D;
+    --surface:   #231C15;
+    --surface-2: #2B2219;
+    --ink:       #F5EFE3;
+    --ink-2:     #C9BBA4;
+    --ink-3:     #9C8B72;
+    --line:      #3A3024;
+    --line-2:    #332A20;
+    --accent:    #1FA968;
+    --accent-soft:rgba(31,169,104,.16);
+
+    --sev-crit:  #E2685A;
+    --sev-high:  #E77B4E;
+    --sev-med:   #D4B258;
+    --sev-low:   #9C8B72;
+    --sev-good:  #4CC583;
+
+    --crit-bg:   #3A211D;
+    --high-bg:   #33211A;
+    --med-bg:    #302818;
+    --low-bg:    #2B2219;
+    --good-bg:   #173325;
+
+    --shadow-sm: 0 3px 10px rgba(0,0,0,.36);
+    --shadow-md: 0 8px 20px rgba(0,0,0,.44);
+  }
+}
+:root[data-theme="dark"] {
+  --bg:#16120D; --surface:#231C15; --surface-2:#2B2219;
+  --ink:#F5EFE3; --ink-2:#C9BBA4; --ink-3:#9C8B72;
+  --line:#3A3024; --line-2:#332A20;
+  --accent:#1FA968; --accent-soft:rgba(31,169,104,.16);
+  --sev-crit:#E2685A; --sev-high:#E77B4E; --sev-med:#D4B258; --sev-low:#9C8B72; --sev-good:#4CC583;
+  --crit-bg:#3A211D; --high-bg:#33211A; --med-bg:#302818; --low-bg:#2B2219; --good-bg:#173325;
+  --shadow-sm:0 3px 10px rgba(0,0,0,.36); --shadow-md:0 8px 20px rgba(0,0,0,.44);
+}
+:root[data-theme="light"] {
+  --bg:#F6EFE0; --surface:#FFFFFF; --surface-2:#F1E7D6;
+  --ink:#221A12; --ink-2:#675844; --ink-3:#6E5E49;
+  --line:#E9DEC8; --line-2:#F2E9D7;
+  --accent:#0B4436; --accent-soft:#D9E7DF;
+  --sev-crit:#C6402E; --sev-high:#C6552E; --sev-med:#B08A2E; --sev-low:#6E5E49; --sev-good:#1A7D45;
+  --crit-bg:#FBE7E3; --high-bg:#F9E8DF; --med-bg:#F7EFD9; --low-bg:#F1E7D6; --good-bg:#E4F5EA;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.55;
+  font-weight: 420;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1100px; margin: 0 auto; padding: 0 24px 96px; }
+
+/* ── Masthead ── */
+.mast { padding: 72px 0 40px; border-bottom: 2px solid var(--ink); }
+.eyebrow {
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  letter-spacing: .16em; text-transform: uppercase; color: var(--ink-3);
+  display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
+}
+.eyebrow .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--gold); }
+h1 {
+  font-family: var(--display);
+  font-size: clamp(34px, 5vw, 58px); line-height: 1.03;
+  font-weight: 800; letter-spacing: -.032em;
+  margin: 22px 0 0; max-width: 20ch; text-wrap: balance;
+}
+h1 em { font-style: normal; color: var(--accent); }
+.lede {
+  margin-top: 24px; max-width: 62ch;
+  font-size: 19px; line-height: 1.62; color: var(--ink-2);
+}
+.lede strong { color: var(--ink); font-weight: 650; }
+
+/* ── Stat band ── */
+.stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 1px; background: var(--line); border: 1px solid var(--line);
+  margin: 40px 0 0; border-radius: 4px; overflow: hidden;
+}
+.stat { background: var(--surface); padding: 18px 16px; }
+.stat .n {
+  font-family: var(--display); font-size: 34px; font-weight: 800;
+  letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums;
+}
+.stat .l {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-top: 8px;
+}
+.n.crit { color: var(--sev-crit); } .n.high { color: var(--sev-high); }
+.n.med { color: var(--sev-med); } .n.low { color: var(--sev-low); }
+
+/* ── Sections ── */
+section { margin-top: 76px; }
+.sec-head { display: flex; align-items: baseline; gap: 16px; border-bottom: 1px solid var(--line); padding-bottom: 14px; }
+.sec-num {
+  font-family: var(--mono); font-size: 12px; font-weight: 600;
+  color: var(--gold); letter-spacing: .1em; flex: none;
+}
+h2 {
+  font-family: var(--display); font-size: clamp(25px, 3vw, 34px);
+  font-weight: 780; letter-spacing: -.025em; line-height: 1.1; margin: 0;
+}
+.sec-note { margin: 18px 0 0; max-width: 66ch; color: var(--ink-2); }
+h3 {
+  font-family: var(--display); font-size: 20px; font-weight: 720;
+  letter-spacing: -.015em; margin: 44px 0 0; text-wrap: balance;
+}
+h3 .sev { vertical-align: 3px; margin-inline-end: 10px; }
+p { margin: 12px 0 0; max-width: 68ch; }
+ul { margin: 12px 0 0; padding-inline-start: 20px; max-width: 68ch; }
+li { margin-top: 7px; }
+code {
+  font-family: var(--mono); font-size: .855em;
+  background: var(--surface-2); color: var(--ink);
+  padding: .12em .38em; border-radius: 3px;
+  border: 1px solid var(--line-2); word-break: break-word;
+}
+
+/* ── Severity chip ── */
+.sev {
+  display: inline-block; font-family: var(--mono); font-size: 10px;
+  font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 3px; white-space: nowrap;
+}
+.sev.crit { background: var(--crit-bg); color: var(--sev-crit); }
+.sev.high { background: var(--high-bg); color: var(--sev-high); }
+.sev.med  { background: var(--med-bg);  color: var(--sev-med); }
+.sev.low  { background: var(--low-bg);  color: var(--sev-low); }
+.sev.good { background: var(--good-bg); color: var(--sev-good); }
+
+/* ── Finding card ── */
+.find {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 6px; padding: 22px 24px; margin-top: 18px;
+  box-shadow: var(--shadow-sm); position: relative;
+  border-inline-start: 3px solid var(--line);
+}
+.find.crit { border-inline-start-color: var(--sev-crit); }
+.find.high { border-inline-start-color: var(--sev-high); }
+.find.med  { border-inline-start-color: var(--sev-med); }
+.find.low  { border-inline-start-color: var(--sev-low); }
+.find-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.find-id {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  color: var(--ink-3); letter-spacing: .06em;
+}
+.find h4 {
+  font-family: var(--display); font-size: 17.5px; font-weight: 700;
+  letter-spacing: -.01em; margin: 10px 0 0; line-height: 1.32; text-wrap: balance;
+}
+.find p { font-size: 15.2px; margin-top: 10px; }
+.loc {
+  font-family: var(--mono); font-size: 12px; color: var(--ink-3);
+  margin-top: 12px; display: block; word-break: break-all;
+}
+.fix {
+  margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line);
+  font-size: 15px;
+}
+.fix b {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--sev-good);
+  display: block; margin-bottom: 6px;
+}
+
+/* ── Demo frame ── */
+.demo {
+  margin-top: 22px; border: 1px solid var(--line); border-radius: 6px;
+  overflow: hidden; background: var(--surface);
+}
+.demo-head {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3);
+  padding: 11px 16px; border-bottom: 1px solid var(--line); background: var(--surface-2);
+}
+.demo-body { padding: 24px 16px; display: flex; gap: 28px; flex-wrap: wrap; justify-content: center; }
+.demo-col { flex: 1 1 240px; max-width: 300px; }
+.demo-cap {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+  letter-spacing: .07em; text-transform: uppercase;
+  text-align: center; margin-top: 14px; color: var(--ink-3);
+}
+.demo-cap.bad { color: var(--sev-crit); }
+.demo-cap.ok  { color: var(--sev-good); }
+
+/* ── Phone mock (фиксированные цвета: это специмен тёмной темы приложения) ── */
+.phone {
+  border-radius: 22px; padding: 16px 12px 20px;
+  border: 1px solid rgba(255,255,255,.09);
+}
+.phone.dark  { background: #16120D; }
+.phone.light { background: #F6EFE0; border-color: rgba(0,0,0,.09); }
+.tile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tile {
+  height: 82px; border-radius: 20px; padding: 11px;
+  position: relative; overflow: hidden;
+  display: flex; align-items: flex-start;
+}
+.tile span {
+  font-size: 12px; font-weight: 800; line-height: 1.35; max-width: 66%;
+}
+.tile .ico { position: absolute; bottom: -3px; right: -5px; opacity: .95; }
+/* Как сейчас: светлая бежевая плитка в тёмной теме */
+.tile.now  { background: #CBBBA0; border: 1px solid rgba(0,0,0,.14); }
+.tile.now span { color: #2A2118; }
+/* Предложение: поверхность из палитры тёмной темы + вектор в акценте */
+.tile.next { background: #2B2219; border: 1px solid #3A3024; }
+.tile.next span { color: #F5EFE3; }
+
+/* ── Type scale demo ── */
+.scale-tbl { width: 100%; border-collapse: collapse; font-size: 15px; }
+.scale-tbl th {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3);
+  text-align: start; padding: 0 14px 10px 0; border-bottom: 1px solid var(--line);
+}
+.scale-tbl td { padding: 13px 14px 13px 0; border-bottom: 1px solid var(--line-2); vertical-align: baseline; }
+.scale-tbl td.k { font-family: var(--mono); font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+.scale-tbl td.d { font-family: var(--mono); font-size: 12.5px; color: var(--sev-crit); font-weight: 600; white-space: nowrap; }
+.spec { font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
+
+/* ── Listing card demo (фиксированные цвета — специмен светлой темы) ── */
+.lc {
+  background: #FFFFFF; border: 1px solid #E9DEC8; border-radius: 26px;
+  overflow: hidden; box-shadow: 0 3px 10px rgba(43,32,19,.06);
+}
+.lc-photo {
+  height: 118px; background: linear-gradient(135deg, #E8DCC6 0%, #D6C3A4 55%, #C9B492 100%);
+  position: relative;
+}
+.lc-badge {
+  position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,.45);
+  color: #fff; border-radius: 999px; padding: 3px 8px; font-weight: 800; letter-spacing: .2px;
+}
+.lc-heart { position: absolute; top: 8px; right: 8px; }
+.lc-body { padding: 8px 8px 12px; }
+.lc-title { color: #221A12; font-weight: 800; line-height: 1.27; }
+.lc-price { color: #0B4436; font-weight: 800; letter-spacing: -.02em; }
+.lc-meta  { color: #6E5E49; }
+
+/* ── Swatch ── */
+.sw-row { display: flex; gap: 14px; flex-wrap: wrap; }
+.sw { flex: 1 1 150px; max-width: 200px; }
+.sw-chip {
+  height: 76px; border-radius: 6px; display: flex;
+  align-items: center; justify-content: center;
+  font-weight: 800; font-size: 20px; border: 1px solid rgba(0,0,0,.1);
+}
+.sw-meta { font-family: var(--mono); font-size: 11px; margin-top: 8px; color: var(--ink-3); line-height: 1.6; }
+.sw-meta b { color: var(--ink); }
+.ratio-bad  { color: var(--sev-crit); font-weight: 700; }
+.ratio-ok   { color: var(--sev-good); font-weight: 700; }
+
+/* ── Compact table ── */
+.tbl-scroll { overflow-x: auto; margin-top: 20px; -webkit-overflow-scrolling: touch; }
+table.mini { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 14.5px; }
+table.mini th {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3);
+  text-align: start; padding: 0 14px 10px 0; border-bottom: 1px solid var(--ink);
+}
+table.mini td { padding: 13px 14px 13px 0; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+table.mini td:first-child { white-space: nowrap; }
+table.mini code { font-size: 12px; }
+
+/* ── Roadmap ── */
+.wave {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+  padding: 24px 26px; margin-top: 18px; box-shadow: var(--shadow-sm);
+}
+.wave-top { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.wave-n {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--gold);
+}
+.wave h3 { margin: 0; font-size: 21px; }
+.wave .why { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); margin-top: 4px; }
+.wave ol { margin: 16px 0 0; padding-inline-start: 22px; }
+.wave li { margin-top: 10px; }
+.wave li b { font-weight: 650; }
+
+/* ── Good-news list ── */
+.props { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-top: 22px; }
+.prop {
+  background: var(--surface); border: 1px solid var(--line);
+  border-inline-start: 3px solid var(--sev-good);
+  border-radius: 6px; padding: 18px 20px;
+}
+.prop h4 { font-family: var(--display); font-size: 15.5px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
+.prop p { font-size: 14.3px; margin-top: 7px; color: var(--ink-2); }
+
+/* ── Оглавление ── */
+.toc {
+  margin-top: 40px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface); overflow: hidden;
+}
+.toc-head {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3);
+  padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--surface-2);
+}
+.toc ol { list-style: none; margin: 0; padding: 8px 0; }
+.toc li { margin: 0; }
+.toc a {
+  display: flex; gap: 16px; align-items: baseline;
+  padding: 9px 20px; color: inherit; text-decoration: none;
+  border-inline-start: 3px solid transparent;
+}
+.toc a:hover, .toc a:focus-visible { background: var(--surface-2); border-inline-start-color: var(--gold); }
+.toc .tn {
+  font-family: var(--mono); font-size: 11.5px; font-weight: 600;
+  color: var(--gold); flex: none; min-width: 22px;
+}
+.toc .tt { font-weight: 620; letter-spacing: -.01em; flex: 1; }
+.toc .tc { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); flex: none; }
+[id] { scroll-margin-top: 20px; }
+
+hr.rule { border: none; border-top: 1px solid var(--line); margin: 56px 0 0; }
+.foot { margin-top: 40px; font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); line-height: 1.9; }
+
+@media (max-width: 640px) {
+  .mast { padding: 44px 0 32px; }
+  .wrap { padding: 0 18px 64px; }
+  .find { padding: 18px 18px; }
+  .demo-body { gap: 22px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ── Печать / сохранение в PDF ── */
+@page { size: A4; margin: 14mm 12mm; }
+@media print {
+  :root {
+    --bg:#FFFFFF; --surface:#FFFFFF; --surface-2:#F6F1E7;
+    --ink:#1A140E; --ink-2:#4A3E30; --ink-3:#6E5E49;
+    --line:#D8CDB8; --line-2:#EAE2D2;
+    --accent:#0B4436; --accent-soft:#E4EDE8;
+    --sev-crit:#A8331F; --sev-high:#A5461F; --sev-med:#8A6A1C; --sev-low:#5A4C3A; --sev-good:#14663A;
+    --crit-bg:#FBEAE6; --high-bg:#FAEDE4; --med-bg:#F8F2E0; --low-bg:#F4EFE4; --good-bg:#E8F5EC;
+    --shadow-sm:none; --shadow-md:none;
+  }
+  body { font-size: 10.5pt; }
+  .wrap { max-width: none; padding: 0; }
+  .mast { padding-top: 0; }
+  h1 { font-size: 28pt; max-width: none; }
+  section { margin-top: 24pt; }
+  .sec-head, h3, h4 { page-break-after: avoid; }
+  .find, .wave, .prop, .demo { page-break-inside: avoid; box-shadow: none; }
+  .demo-body { gap: 14pt; }
+  table.mini { min-width: 0; font-size: 9pt; }
+  .tbl-scroll { overflow: visible; }
+}
+
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow">
+    <span>Ревью кода и дизайна</span><span class="dot"></span>
+    <span>salimastrakhan-ast/khedma</span><span class="dot"></span>
+    <span>1d95107</span><span class="dot"></span>
+    <span>24.07.2026</span>
+  </div>
+  <h1>Khadamni — это уже не прототип. Но <em>тёмная тема светится</em>, а цена не главная.</h1>
+  <p class="lede">
+    24 000 строк на трёх поверхностях: Expo-приложение, Next.js-сайт, Express + PostgreSQL.
+    Инженерная база <strong>сильно выше среднего</strong> — контрастность посчитана и записана в
+    комментарии, арабская типографика сделана по метрикам шрифта, платёжный вебхук идемпотентен
+    через compare-and-swap. Это работа, к которой стоит относиться серьёзно, поэтому ниже —
+    не общие советы, а <strong>31 конкретная находка</strong> с адресами в коде.
+  </p>
+  <p class="lede">
+    Главное: продукт целится в «Airbnb / Revolut / Linear», а тянут его назад
+    <strong>57 растровых 3D-иконок</strong>. Из них растёт и светящаяся тёмная тема, и вес бандла,
+    и смешение стилей, которое ваш же CLAUDE.md запрещает. Это одна правка с четырьмя
+    последствиями — с неё и начинать.
+  </p>
+
+  <div class="stats">
+    <div class="stat"><div class="n crit">2</div><div class="l">Критично</div></div>
+    <div class="stat"><div class="n high">9</div><div class="l">Высокий</div></div>
+    <div class="stat"><div class="n med">14</div><div class="l">Средний</div></div>
+    <div class="stat"><div class="n low">6</div><div class="l">Низкий</div></div>
+    <div class="stat"><div class="n">13</div><div class="l">Из них дизайн</div></div>
+    <div class="stat"><div class="n">3,7 МБ</div><div class="l">Иконки-PNG</div></div>
+  </div>
+
+  <nav class="toc" aria-label="Содержание">
+    <div class="toc-head">Содержание</div>
+    <ol>
+      <li><a href="#good"><span class="tn">00</span><span class="tt">Что не надо трогать</span><span class="tc">4 сильных места</span></a></li>
+      <li><a href="#design"><span class="tn">01</span><span class="tt">Дизайн-система</span><span class="tc">13 находок</span></a></li>
+      <li><a href="#arch"><span class="tn">02</span><span class="tt">Архитектура и производительность</span><span class="tc">8 находок</span></a></li>
+      <li><a href="#security"><span class="tn">03</span><span class="tt">Безопасность</span><span class="tc">11 находок</span></a></li>
+      <li><a href="#process"><span class="tn">04</span><span class="tt">Процесс и CI</span><span class="tc">3 находки</span></a></li>
+      <li><a href="#plan"><span class="tn">05</span><span class="tt">С чего начинать</span><span class="tc">3 волны</span></a></li>
+    </ol>
+  </nav>
+</header>
+
+<!-- ══════════════════ 0. ЧТО СДЕЛАНО ХОРОШО ══════════════════ -->
+<section id="good">
+  <div class="sec-head">
+    <span class="sec-num">00</span>
+    <h2>Сначала — что не надо трогать</h2>
+  </div>
+  <p class="sec-note">
+    Это не вежливость: ниже я предлагаю переделки, и важно очертить, где переделывать нечего.
+    Четыре вещи в проекте сделаны на уровне, который я редко вижу в продакшене.
+  </p>
+  <div class="props">
+    <div class="prop">
+      <h4>Арабская типографика по метрикам шрифта</h4>
+      <p>Оптический подъём Cairo выведен из TTF (<code>ascent−descent−xHeight)/2 = 0.116·кегль</code>),
+      минимальный интерлиньяж 1.6 поднимается только вверх, трекинг обнуляется для вязи.
+      Так почти никто не делает.</p>
+    </div>
+    <div class="prop">
+      <h4>Контраст посчитан, а не «на глаз»</h4>
+      <p>Разделение <code>accent</code> / <code>accentFill</code> существует именно потому, что белый
+      на <code>#1FA968</code> даёт 3.03:1 — и это записано в комментарии рядом со значением.</p>
+    </div>
+    <div class="prop">
+      <h4>Платежи устойчивы к гонкам</h4>
+      <p>CAS <code>pending→paid</code> плюс отдельный флаг <code>promo_applied</code>, который
+      различает «уже применено» и «упало между двумя операциями». Сумма и валюта сверяются повторно.</p>
+    </div>
+    <div class="prop">
+      <h4>Приватность контактов продумана</h4>
+      <p>Телефон не отдаётся в ленте, только точечно — под лимитом и с журналом раскрытий.
+      Резюме — по подписанной ссылке на 5 минут, с отдельным секретом.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ 1. ДИЗАЙН ══════════════════ -->
+<section id="design">
+  <div class="sec-head">
+    <span class="sec-num">01</span>
+    <h2>Дизайн-система</h2>
+  </div>
+  <p class="sec-note">
+    Токены есть, они осмысленные и продублированы в веб с тестом на расхождение. Проблема не в
+    отсутствии системы, а в том, что <strong>рядом с ней живёт вторая</strong> — старая шкала,
+    растровые иконки и хардкод-значения. Ниже — по одной демонстрации на каждую.
+  </p>
+
+  <!-- D1 -->
+  <h3><span class="sev crit">Критично</span>Тёмная тема: главный экран — сетка светящихся плиток</h3>
+  <p>
+    В тёмной теме <code>tileBg = #CBBBA0</code> — светлый беж. Им залиты плитки категорий на главной
+    (26 или 30 штук) и переключатель «Вакансии / Услуги». На фоне <code>#16120D</code> это не тёмная
+    тема, а светлая сетка на чёрном: экран физически светит в темноте и ломает ощущение премиума,
+    ради которого всё остальное и делалось.
+  </p>
+  <p>
+    Причина не в палитре. Причина в том, что иконки — <strong>растровые PNG с глянцевыми блёстками,
+    нарисованные под светлый фон</strong>. Плитку пришлось оставить светлой, чтобы они были видны.
+    Токен здесь — симптом, а не болезнь.
+  </p>
+
+  <div class="demo">
+    <div class="demo-head">Главная в тёмной теме · слева как сейчас, справа предложение</div>
+    <div class="demo-body">
+      <div class="demo-col">
+        <div class="phone dark">
+          <div class="tile-grid">
+            <div class="tile now"><span>Ремонт авто</span>
+              <svg class="ico" width="56" height="56" viewBox="0 0 24 24" fill="none"><rect x="2" y="11" width="20" height="6" rx="2" fill="#4A7FB5"/><path d="M5 11l2.5-4h9L19 11" fill="#6FA3D6"/><circle cx="7" cy="18" r="2.4" fill="#2A2118"/><circle cx="17" cy="18" r="2.4" fill="#2A2118"/><circle cx="7" cy="18" r="1" fill="#9C8B72"/><circle cx="17" cy="18" r="1" fill="#9C8B72"/></svg>
+            </div>
+            <div class="tile now"><span>Уборка</span>
+              <svg class="ico" width="56" height="56" viewBox="0 0 24 24" fill="none"><rect x="5" y="9" width="7" height="11" rx="1.6" fill="#5BBE86"/><rect x="13" y="12" width="5" height="8" rx="1.4" fill="#E8C86A"/><rect x="7" y="4" width="3" height="5" rx="1.2" fill="#8FD4AE"/></svg>
+            </div>
+            <div class="tile now"><span>Стройка</span>
+              <svg class="ico" width="56" height="56" viewBox="0 0 24 24" fill="none"><path d="M4 14h16v6H4z" fill="#C06B3E"/><path d="M6 8h12v6H6z" fill="#D98A55"/><path d="M12 4l7 4H5z" fill="#E8B47A"/></svg>
+            </div>
+            <div class="tile now"><span>Красота</span>
+              <svg class="ico" width="56" height="56" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.4" fill="#E28FA8"/><circle cx="15" cy="14" r="3.4" fill="#F0B3C4"/><rect x="11" y="4" width="2" height="14" rx="1" fill="#B0708A"/></svg>
+            </div>
+          </div>
+        </div>
+        <div class="demo-cap bad">Плитка #CBBBA0 на фоне #16120D</div>
+      </div>
+      <div class="demo-col">
+        <div class="phone dark">
+          <div class="tile-grid">
+            <div class="tile next"><span>Ремонт авто</span>
+              <svg class="ico" width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#1FA968" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"><path d="M3 12.5h18v4.5H3z"/><path d="M5.5 12.5 8 7.5h8l2.5 5"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/></svg>
+            </div>
+            <div class="tile next"><span>Уборка</span>
+              <svg class="ico" width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#1FA968" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"><rect x="5.5" y="9.5" width="7" height="10" rx="1.6"/><rect x="13.5" y="12.5" width="5" height="7" rx="1.4"/><path d="M9 9.5V5"/></svg>
+            </div>
+            <div class="tile next"><span>Стройка</span>
+              <svg class="ico" width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#1FA968" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"><path d="M4.5 14.5h15v5h-15z"/><path d="M6.5 9.5h11v5h-11z"/><path d="M12 5.5l6.5 4h-13z"/></svg>
+            </div>
+            <div class="tile next"><span>Красота</span>
+              <svg class="ico" width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#1FA968" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"><circle cx="9" cy="8.5" r="3"/><circle cx="15" cy="14" r="3"/><path d="M12 5v13"/></svg>
+            </div>
+          </div>
+        </div>
+        <div class="demo-cap ok">Поверхность #2B2219 + вектор в accent</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="find crit">
+    <div class="find-top"><span class="find-id">D1</span><span class="sev crit">Критично</span></div>
+    <h4>Растровые иконки диктуют палитру, а не наоборот</h4>
+    <p>
+      57 PNG в <code>app/assets/icons/{job,service}/</code> — 3,7 МБ, статические
+      <code>require()</code> в двух словарях по 30 строк. Они не тонируются темой, не зеркалятся
+      под RTL, не масштабируются без потери резкости и заставляют держать светлую плитку в тёмной теме.
+    </p>
+    <span class="loc">app/src/theme.ts:72 · app/src/components/CategoryIcon.tsx:18–82 · app/src/screens/MarketHomeScreen.tsx:89</span>
+    <div class="fix">
+      <b>Что сделать</b>
+      Перевести категории на монохромный вектор — Phosphor или Lucide, отрисованные через
+      <code>react-native-svg</code> (он уже в зависимостях и уже используется в <code>Icon.tsx</code>).
+      Одна правка закрывает четыре проблемы: тёмная тема получает нормальную поверхность
+      <code>cardAlt</code>, иконки тонируются <code>accent</code>, зеркалирование под арабский
+      достаётся бесплатно, из бандла уходит 3,7 МБ. Плюс исчезает <code>tileBg/tileLabel/tileHint</code> —
+      четыре токена, существующих только ради растра.
+    </div>
+  </div>
+
+  <!-- D2 -->
+  <h3><span class="sev high">Высокий</span>Два несовместимых набора иконок — и эмодзи внутри одного из них</h3>
+  <p>
+    В проекте одновременно живут <code>Icon.tsx</code> — 40 линейных SVG, нарисованных руками, ровный
+    штрих 2px, сетка 24×24 — и растровый набор категорий. Это ровно то, что ваш CLAUDE.md запрещает
+    строкой «Never mix different icon styles».
+  </p>
+  <p>
+    Хуже, что растровый набор не консистентен <em>внутри себя</em>. По листу категорий видно:
+    часть иконок фотореалистична (автомобиль, стиральная машина), часть — плоский вектор,
+    а «HR» — <strong>буквально системный эмодзи</strong> «силуэты людей», и «Прочие услуги» — три точки.
+    Разная перспектива, разные источники света, разная насыщенность. При требовании
+    «Avoid: emojis» в тех же инструкциях.
+  </p>
+  <div class="find high">
+    <div class="find-top"><span class="find-id">D2</span><span class="sev high">Высокий</span></div>
+    <h4>Иконки категорий не проходят собственный дизайн-регламент</h4>
+    <p>
+      Дополнительно: <code>Icon</code> принимает <code>name: string</code> и при опечатке
+      <code>return null</code> — иконка молча исчезает, ошибки нет ни в типах, ни в рантайме.
+      Дефолтный цвет <code>#10231A</code> — хардкод из прошлой палитры, в токенах его нет.
+    </p>
+    <span class="loc">app/src/components/Icon.tsx:238–257 · CLAUDE.md § Icons And Visual Assets</span>
+    <div class="fix">
+      <b>Что сделать</b>
+      Один набор на всё приложение. <code>name: keyof typeof ICONS</code> вместо
+      <code>string</code> — опечатка станет ошибкой компиляции, а не невидимой иконкой.
+      Дефолтный цвет убрать: пусть <code>color</code> будет обязательным и приходит из темы.
+    </div>
+  </div>
+
+  <!-- D3 -->
+  <h3><span class="sev high">Высокий</span>Две шкалы типографики с одинаковыми именами и разными размерами</h3>
+  <p>
+    <code>theme.ts</code> экспортирует и старую шкалу <code>font</code>, и новую <code>type</code>.
+    Имена совпадают, значения — нет. Разработчик пишет <code>title</code> и получает 17 или 18
+    в зависимости от того, какой импорт попался под руку. По коду приложения: <strong>121 обращение
+    к <code>font.*</code> против 31 к <code>type.*</code></strong> — миграция остановилась на пятой части.
+  </p>
+
+  <div class="demo">
+    <div class="demo-head">Один и тот же токен, два разных кегля</div>
+    <div style="padding: 4px 20px 20px;">
+      <table class="scale-tbl">
+        <thead><tr><th>Токен</th><th>font (121 исп.)</th><th>type (31 исп.)</th><th>Δ</th></tr></thead>
+        <tbody>
+          <tr><td class="k">h1</td>
+              <td><span class="spec" style="font-size:32px">Emplois</span> <span class="k">32px</span></td>
+              <td><span class="spec" style="font-size:26px">Emplois</span> <span class="k">26px</span></td>
+              <td class="d">−6px</td></tr>
+          <tr><td class="k">h2</td>
+              <td><span class="spec" style="font-size:26px">Services</span> <span class="k">26px</span></td>
+              <td><span class="spec" style="font-size:21px">Services</span> <span class="k">21px</span></td>
+              <td class="d">−5px</td></tr>
+          <tr><td class="k">title</td>
+              <td><span class="spec" style="font-size:18px">Mécanicien auto</span> <span class="k">18px</span></td>
+              <td><span class="spec" style="font-size:17px">Mécanicien auto</span> <span class="k">17px</span></td>
+              <td class="d">−1px</td></tr>
+          <tr><td class="k">body</td>
+              <td><span class="spec" style="font-size:15px;font-weight:500">Alger · aujourd'hui</span> <span class="k">15px</span></td>
+              <td><span class="spec" style="font-size:15px;font-weight:500">Alger · aujourd'hui</span> <span class="k">15px</span></td>
+              <td style="color:var(--sev-good);font-family:var(--mono);font-size:12.5px;font-weight:600">совпало</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="find high">
+    <div class="find-top"><span class="find-id">D3</span><span class="sev high">Высокий</span></div>
+    <h4>Плюс 11 кеглей, которых нет ни в одной шкале</h4>
+    <p>
+      Хардкод по экранам: <code>9px</code> ×3, <code>10px</code> ×3, <code>12</code>,
+      <code>15</code>, <code>22</code>, <code>24</code> ×2. Аналогично с 8-точечной сеткой —
+      рядом с <code>spacing</code> живут <code>height: 38</code>, <code>paddingVertical: 11</code>,
+      <code>gap: 6</code>, <code>marginBottom: 6</code>, <code>borderWidth: 1.5</code>.
+      Сетка заявлена в регламенте, но в шкале нет ступени 12, и её каждый раз добирают руками.
+    </p>
+    <span class="loc">app/src/theme.ts:80 (font) vs :99–108 (type) · 13 файлов с хардкодом</span>
+    <div class="fix">
+      <b>Что сделать</b>
+      Оставить одну шкалу — <code>type</code>, у неё есть вес и интерлиньяж, а не только кегль.
+      <code>font</code> помечать <code>@deprecated</code> и добить 121 обращение механически.
+      В <code>spacing</code> добавить ступень <code>12</code>, тогда исчезнет половина хардкода.
+      Дальше — ESLint-правило на литералы <code>fontSize</code> в <code>StyleSheet.create</code>.
+    </div>
+  </div>
+
+  <!-- D4 -->
+  <h3><span class="sev high">Высокий</span>На карточке объявления цена — самый мелкий текст</h3>
+  <p>
+    Маркетплейс сканируют по цене. В <code>ListingCard</code> иерархия обратная: заголовок
+    <code>font.body</code> = 15px/800, цена <code>font.small</code> = <strong>13px</strong>/800,
+    место и дата 11px. То есть цена — вторая по порядку и <em>третья</em> по размеру.
+  </p>
+  <p>
+    На ваших же референсах Авито (они лежат в корне репозитория) цена — самый крупный и жирный
+    элемент карточки: «от 1 990 ₽» набрано заметно больше заголовка. Это не вкус, это то,
+    как люди читают выдачу.
+  </p>
+
+  <div class="demo">
+    <div class="demo-head">Карточка в сетке · слева как сейчас, справа предложение</div>
+    <div class="demo-body">
+      <div class="demo-col">
+        <div class="lc">
+          <div class="lc-photo">
+            <div class="lc-badge" style="font-size:10px">Je propose</div>
+            <svg class="lc-heart" width="20" height="20" viewBox="0 0 24 24" fill="rgba(0,0,0,0.28)" stroke="#FFF" stroke-width="2" stroke-linejoin="round"><path d="M12 21s-7.5-4.9-9.5-9C1 8.7 2.8 5 6.4 5c2 0 3.4 1 4.3 2.4l1.3 2 1.3-2C14.2 6 15.6 5 17.6 5 21.2 5 23 8.7 21.5 12c-2 4.1-9.5 9-9.5 9z"/></svg>
+          </div>
+          <div class="lc-body">
+            <div class="lc-title" style="font-size:15px">Mécanicien auto à domicile</div>
+            <div class="lc-price" style="font-size:13px; margin-top:3px">2 500 DA / heure</div>
+            <div class="lc-meta" style="font-size:11px; margin-top:5px">Alger · aujourd'hui</div>
+          </div>
+        </div>
+        <div class="demo-cap bad">Цена 13px — мельче заголовка</div>
+      </div>
+      <div class="demo-col">
+        <div class="lc">
+          <div class="lc-photo">
+            <div class="lc-badge" style="font-size:11px">Je propose</div>
+            <span style="position:absolute;top:6px;right:6px;width:32px;height:32px;border-radius:50%;background:rgba(20,14,8,.42);display:flex;align-items:center;justify-content:center">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#FFF" stroke-width="2" stroke-linejoin="round"><path d="M12 21s-7.5-4.9-9.5-9C1 8.7 2.8 5 6.4 5c2 0 3.4 1 4.3 2.4l1.3 2 1.3-2C14.2 6 15.6 5 17.6 5 21.2 5 23 8.7 21.5 12c-2 4.1-9.5 9-9.5 9z"/></svg>
+            </span>
+          </div>
+          <div class="lc-body">
+            <div class="lc-price" style="font-size:20px; line-height:1.2">2 500 <span style="font-size:13px;font-weight:700">DA / h</span></div>
+            <div class="lc-title" style="font-size:14px; margin-top:4px; font-weight:650; color:#3A2E20">Mécanicien auto à domicile</div>
+            <div class="lc-meta" style="font-size:11.5px; margin-top:6px">Alger · aujourd'hui</div>
+          </div>
+        </div>
+        <div class="demo-cap ok">Цена 20px — первый элемент, ♥ на подложке</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="find high">
+    <div class="find-top"><span class="find-id">D4</span><span class="sev high">Высокий</span></div>
+    <h4>Иерархия карточки инвертирована относительно собственного референса</h4>
+    <p>
+      Заодно: единица измерения («/ heure», «/ mois») набрана тем же весом, что и сумма, —
+      она перетягивает внимание. Разделить сумму и единицу по кеглю и весу, как в правой версии.
+    </p>
+    <span class="loc">app/src/components/ListingCard.tsx:200–205</span>
+    <div class="fix">
+      <b>Что сделать</b>
+      Цена — <code>type.h2</code> (21px/800), заголовок — 14–15px/650, порядок:
+      цена → заголовок → место. Проверить на арабском: у цифр в арабской вёрстке остаётся
+      LTR-направление, а <code>writingDirection</code> у вас уже проставляется.
+    </div>
+  </div>
+
+  <!-- D5 -->
+  <h3><span class="sev med">Средний</span>Бейджи набраны 9px — и это же надо прочитать по-арабски</h3>
+  <p>
+    <code>promoBadgeText</code> и <code>xlBadgeText</code> — <code>fontSize: 9</code>,
+    <code>intentBadgeText</code> — <code>fontSize: 10</code>. Нижняя ступень ваших шкал — 11px.
+    Для латиницы 9px в верхнем регистре ещё читается на пределе; для арабской вязи с диакритикой
+    это нечитаемо в принципе — там кегль надо <em>увеличивать</em>, а не уменьшать.
+  </p>
+  <div class="demo">
+    <div class="demo-head">Бейдж «VIP» и «Je cherche» в трёх кеглях, латиница и арабица</div>
+    <div style="padding:24px 20px; display:flex; gap:34px; flex-wrap:wrap; justify-content:center">
+      <div style="text-align:center">
+        <div style="display:flex; gap:8px; align-items:center; justify-content:center">
+          <span style="background:#D4B258;color:#150E08;border-radius:999px;padding:3px 7px;font-size:9px;font-weight:800;letter-spacing:.4px">VIP</span>
+          <span style="background:rgba(0,0,0,.45);color:#fff;border-radius:999px;padding:3px 8px;font-size:9px;font-weight:800">Je cherche</span>
+          <span style="background:rgba(0,0,0,.45);color:#fff;border-radius:999px;padding:3px 8px;font-size:9px;font-weight:800;font-family:var(--arabic)">أبحث عن عمل</span>
+        </div>
+        <div class="demo-cap bad">9px · как сейчас</div>
+      </div>
+      <div style="text-align:center">
+        <div style="display:flex; gap:8px; align-items:center; justify-content:center">
+          <span style="background:#D4B258;color:#150E08;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:800;letter-spacing:.5px">VIP</span>
+          <span style="background:rgba(0,0,0,.45);color:#fff;border-radius:999px;padding:4px 9px;font-size:11px;font-weight:800">Je cherche</span>
+          <span style="background:rgba(0,0,0,.45);color:#fff;border-radius:999px;padding:4px 9px;font-size:12px;font-weight:800;font-family:var(--arabic)">أبحث عن عمل</span>
+        </div>
+        <div class="demo-cap ok">11px латиница / 12px арабица · <code style="font-size:11px">type.label</code></div>
+      </div>
+    </div>
+  </div>
+  <div class="find med">
+    <div class="find-top"><span class="find-id">D5</span><span class="sev med">Средний</span></div>
+    <h4>Ниже нижней ступени шкалы, и без поправки на арабский</h4>
+    <p>
+      Правило стоит зашить в <code>Text</code>: он уже поднимает интерлиньяж для арабского
+      (<code>AR_LINE_HEIGHT = 1.6</code>) — там же логично поднимать и минимальный кегль,
+      скажем до 12px. Одна точка, все бейджи сразу.
+    </p>
+    <span class="loc">app/src/components/ListingCard.tsx:182, 193, 197 · app/src/components/Text.tsx:54–71</span>
+  </div>
+
+  <!-- D6 + D8 контраст -->
+  <h3><span class="sev med">Средний</span>Два места, где контраст не дотягивает — по вашим же расчётам</h3>
+  <p>
+    Разделение <code>accent</code> / <code>accentFill</code> сделано именно потому, что белый на
+    <code>#1FA968</code> даёт 3.03:1. Но <code>Avatar</code> берёт <code>colors.accent</code>
+    и рисует на нём <code>colors.white</code> — тот самый случай, от которого токен и защищает.
+  </p>
+  <div class="demo">
+    <div class="demo-head">Аватар-заглушка в тёмной теме</div>
+    <div style="padding:24px 20px">
+      <div class="sw-row" style="justify-content:center">
+        <div class="sw">
+          <div class="sw-chip" style="background:#1FA968;color:#FFFFFF">M</div>
+          <div class="sw-meta"><b>accent #1FA968</b><br>белый — <span class="ratio-bad">3.03:1</span><br>как сейчас</div>
+        </div>
+        <div class="sw">
+          <div class="sw-chip" style="background:#14804C;color:#FFFFFF">M</div>
+          <div class="sw-meta"><b>accentFill #14804C</b><br>белый — <span class="ratio-ok">4.97:1</span><br>предложение</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="find med">
+    <div class="find-top"><span class="find-id">D8</span><span class="sev med">Средний</span></div>
+    <h4>Avatar игнорирует собственное правило accentFill</h4>
+    <p>
+      3.03:1 проходит AA только для крупного текста (≥18.66px bold). Буква аватара —
+      <code>size * 0.42</code>, то есть порог держится лишь при размере ≥ 45px. В списке чатов
+      и в отзывах аватары мельче — там это отказ AA.
+    </p>
+    <span class="loc">app/src/components/UI.tsx:570 · правило описано в app/src/theme.ts:49–53</span>
+    <div class="fix"><b>Что сделать</b>Заменить на <code>colors.accentFill</code> — токен для этого и создан.</div>
+  </div>
+  <div class="find med">
+    <div class="find-top"><span class="find-id">D6</span><span class="sev med">Средний</span></div>
+    <h4>Сердечко «избранного» пропадает на светлых фото</h4>
+    <p>
+      На сетке это белый контур с заливкой <code>rgba(0,0,0,0.28)</code> прямо поверх
+      пользовательского фото. На светлом снимке — белая стена, небо, бумага — он исчезает.
+      Подложки или тени нет; на референсе Авито под тем же сердечком есть затемнение.
+    </p>
+    <span class="loc">app/src/components/ListingCard.tsx:113–120</span>
+    <div class="fix"><b>Что сделать</b>Круглая подложка <code>rgba(20,14,8,.42)</code> под иконкой — как в правой карточке в демо выше. Тач-таргет 44×44 при этом уже есть, менять не нужно.</div>
+  </div>
+
+  <!-- D9 -->
+  <h3><span class="sev med">Средний</span>Страница «оплата прошла» — вне бренда</h3>
+  <p>
+    Единственный экран, который человек видит <em>сразу после того, как заплатил деньги</em>,
+    отдаётся бэкендом как инлайн-HTML с <code>font-family: sans-serif</code>, эмодзи ✅ на 56px и
+    тремя цветами, которых нет в палитре. Это не другие цвета — это <strong>почти те же</strong>,
+    и такие промахи заметнее откровенно чужих.
+  </p>
+  <div class="demo">
+    <div class="demo-head">Хардкод на странице оплаты против токенов палитры</div>
+    <div style="padding:24px 20px">
+      <div class="sw-row">
+        <div class="sw">
+          <div class="sw-chip" style="background:#F7F1E6;color:#241C14;font-size:13px;font-family:var(--mono)">#F7F1E6</div>
+          <div class="sw-meta">фон страницы<br>токен: <b>#F6EFE0</b></div>
+        </div>
+        <div class="sw">
+          <div class="sw-chip" style="background:#241C14;color:#F7F1E6;font-size:13px;font-family:var(--mono)">#241C14</div>
+          <div class="sw-meta">заголовок<br>токен: <b>#221A12</b></div>
+        </div>
+        <div class="sw">
+          <div class="sw-chip" style="background:#6B5D4C;color:#fff;font-size:13px;font-family:var(--mono)">#6B5D4C</div>
+          <div class="sw-meta">подпись<br>токен: <b>#6E5E49</b></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="find med">
+    <div class="find-top"><span class="find-id">D9</span><span class="sev med">Средний</span></div>
+    <h4>Возврат после оплаты живёт вне дизайн-системы</h4>
+    <p>
+      Рядом — та же проблема в копирайте: эмодзи в уведомлениях (🔔 💚 ✅ ❌ 📷) при
+      прямом «Avoid: emojis» в регламенте.
+    </p>
+    <span class="loc">backend/src/routes/index.ts:1082–1089, :579, :634 · backend/src/services/payments.ts:105</span>
+    <div class="fix">
+      <b>Что сделать</b>
+      Отдавать возврат страницей веб-фронта (<code>PUBLIC_WEB_URL</code> уже есть в конфиге и
+      используется для <code>platform='web'</code>) — тогда она получит и токены, и шрифт, и обе темы
+      автоматически. Эмодзи в уведомлениях заменить на <code>type</code>-поле, которое у уведомления
+      уже есть: пусть иконку рисует клиент своим набором.
+    </div>
+  </div>
+
+  <!-- D10 -->
+  <div class="find med">
+    <div class="find-top"><span class="find-id">D10</span><span class="sev med">Средний</span></div>
+    <h4>Бэкенд склеивает два языка в одну строку, хотя знает язык пользователя</h4>
+    <p>
+      <code>notifyClosed</code> отправляет <code>"Cette annonce n'est plus disponible / لم يعد الإعلان متاحًا"</code> —
+      французский и арабский в одном пуше, через слэш. При этом <code>user.language</code> в базе есть,
+      и <code>payments.ts</code> уже делает правильно: <code>const ar = user.language === 'ar'</code>.
+      То есть в проекте две разные практики локализации серверных текстов.
+    </p>
+    <span class="loc">backend/src/routes/index.ts:649 · корректный образец — backend/src/services/payments.ts:100–110</span>
+    <div class="fix"><b>Что сделать</b>Вынести серверные строки в один словарь <code>{fr, ar}</code> и выбирать по <code>user.language</code>, как в payments. Смешанные пуши — это ещё и вдвое длиннее лимита превью на Android.</div>
+  </div>
+
+  <!-- D11..D13 таблицей -->
+  <h3>Остальное по дизайну</h3>
+  <div class="tbl-scroll">
+    <table class="mini">
+      <thead><tr><th>#</th><th>Находка</th><th>Адрес</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="sev med">Сред.</span></td>
+          <td><b>Резерв под 2 строки посчитан для латиницы и не держится в арабском.</b>
+              <code>minHeight: 38</code> — это 2×19. Но <code>Text</code> поднимает интерлиньяж
+              арабского до <code>round(15×1.6) = 24</code>, значит две строки требуют 48.
+              Сетка, идеально ровная по-французски, становится рваной по-арабски.</td>
+          <td><code>ListingCard.tsx:200</code><br><code>Text.tsx:29, 66</code></td>
+        </tr>
+        <tr>
+          <td><span class="sev med">Сред.</span></td>
+          <td><b>До четырёх оверлеев на одной миниатюре 148px:</b> бейдж намерения, бейдж промо,
+              бейдж XL и сердечко. У продвинутого XL-объявления фото почти не видно из-за
+              собственного интерфейса.</td>
+          <td><code>ListingCard.tsx:96–120</code></td>
+        </tr>
+        <tr>
+          <td><span class="sev low">Низ.</span></td>
+          <td><b>Масштабирование шрифта ОС ограничено 130%.</b> <code>maxFontSizeMultiplier = 1.3</code>
+              стоит потому, что контролы имеют фиксированную высоту (Button 44/52/56, Chip 38).
+              Пользователю со слабым зрением система даёт до 200% — приложение не даёт.</td>
+          <td><code>Text.tsx:34</code></td>
+        </tr>
+        <tr>
+          <td><span class="sev low">Низ.</span></td>
+          <td><b>Скелетоны загрузки не зеркалятся.</b> Базовый стиль объявляет
+              <code>flexDirection: 'row'</code>, а <code>row()</code> накладывается сверху на месте
+              использования — в скелетоне его забыли. Ровно та ошибка, которую ручной RTL и
+              провоцирует.</td>
+          <td><code>WalletScreen.tsx:61</code></td>
+        </tr>
+        <tr>
+          <td><span class="sev low">Низ.</span></td>
+          <td><b>Скелетон — пульсация непрозрачности</b>, а не бегущий градиент. Для «премиум»
+              обычно ждут sweep-анимацию; заодно <code>colors.border</code> как база даёт
+              слишком слабый контраст с картой.</td>
+          <td><code>UI.tsx:594–606</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ══════════════════ 2. АРХИТЕКТУРА ══════════════════ -->
+<section id="arch">
+  <div class="sec-head">
+    <span class="sec-num">02</span>
+    <h2>Архитектура и производительность</h2>
+  </div>
+  <p class="sec-note">
+    Код чистый и слоистый, драйверы (память/PostgreSQL, local/S3, mock/chargily) абстрагированы
+    аккуратно. Ограничения проявятся не в качестве кода, а в масштабе: несколько узлов линейно
+    зависят от числа пользователей.
+  </p>
+
+  <div class="find high">
+    <div class="find-top"><span class="find-id">A1</span><span class="sev high">Высокий</span></div>
+    <h4>N+1 запросов на всех списочных ручках</h4>
+    <p>
+      <code>GET /chats</code> делает 4 запроса плюс проверку присутствия <em>на каждую беседу</em> —
+      50 диалогов дают ~250 обращений к базе на один экран. То же в
+      <code>/payments</code>, <code>/users/:id/reviews</code>, <code>/market/favorites</code>,
+      <code>/market/searches</code>. В <code>/admin/reports</code> хуже — там <code>await</code>
+      внутри <code>for</code>, то есть строго последовательно.
+    </p>
+    <span class="loc">routes/index.ts:721–737, 905, 1101, 418, 868, 970</span>
+    <div class="fix">
+      <b>Что сделать</b>
+      Батч-методы <code>findByIds(ids[])</code> в слое моделей (в <code>favorites.hasMany</code>
+      этот приём у вас уже применён — распространить на users/listings), либо один JOIN на список.
+      <code>Promise.all</code> проблему не решает: он параллелит, но количество round-trip'ов
+      остаётся линейным.
+    </div>
+  </div>
+
+  <div class="find high">
+    <div class="find-top"><span class="find-id">A2</span><span class="sev high">Высокий</span></div>
+    <h4>Рассылка уведомлений — последовательный цикл внутри fire-and-forget промиса</h4>
+    <p>
+      <code>notifyFollowers</code> идёт по подписчикам циклом с <code>await</code>: на каждого —
+      вставка в базу и HTTP-вызов Expo Push. У продавца с 5 000 подписчиков публикация объявления
+      превращается в 5 000 последовательных сетевых вызовов в процессе пода. Ретраев нет,
+      при рестарте пода очередь теряется целиком, а <code>.catch(() => {})</code> гасит и сам факт сбоя.
+    </p>
+    <span class="loc">routes/index.ts:588–597, 572–584, 628–653 · services/payments.ts:121–150</span>
+    <div class="fix">
+      <b>Что сделать</b>
+      Очередь задач на Redis, который уже развёрнут (BullMQ) — публикация кладёт одну задачу,
+      воркер разбирает её пачками. Expo принимает <strong>до 100 токенов за один вызов</strong>,
+      так что 5 000 подписчиков — это 50 запросов, а не 5 000. Плюс ретраи с backoff и видимость
+      сбоев в метриках, которые у вас уже есть.
+    </div>
+  </div>
+
+  <div class="find high">
+    <div class="find-top"><span class="find-id">A3</span><span class="sev high">Высокий</span></div>
+    <h4>Списки без пагинации</h4>
+    <p>
+      У ленты объявлений <code>limit/offset</code> есть и провалидированы. А
+      <code>/chats</code>, <code>/notifications</code>, <code>/users/:id/reviews</code>,
+      <code>/market/my</code>, <code>/market/favorites</code> отдают всё, что накопилось.
+      Активный пользователь через год — это ответ на несколько мегабайт и заметный отказ на мобильной сети.
+    </p>
+    <span class="loc">routes/index.ts:411, 416, 718, 853, 903</span>
+  </div>
+
+  <div class="find med">
+    <div class="find-top"><span class="find-id">A5</span><span class="sev med">Средний</span></div>
+    <h4>Ширина экрана снимается один раз при импорте модуля</h4>
+    <p>
+      <code>const SCREEN_W = Dimensions.get('window').width</code> на уровне модуля в двух экранах.
+      Значение фиксируется при загрузке JS и больше не обновляется: после поворота,
+      на планшете, в разделённом экране Android и на складных устройствах галерея и
+      пузыри чата считаются от неверной ширины. <code>useWindowDimensions</code> в проекте
+      не используется ни разу.
+    </p>
+    <span class="loc">MarketDetailScreen.tsx:24 · ChatScreen.tsx:22 · UI.tsx:450–451</span>
+    <div class="fix"><b>Что сделать</b><code>useWindowDimensions()</code> — хук пересчитывает значение сам и уже входит в React Native.</div>
+  </div>
+
+  <div class="find med">
+    <div class="find-top"><span class="find-id">A6</span><span class="sev med">Средний</span></div>
+    <h4>Две несовместимые стратегии RTL на двух поверхностях</h4>
+    <p>
+      Веб использует логические свойства CSS — арабская раскладка получается сама.
+      Приложение сознательно не включает <code>forceRTL</code> и зеркалит вручную через
+      <code>row()</code>, <code>side()</code>, <code>edge()</code>, <code>flipIcon()</code>.
+      Решение обосновано (мгновенное переключение языка без рестарта), но цена в том, что
+      <strong>любой забытый вызов молча рендерится в LTR</strong> — видно только на арабском
+      и только глазами. Скелетон в <code>WalletScreen</code> — уже случившийся пример.
+    </p>
+    <span class="loc">app/src/services/rtl.ts · web/app/globals.css:6–8</span>
+    <div class="fix">
+      <b>Что сделать</b>
+      Оставить подход, но подпереть его линтером: запретить литералы
+      <code>flexDirection: 'row'</code>, <code>left</code>, <code>right</code>,
+      <code>textAlign</code> внутри <code>StyleSheet.create</code>. Правило дешевле, чем
+      RTL-тесты на 19 экранов — сейчас их два.
+    </div>
+  </div>
+
+  <div class="find med">
+    <div class="find-top"><span class="find-id">A4 · A7 · A8</span><span class="sev med">Средний</span></div>
+    <h4>Три более мелких узла</h4>
+    <ul>
+      <li><b>Поход в базу на каждый авторизованный запрос.</b> <code>requireAuth</code> и
+      <code>maybeAuth</code> делают <code>findById</code> всегда. Это даёт мгновенный отзыв на
+      удаление аккаунта, но и лишний round-trip на каждый вызов API. Кандидат на короткий кэш
+      в Redis (30–60 с) с инвалидацией по <code>users.update</code>.
+      <span class="loc">middleware/auth.ts:34, 67</span></li>
+      <li><b>Токены дублируются вручную.</b> <code>app/src/theme.ts</code> и
+      <code>web/lib/theme/tokens.ts</code> — копия один в один, синхронность держится тестом
+      на паритет. Тест ловит цвета, но структура остаётся продублированной; напрашивается
+      один пакет токенов и генерация обоих файлов.
+      <span class="loc">web/lib/theme/tokens.ts:1–12</span></li>
+      <li><b><code>StyleSheet.flatten</code> на каждый рендер каждого текста.</b> Обёртка
+      <code>Text</code> плющит стиль, чтобы вытащить <code>fontWeight</code>. На сетке из
+      20 карточек это ~80 вызовов за рендер списка.
+      <span class="loc">components/Text.tsx:37</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ══════════════════ 3. БЕЗОПАСНОСТЬ ══════════════════ -->
+<section id="security">
+  <div class="sec-head">
+    <span class="sec-num">03</span>
+    <h2>Безопасность</h2>
+  </div>
+  <p class="sec-note">
+    Базовая гигиена закрыта, и закрыта грамотно: <code>helmet</code>, CORS-allowlist с явным
+    отказом от <code>*</code> в продакшене, zod на всех входах, выравнивание тайминга логина
+    фиктивным хешем, обязательный <code>audience</code> у Google-токена и проверка
+    <code>email_verified</code>, <code>timingSafeEqual</code> везде, где сравниваются секреты,
+    токен в Keychain/Keystore с миграцией из AsyncStorage. Ниже — что осталось.
+  </p>
+
+  <div class="find crit">
+    <div class="find-top"><span class="find-id">S1</span><span class="sev crit">Критично</span></div>
+    <h4>Покупка более дешёвого тарифа понижает уже оплаченное продвижение</h4>
+    <p>
+      <code>applyPromotion</code> присваивает <code>promoLevel</code> и <code>promoUntil</code>
+      безусловно. Если у объявления активен <code>vip</code> (2 500 DA, 30 дней) и владелец
+      покупает <code>highlight</code> (400 DA, 7 дней), уровень падает до highlight, а срок
+      обрезается до 7 дней от текущего момента. Человек заплатил и получил <em>худшее</em>
+      размещение, чем было. Проверки текущего уровня и продления срока нет.
+    </p>
+    <span class="loc">backend/src/services/payments.ts:78–87</span>
+    <div class="fix">
+      <b>Что сделать</b>
+      Ранжировать уровни (<code>highlight &lt; premium &lt; vip</code>) и брать максимум;
+      срок — <code>max(promoUntil, now) + days</code>, чтобы покупка продлевала, а не обрезала.
+      Это единственная находка, которая прямо стоит денег пользователю, — и покрывается
+      юнит-тестом на десять строк.
+    </div>
+  </div>
+
+  <div class="find high">
+    <div class="find-top"><span class="find-id">S2</span><span class="sev high">Высокий</span></div>
+    <h4>scrypt на дефолтах Node, а параметры стоимости негде хранить</h4>
+    <p>
+      <code>crypto.scrypt(plain, salt, 64)</code> без опций — это N = 16 384 (2¹⁴).
+      OWASP для scrypt рекомендует минимум 2¹⁷, то есть текущая стоимость в 8 раз ниже.
+      Отдельно важнее формат: <code>scrypt$salt$hash</code> <strong>не содержит N/r/p</strong>,
+      поэтому поднять коэффициент позже нельзя — старые хеши станет невозможно проверить,
+      а пути миграции в коде нет.
+    </p>
+    <span class="loc">backend/src/utils/password.ts:14–28</span>
+    <div class="fix">
+      <b>Что сделать</b>
+      Перейти на формат с параметрами: <code>scrypt$N$r$p$salt$hash</code>. Верификация читает
+      параметры из строки — тогда любое будущее ужесточение становится безболезненным.
+      Плюс перехеширование при успешном входе, если параметры устарели. Ещё лучше — argon2id.
+    </div>
+  </div>
+
+  <div class="find high">
+    <div class="find-top"><span class="find-id">S3</span><span class="sev high">Высокий</span></div>
+    <h4>JWT на 30 дней без возможности отзыва; сброс пароля не завершает сессии</h4>
+    <p>
+      Токен полностью stateless, живёт 30 дней, содержит только <code>sub</code>.
+      Ни <code>jti</code>, ни версии. Следствия: «выйти на всех устройствах» реализовать нечем;
+      украденный токен действителен месяц; <strong>сброс пароля через код из письма не
+      инвалидирует уже выданные токены</strong> — то есть при угоне аккаунта смена пароля
+      не выгоняет атакующего.
+    </p>
+    <span class="loc">middleware/auth.ts:15–21 · routes/index.ts:152–163</span>
+    <div class="fix">
+      <b>Что сделать</b>
+      Клейм <code>tv</code> (token version) против колонки <code>users.token_version</code>.
+      Инфраструктура для проверки уже есть: <code>requireAuth</code> и так читает пользователя
+      из базы на каждый запрос — сравнение версии бесплатно. Инкремент на сбросе пароля и на
+      «выйти везде».
+    </div>
+  </div>
+
+  <div class="find med">
+    <div class="find-top"><span class="find-id">S4</span><span class="sev med">Средний</span></div>
+    <h4>Защита резюме отключается настройкой S3_PUBLIC_URL</h4>
+    <p>
+      Вокруг документов выстроен аккуратный контур: подписанная ссылка на 5 минут, отдельный
+      секрет, журнал раскрытий, лимит 40/час. Но <code>serveObject</code> при заданном
+      <code>S3_PUBLIC_URL</code> делает <code>302</code> на публичный CDN-путь
+      <strong>для любого ключа</strong> — ветки на <code>isDocKey</code> там нет. С публичным
+      бакетом или CDN подпись начинает охранять только редирект, а не сам объект: PDF с телефоном,
+      адресом и биографией соискателя становится доступен бессрочно всем, у кого есть ссылка,
+      и попадает в кэши и логи CDN.
+    </p>
+    <span class="loc">backend/src/services/storage.ts:65–78 vs services/fileTokens.ts:1–20</span>
+    <div class="fix">
+      <b>Что сделать</b>
+      Развести фото и документы по разным префиксам или бакетам: фото — публично и через CDN
+      (так и задумано), документы — всегда presigned, никогда через <code>PUBLIC_URL</code>.
+      Плюс <code>Content-Disposition: attachment</code> для документов.
+    </div>
+  </div>
+
+  <div class="find med">
+    <div class="find-top"><span class="find-id">S7 · S8</span><span class="sev med">Средний</span></div>
+    <h4>У сайта нет заголовков безопасности, а в бандл вшит IP прода</h4>
+    <p>
+      API закрыт <code>helmet</code>. У Next.js-фронта в <code>next.config.ts</code> нет блока
+      <code>headers()</code> вообще: ни CSP, ни <code>Referrer-Policy</code>, ни
+      <code>frame-ancestors</code>, ни <code>Permissions-Policy</code>. При этом сайт рендерит
+      пользовательский контент — заголовки объявлений, описания, сообщения чата.
+    </p>
+    <p>
+      Рядом: <code>NEXT_PUBLIC_API_URL</code> имеет фолбэком
+      <code>'https://141-98-84-135.sslip.io'</code> — сырой IP инфраструктуры, который попадает
+      в публичный клиентский бандл и молча становится боевым адресом, если переменная не задана на сборке.
+    </p>
+    <span class="loc">web/next.config.ts:8, 11–27</span>
+    <div class="fix">
+      <b>Что сделать</b>
+      Добавить <code>headers()</code> с CSP (у вас нет inline-скриптов от сторонних доменов, так
+      что политика получится строгой), <code>Referrer-Policy: strict-origin-when-cross-origin</code>,
+      <code>frame-ancestors 'none'</code>. Фолбэк URL убрать: пусть сборка падает без переменной,
+      а не уходит на IP.
+    </div>
+  </div>
+
+  <div class="find med">
+    <div class="find-top"><span class="find-id">S5 · S6 · S9</span><span class="sev med">Средний</span></div>
+    <h4>Ещё три места</h4>
+    <ul>
+      <li><b>Минимальная длина пароля — 6 символов</b>, без проверок на утечки и словарные значения.
+      Для маркетплейса с платежами и персональными данными мало; 8–10 плюс сверка с k-anonymity
+      HIBP (одна HTTP-ручка, пароль наружу не уходит).
+      <span class="loc">middleware/validate.ts:21, 48</span></li>
+      <li><b>Тип файла определяется по заявленному клиентом mimetype.</b> Для изображений это
+      нейтрализовано перекодированием через sharp — но если sharp недоступен в сборке, байты
+      сохраняются как есть, а <em>документы не перекодируются никогда</em>. Стоит добавить
+      проверку magic bytes (<code>file-type</code>) до записи.
+      <span class="loc">services/uploads.ts:45–48, 101–115</span></li>
+      <li><b>Модератор — это email в переменной окружения, и действия не журналируются.</b>
+      Блокировка объявления, одобрение и отказ по верификации не оставляют записи о том,
+      кто и когда их совершил. Для роли, которая может снимать чужой контент, нужен
+      audit-лог; сама таблица уведомлений для этого не годится.
+      <span class="loc">routes/index.ts:27–34, 985–1032</span></li>
+    </ul>
+  </div>
+
+  <div class="find low">
+    <div class="find-top"><span class="find-id">S10 · S11</span><span class="sev low">Низкий</span></div>
+    <h4>Мелочи</h4>
+    <ul>
+      <li>События сокета не лимитированы. <code>peers</code> ограничен 200, но чередование
+      <code>chat:join</code> / <code>chat:leave</code> обходит кап, а каждый join — запрос в базу.
+      <code>chat:typing</code> не ограничен вовсе и размножается по комнате.
+      <span class="loc">services/realtime.ts:140–171</span></li>
+      <li><code>attributes</code> проверяются только по длине ключа и значения, но не против
+      белого списка <code>ATTRIBUTES</code> — при том что категория и подкатегория валидируются
+      строго. В карточку попадёт произвольная пара ключ-значение.
+      <span class="loc">middleware/validate.ts:67</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ══════════════════ 4. ПРОЦЕСС ══════════════════ -->
+<section id="process">
+  <div class="sec-head">
+    <span class="sec-num">04</span>
+    <h2>Процесс и CI</h2>
+  </div>
+
+  <div class="find high">
+    <div class="find-top"><span class="find-id">P1</span><span class="sev high">Высокий</span></div>
+    <h4>Веб-фронтенд не проверяется в CI вообще</h4>
+    <p>
+      <code>ci.yml</code> собирает три задачи: тесты и типы бэкенда, типы и тесты приложения,
+      сборка Docker-образа со smoke-проверкой <code>/health</code>. Это хороший пайплайн —
+      но каталога <code>web/</code> в нём нет ни в одной задаче. <strong>7 318 строк Next.js
+      без typecheck, без lint, без проверки сборки.</strong> Сломанная страница обнаружится
+      только на деплое.
+    </p>
+    <span class="loc">.github/workflows/ci.yml</span>
+    <div class="fix">
+      <b>Что сделать</b>
+      Задача <code>web-check</code>: <code>npm ci</code>, <code>tsc --noEmit</code>,
+      <code>next lint</code>, <code>next build</code>. Конфиг ESLint в <code>web/</code> уже лежит
+      и просто не запускается.
+    </div>
+  </div>
+
+  <div class="find med">
+    <div class="find-top"><span class="find-id">P2 · P3</span><span class="sev med">Средний</span></div>
+    <h4>Остальное по пайплайну</h4>
+    <ul>
+      <li><b>Линтера нет ни у бэкенда, ни у приложения</b> — ESLint настроен только в web.
+      При двух шкалах типографики и хардкоде кеглей именно линтер и был бы тем, что не даёт
+      системе разъезжаться дальше.</li>
+      <li><b>E2E настроены, но не запускаются.</b> Есть <code>.detoxrc.js</code>, три спека
+      (<code>login</code>, <code>publish</code>, <code>chat</code>) и <code>docs/E2E.md</code> —
+      в CI их нет. Регламент просит Playwright для визуальной проверки; визуальных
+      регресс-тестов тоже нет, а при таком объёме работы с палитрой и тёмной темой они
+      окупились бы быстро.</li>
+      <li><b>~9,4 МБ референс-скриншотов в корне репозитория</b> (7 PNG, включая
+      <code>IMG_2225…2230.png</code> — скриншоты Авито). Каждый клон тянет их вместе с историей;
+      <code>.git</code> уже 16 МБ. Им место в <code>docs/</code> и в Git LFS, либо вне репозитория.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ══════════════════ 5. ПЛАН ══════════════════ -->
+<section id="plan">
+  <div class="sec-head">
+    <span class="sec-num">05</span>
+    <h2>С чего начинать</h2>
+  </div>
+  <p class="sec-note">
+    Порядок — по отношению «эффект / стоимость», а не по строгой критичности. Первая волна —
+    то, что стоит денег пользователю или ломает впечатление от продукта; она же самая дешёвая.
+  </p>
+
+  <div class="wave">
+    <div class="wave-top">
+      <span class="wave-n">Волна 1</span>
+      <h3>Деньги и доверие</h3>
+    </div>
+    <div class="why">Малый объём правок, прямой эффект. Каждый пункт закрывается юнит-тестом.</div>
+    <ol>
+      <li><b>S1 — понижение оплаченного промо.</b> Максимум по уровню, продление по сроку.
+      Единственная находка, которая напрямую забирает у пользователя оплаченное.</li>
+      <li><b>S3 — <code>tokenVersion</code>.</b> Одна колонка, один клейм, инкремент на сбросе
+      пароля. Пользователь в базе и так читается на каждый запрос.</li>
+      <li><b>S4 — документы мимо публичного CDN.</b> Ветка на <code>isDocKey</code> в
+      <code>serveObject</code>, пока <code>S3_PUBLIC_URL</code> не включён в продакшене.</li>
+      <li><b>D8 — <code>accentFill</code> в <code>Avatar</code>.</b> Одна строка.</li>
+      <li><b>P1 — <code>web</code> в CI.</b> Одна задача в workflow.</li>
+    </ol>
+  </div>
+
+  <div class="wave">
+    <div class="wave-top">
+      <span class="wave-n">Волна 2</span>
+      <h3>Дизайн: одна правка, четыре следствия</h3>
+    </div>
+    <div class="why">Самая заметная для пользователя часть. Начинать с иконок — от них зависит остальное.</div>
+    <ol>
+      <li><b>D1 + D2 — векторные иконки категорий.</b> Корень и светящейся тёмной темы, и
+      смешения стилей, и 3,7 МБ бандла. После этого <code>tileBg</code> и соседние токены
+      удаляются, а тёмная тема получает нормальные поверхности.</li>
+      <li><b>D4 — иерархия карточки.</b> Цена первой и крупной, подложка под сердечко.
+      Затрагивает каждый экран выдачи, стоит один компонент.</li>
+      <li><b>D3 — одна шкала типографики.</b> <code>type</code> остаётся,
+      <code>font</code> помечается deprecated, 121 обращение правится механически.
+      Сразу же — ESLint на литералы кеглей, иначе разъедется снова.</li>
+      <li><b>D5 + D11 — минимальный кегль и резерв строк для арабского.</b> Логичнее всего
+      внутри <code>Text</code>, рядом с уже существующей поправкой интерлиньяжа.</li>
+      <li><b>D9 + D10 — страница оплаты и серверные тексты.</b> Возврат отдаёт веб-фронт,
+      строки бэкенда — в словарь <code>{fr, ar}</code> по образцу <code>payments.ts</code>.</li>
+    </ol>
+  </div>
+
+  <div class="wave">
+    <div class="wave-top">
+      <span class="wave-n">Волна 3</span>
+      <h3>Масштаб</h3>
+    </div>
+    <div class="why">Пока пользователей мало — не болит. Переделывать под нагрузкой дороже, чем заранее.</div>
+    <ol>
+      <li><b>A2 — очередь уведомлений.</b> BullMQ на уже развёрнутом Redis плюс батчи Expo
+      по 100 токенов. Заодно появляются ретраи и видимость сбоев.</li>
+      <li><b>A1 — батч-загрузчики.</b> Начать с <code>/chats</code>: там выигрыш максимальный.</li>
+      <li><b>A3 — пагинация</b> на чатах, уведомлениях, отзывах, избранном, «моих объявлениях».</li>
+      <li><b>A6 — линтер на RTL.</b> Дешевле, чем RTL-тесты на 19 экранов; ловит именно тот
+      класс ошибок, который ручное зеркалирование создаёт.</li>
+      <li><b>A7 — один пакет токенов</b> с генерацией <code>theme.ts</code> и
+      <code>tokens.ts</code> вместо ручной копии под тестом на паритет.</li>
+    </ol>
+  </div>
+</section>
+
+<hr class="rule">
+<p class="foot">
+  Ревью: 24 июля 2026 · <code>salimastrakhan-ast/khedma</code> @ <code>1d95107</code><br>
+  Разобрано: app 10 327 строк · backend 6 452 · web 7 318 · deploy (k8s, Grafana, Prometheus)<br>
+  Прочитано целиком: theme.ts, tokens.ts, UI.tsx, Icon.tsx, CategoryIcon.tsx, ListingCard.tsx,
+  Text.tsx, fonts.ts, rtl.ts, app.ts, auth.ts, validate.ts, routes/index.ts, payments.ts,
+  realtime.ts, storage.ts, uploads.ts, fileTokens.ts, limiter.ts, password.ts, schema.sql,
+  next.config.ts, globals.css, ci.yml<br>
+  Учтён существующий <code>docs/AUDIT.md</code> от 20.07.2026 — находки из него здесь не повторяются.
+</p>
+
+</div>
+</body>
+</html>
