@@ -1,0 +1,2326 @@
+From ccb545b66d50eca6db0ea52513b2361e90660314 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 25 Jul 2026 06:49:30 +0000
+Subject: [PATCH 1/3] =?UTF-8?q?=D0=91=D1=8D=D0=BA=D0=B5=D0=BD=D0=B4:=20?=
+ =?UTF-8?q?=D0=B1=D0=B5=D0=B7=D0=BE=D0=BF=D0=B0=D1=81=D0=BD=D0=BE=D1=81?=
+ =?UTF-8?q?=D1=82=D1=8C=20=D0=B8=20=D0=BA=D0=BE=D1=80=D1=80=D0=B5=D0=BA?=
+ =?UTF-8?q?=D1=82=D0=BD=D0=BE=D1=81=D1=82=D1=8C=20=D0=BF=D0=BE=20=D0=B8?=
+ =?UTF-8?q?=D1=82=D0=BE=D0=B3=D0=B0=D0=BC=20=D1=80=D0=B5=D0=B2=D1=8C=D1=8E?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+S1. Покупка более дешёвого тарифа понижала уже оплаченное продвижение:
+applyPromotion присваивал promoLevel/promoUntil безусловно, поэтому
+highlight (400 DA, 7 дней) поверх активного vip (2500 DA, 30 дней) ронял
+объявление до highlight и обрезал срок до недели. Теперь уровень берётся
+как максимум действующего и купленного, а срок продлевается от текущего.
+
+S2. scrypt считался на дефолтах Node (N=2^14 против рекомендованных OWASP
+2^17), и главное — формат scrypt$salt$hash не хранил параметры, поэтому
+поднять коэффициент было нельзя без поломки старых хешей. Новый формат
+scrypt$N$r$p$salt$hash; старый по-прежнему проверяется и перехешируется
+на успешном входе.
+
+S3. JWT нельзя было отозвать: сброс пароля не выгонял того, кто уже вошёл
+с угнанным аккаунтом. Добавлен users.token_version, клейм tv сверяется в
+requireAuth, maybeAuth и при рукопожатии сокета. Сброс пароля гасит сессии
+тем же UPDATE; добавлен POST /auth/logout-all.
+
+S4. При заданном S3_PUBLIC_URL serveObject редиректил на публичный CDN для
+любого ключа, включая документы, — подпись охраняла только редирект, а не
+сам PDF резюме. Документы теперь всегда presigned и отдаются вложением.
+
+S5. Минимальная длина пароля 6 → 8.
+
+S6. Тип файла определялся по клиентскому mimetype. Добавлена проверка по
+сигнатуре: для документов она единственная, так как они не перекодируются.
+
+S10. События сокета не были ограничены: чередование chat:join/chat:leave
+обходило кап peers и давало неограниченный поток запросов в БД.
+
+S11. attributes проверялись только по длине; теперь ключ и значение
+сверяются со справочником ATTRIBUTES.
+
+Тесты: 179 проходят, из них 19 новых на эти исправления. Фикстура загрузки
+в auditFixes переведена на настоящий JPEG — фиктивный буфер теперь честно
+отклоняется проверкой сигнатуры.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01QkXjYVhyvbFYQojwaiPpTr
+---
+ backend/src/db/pg.ts                |  18 ++-
+ backend/src/db/schema.sql           |   9 ++
+ backend/src/middleware/auth.ts      |  23 ++-
+ backend/src/middleware/validate.ts  |  12 +-
+ backend/src/models/memory.ts        |  16 +-
+ backend/src/routes/index.ts         |  46 +++++-
+ backend/src/services/marketplace.ts |  23 +++
+ backend/src/services/payments.ts    |  43 +++++-
+ backend/src/services/realtime.ts    |  43 ++++++
+ backend/src/services/storage.ts     |  27 +++-
+ backend/src/services/uploads.ts     |  45 ++++++
+ backend/src/types.ts                |  18 ++-
+ backend/src/utils/password.ts       |  88 +++++++++--
+ backend/tests/auditFixes.test.ts    |  10 +-
+ backend/tests/reviewFixes.test.ts   | 228 ++++++++++++++++++++++++++++
+ 15 files changed, 612 insertions(+), 37 deletions(-)
+ create mode 100644 backend/tests/reviewFixes.test.ts
+
+diff --git a/backend/src/db/pg.ts b/backend/src/db/pg.ts
+index 24fff3c..88dcd7f 100644
+--- a/backend/src/db/pg.ts
++++ b/backend/src/db/pg.ts
+@@ -56,7 +56,8 @@ function mapUser(r: any): User | null {
+     googleId: r.google_id || null, pushToken: r.push_token || null,
+     phone: r.phone, language: r.language, avatar: r.avatar || null,
+     lastSeenAt: r.last_seen_at || null, verified: !!r.verified,
+-    emailVerified: !!r.email_verified, createdAt: r.created_at,
++    emailVerified: !!r.email_verified, tokenVersion: Number(r.token_version || 0),
++    createdAt: r.created_at,
+   };
+ }
+ 
+@@ -124,8 +125,19 @@ const users = {
+   async clearPushTokenForOthers(token: string, keepUserId: string): Promise<void> {
+     await q('UPDATE users SET push_token=NULL WHERE push_token=$1 AND id<>$2', [token, keepUserId]);
+   },
+-  async setPassword(id: string, passwordHash: string): Promise<void> {
+-    await q('UPDATE users SET password_hash=$1 WHERE id=$2', [passwordHash, id]);
++  async setPassword(id: string, passwordHash: string, revokeSessions = false): Promise<void> {
++    // Отзыв сессий — тем же UPDATE, а не вторым запросом: иначе между сменой
++    // пароля и инкрементом версии остаётся окно, в котором старый токен жив.
++    await q(
++      revokeSessions
++        ? 'UPDATE users SET password_hash=$1, token_version=token_version+1 WHERE id=$2'
++        : 'UPDATE users SET password_hash=$1 WHERE id=$2',
++      [passwordHash, id]
++    );
++  },
++  async revokeSessions(id: string): Promise<number> {
++    const { rows } = await q('UPDATE users SET token_version=token_version+1 WHERE id=$1 RETURNING token_version', [id]);
++    return Number(rows[0]?.token_version || 0);
+   },
+   // Каскад через FK (ON DELETE CASCADE везде, включая messages.sender_id — см. schema.sql v9).
+   async deleteCascade(userId: string): Promise<void> {
+diff --git a/backend/src/db/schema.sql b/backend/src/db/schema.sql
+index c7c4057..649d3a4 100644
+--- a/backend/src/db/schema.sql
++++ b/backend/src/db/schema.sql
+@@ -348,3 +348,12 @@ CREATE INDEX IF NOT EXISTS idx_search_misses_count ON search_misses(count DESC,
+ -- promo_applied позволяет handleWebhookEvent отличить этот случай от обычной
+ -- идемпотентной повторной доставки и дозавершить применение тарифа.
+ ALTER TABLE payments ADD COLUMN IF NOT EXISTS promo_applied BOOLEAN NOT NULL DEFAULT false;
++
++-- ============ Отзыв выданных JWT ============
++-- Токен stateless и живёт 30 дней, в нём только sub — погасить его было нечем:
++-- «выйти на всех устройствах» реализовать не на чем, а сброс пароля по коду из
++-- письма НЕ выгонял того, кто уже успел войти с угнанным аккаунтом.
++-- token_version кладётся в токен при выпуске (клейм tv) и сверяется в
++-- requireAuth/maybeAuth — пользователь и так читается из БД на каждый запрос,
++-- поэтому сверка бесплатна. Инкремент: смена пароля, явный «выйти везде».
++ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0;
+diff --git a/backend/src/middleware/auth.ts b/backend/src/middleware/auth.ts
+index d841124..dbed8d3 100644
+--- a/backend/src/middleware/auth.ts
++++ b/backend/src/middleware/auth.ts
+@@ -15,9 +15,23 @@ if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+ export const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+ const JWT_EXPIRES = '30d';
+ 
+-export function signToken(user: Pick<User, 'id'>): string {
+-  // В токен кладём минимум: только id пользователя
+-  return jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
++export function signToken(user: Pick<User, 'id' | 'tokenVersion'>): string {
++  // В токен кладём минимум: id пользователя и версию сессий (tv).
++  // tv нужен, чтобы токен вообще можно было отозвать: он сверяется с
++  // users.token_version на каждом запросе, и инкремент версии (смена пароля,
++  // «выйти везде») мгновенно обесценивает все ранее выданные токены.
++  return jwt.sign({ sub: user.id, tv: user.tokenVersion ?? 0 }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
++}
++
++/**
++ * Токен выпущен до последнего отзыва сессий?
++ * Токены, выпущенные до появления клейма (tv отсутствует), считаем версией 0 —
++ * они остаются валидными для тех, у кого версия ещё 0, и гаснут при первом же
++ * отзыве. Иначе релиз разлогинил бы всех разом.
++ */
++function isRevoked(payload: jwt.JwtPayload, user: User): boolean {
++  const tv = typeof payload.tv === 'number' ? payload.tv : 0;
++  return tv !== (user.tokenVersion ?? 0);
+ }
+ 
+ /**
+@@ -33,6 +47,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
+     const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as jwt.JwtPayload;
+     const user = await db.users.findById(payload.sub as string);
+     if (!user) { res.status(401).json({ error: 'USER_NOT_FOUND' }); return; }
++    if (isRevoked(payload, user)) { res.status(401).json({ error: 'TOKEN_REVOKED' }); return; }
+     req.auth = { userId: user.id, user };
+     next();
+   } catch (e) {
+@@ -65,7 +80,7 @@ export async function maybeAuth(req: Request, _res: Response, next: NextFunction
+   try {
+     const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as jwt.JwtPayload;
+     const user = await db.users.findById(payload.sub as string);
+-    if (user) req.auth = { userId: user.id, user };
++    if (user && !isRevoked(payload, user)) req.auth = { userId: user.id, user };
+   } catch (e) { /* невалидный токен у гостевого доступа — просто игнорируем */ }
+   next();
+ }
+diff --git a/backend/src/middleware/validate.ts b/backend/src/middleware/validate.ts
+index d1138fc..6c12fb6 100644
+--- a/backend/src/middleware/validate.ts
++++ b/backend/src/middleware/validate.ts
+@@ -14,11 +14,19 @@ const phone = z.string().trim().min(6).max(20).regex(/^[0-9+\s-]+$/, 'INVALID_PH
+ // разойдётся по клиентам вместе с контентом.
+ const fileRef = z.string().trim().max(500).regex(/^\/api\/files\/[A-Za-z0-9_.-]+$/, 'INVALID_FILE_URL');
+ 
++/**
++ * Пароль. 8 символов вместо прежних 6: маркетплейс держит платежи, переписку и
++ * персональные данные, а шестизначный пароль перебирается офлайн за минуты,
++ * если база когда-нибудь утечёт. Верхняя граница оставлена прежней (128) —
++ * она защищает от DoS через дорогой scrypt на гигантском вводе.
++ */
++const password = z.string().min(8, 'PASSWORD_MIN_8').max(128);
++
+ export const schemas = {
+   register: z.object({
+     name: z.string().trim().min(1).max(100),
+     email: z.string().trim().email().max(160),
+-    password: z.string().min(6, 'PASSWORD_MIN_6').max(128),
++    password,
+     phone: phone.optional(),
+     language: z.enum(['fr', 'ar']).default('fr'),
+   }),
+@@ -45,7 +53,7 @@ export const schemas = {
+   passwordReset: z.object({
+     email: z.string().trim().email().max(160),
+     code: z.string().trim().regex(/^\d{6}$/, 'CODE_INVALID'),
+-    newPassword: z.string().min(6, 'PASSWORD_MIN_6').max(128),
++    newPassword: password,
+   }),
+ 
+   listingCreate: z.object({
+diff --git a/backend/src/models/memory.ts b/backend/src/models/memory.ts
+index b1abf0b..e48573d 100644
+--- a/backend/src/models/memory.ts
++++ b/backend/src/models/memory.ts
+@@ -55,7 +55,7 @@ const FAVORITES_NOTIFY_CAP = 200;
+ const usersRepo = {
+   async createWithPassword({ name, email, passwordHash, phone = null, language = 'fr' }: CreateUserWithPassword): Promise<User> {
+     const id = nextId();
+-    const user: User = { id, name, email, passwordHash, googleId: null, pushToken: null, phone: phone ?? null, language, avatar: null, lastSeenAt: null, verified: false, emailVerified: false, createdAt: now() };
++    const user: User = { id, name, email, passwordHash, googleId: null, pushToken: null, phone: phone ?? null, language, avatar: null, lastSeenAt: null, verified: false, emailVerified: false, tokenVersion: 0, createdAt: now() };
+     tables.users.set(id, user);
+     return user;
+   },
+@@ -63,7 +63,7 @@ const usersRepo = {
+   async createWithGoogle({ name, email, googleId, avatar = null, language = 'fr' }: CreateUserWithGoogle): Promise<User> {
+     const id = nextId();
+     // emailVerified=true: адрес уже проверен Google (email_verified в id-токене)
+-    const user: User = { id, name, email, passwordHash: null, googleId, pushToken: null, phone: null, language, avatar: avatar ?? null, lastSeenAt: null, verified: false, emailVerified: true, createdAt: now() };
++    const user: User = { id, name, email, passwordHash: null, googleId, pushToken: null, phone: null, language, avatar: avatar ?? null, lastSeenAt: null, verified: false, emailVerified: true, tokenVersion: 0, createdAt: now() };
+     tables.users.set(id, user);
+     return user;
+   },
+@@ -84,9 +84,17 @@ const usersRepo = {
+     Object.assign(u, patch);
+     return u;
+   },
+-  async setPassword(id: string, passwordHash: string): Promise<void> {
++  async setPassword(id: string, passwordHash: string, revokeSessions = false): Promise<void> {
+     const u = tables.users.get(id);
+-    if (u) u.passwordHash = passwordHash;
++    if (!u) return;
++    u.passwordHash = passwordHash;
++    if (revokeSessions) u.tokenVersion = (u.tokenVersion || 0) + 1;
++  },
++  async revokeSessions(id: string): Promise<number> {
++    const u = tables.users.get(id);
++    if (!u) return 0;
++    u.tokenVersion = (u.tokenVersion || 0) + 1;
++    return u.tokenVersion;
+   },
+   // Снять данный push-токен со всех остальных (1 устройство = 1 аккаунт)
+   async clearPushTokenForOthers(token: string, keepUserId: string): Promise<void> {
+diff --git a/backend/src/routes/index.ts b/backend/src/routes/index.ts
+index d1be054..3fe81f5 100644
+--- a/backend/src/routes/index.ts
++++ b/backend/src/routes/index.ts
+@@ -2,11 +2,11 @@ import express, { type Request, type Response, type NextFunction, type RequestHa
+ import { makeLimiter, byUser } from '../services/limiter.js';
+ import db from '../models/db.js';
+ import { signToken, requireAuth, requireVerifiedEmail, maybeAuth } from '../middleware/auth.js';
+-import { hashPassword, verifyPassword } from '../utils/password.js';
++import { hashPassword, verifyPassword, needsRehash } from '../utils/password.js';
+ import { schemas, validateBody, validateQuery } from '../middleware/validate.js';
+-import { JOB_CATEGORIES, SERVICE_CATEGORIES, WILAYAS, ATTRIBUTES, SUBCATEGORIES, isValidCategory, isValidSubcategory } from '../services/marketplace.js';
++import { JOB_CATEGORIES, SERVICE_CATEGORIES, WILAYAS, ATTRIBUTES, SUBCATEGORIES, isValidCategory, isValidSubcategory, isValidAttributes } from '../services/marketplace.js';
+ import { isPaidCategory } from '../services/pricing.js';
+-import { upload, uploadDoc, docExt, processImage, keyWithExt, thumbKey } from '../services/uploads.js';
++import { upload, uploadDoc, docExt, processImage, keyWithExt, thumbKey, isAllowedImageBuffer, isAllowedDocBuffer } from '../services/uploads.js';
+ import { putObject, serveObject, publicPath } from '../services/storage.js';
+ import { queryListings, indexListing, removeListing } from '../services/search.js';
+ import { parseQuery } from '../services/searchText.js';
+@@ -156,9 +156,14 @@ router.post('/auth/password/reset', validateBody(schemas.passwordReset), wrap(as
+   if (!user || !(await consumeCode(user.id, 'reset', code))) {
+     return res.status(400).json({ error: 'CODE_INVALID' });
+   }
+-  await db.users.setPassword(user.id, await hashPassword(newPassword));
++  // revokeSessions=true: смена пароля гасит все ранее выданные токены. Иначе
++  // тот, кто уже вошёл с угнанным аккаунтом, оставался бы внутри на 30 дней,
++  // и сброс пароля ничего бы не решал.
++  await db.users.setPassword(user.id, await hashPassword(newPassword), true);
+   // Код пришёл с почты → адрес подтверждён, даже если регистрацию не завершали
+-  const updated = user.emailVerified ? user : (await db.users.update(user.id, { emailVerified: true }))!;
++  const fresh = (await db.users.findById(user.id))!;
++  const updated = fresh.emailVerified ? fresh : (await db.users.update(fresh.id, { emailVerified: true }))!;
++  // Токен выпускаем ПОСЛЕ отзыва — с новой версией, иначе он сам бы был отозван.
+   res.json({ token: signToken(updated), user: publicUser(updated) });
+ }));
+ 
+@@ -177,9 +182,24 @@ router.post('/auth/login', validateBody(schemas.login), wrap(async (req, res) =>
+   if (!(await verifyPassword(password, user.passwordHash))) {
+     return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
+   }
++  // Пароль верен и открытый текст есть только здесь — единственная точка, где
++  // можно бесшовно поднять устаревший хеш до текущих параметров scrypt.
++  // Без отзыва сессий: пароль не менялся, выгонять пользователя не за что.
++  if (needsRehash(user.passwordHash)) {
++    db.users.setPassword(user.id, await hashPassword(password)).catch((e) => {
++      console.error('[auth] перехеширование не удалось:', e);
++    });
++  }
+   res.json({ token: signToken(user), user: publicUser(user) });
+ }));
+ 
++// «Выйти на всех устройствах»: инкремент версии обесценивает все выданные
++// токены, включая текущий — приложение после этого уводит на экран входа.
++router.post('/auth/logout-all', requireAuth, wrap(async (req, res) => {
++  await db.users.revokeSessions(req.auth!.userId);
++  res.json({ ok: true });
++}));
++
+ // Вход/регистрация через Google: проверяем idToken у Google, связываем по email
+ router.post('/auth/google', validateBody(schemas.googleAuth), wrap(async (req, res) => {
+   const { idToken, language } = req.valid;
+@@ -275,6 +295,10 @@ router.post('/uploads', requireAuth, requireVerifiedEmail, uploadLimiter, (req:
+     const files = req.files as Express.Multer.File[] | undefined;
+     if (!files || !files.length) return res.status(400).json({ error: 'NO_FILES' });
+     try {
++      // Тип по СОДЕРЖИМОМУ: mimetype в multipart задаёт клиент (см. uploads.ts).
++      if (files.some((f) => !isAllowedImageBuffer(f.buffer))) {
++        return res.status(415).json({ error: 'INVALID_FILE_TYPE' });
++      }
+       const urls: string[] = [];
+       for (const f of files) {
+         const img = await processImage(f);          // ужать + превью (или как есть)
+@@ -300,6 +324,11 @@ router.post('/uploads/doc', requireAuth, requireVerifiedEmail, uploadLimiter, (r
+     }
+     const f = req.file as Express.Multer.File | undefined;
+     if (!f) return res.status(400).json({ error: 'NO_FILE' });
++    // Документы не перекодируются, поэтому здесь проверка по байтам —
++    // единственное, что отделяет резюме от произвольного файла с чужим mime.
++    if (!isAllowedDocBuffer(f.buffer)) {
++      return res.status(415).json({ error: 'INVALID_FILE_TYPE' });
++    }
+     try {
+       const key = keyWithExt(docExt(f.mimetype));
+       await putObject(key, f.buffer, f.mimetype);
+@@ -547,6 +576,9 @@ router.post('/market/listings', requireAuth, requireVerifiedEmail, validateBody(
+   if (!isValidSubcategory(data.type, data.category, data.subcategory)) {
+     return res.status(400).json({ error: 'INVALID_SUBCATEGORY' });
+   }
++  if (!isValidAttributes(data.type, data.attributes)) {
++    return res.status(400).json({ error: 'INVALID_ATTRIBUTES' });
++  }
+   // Каркас платности по категориям — флаг выключен по умолчанию (CATEGORY_PRICING_ENABLED),
+   // сейчас всегда false → эта проверка no-op. См. services/pricing.ts.
+   if (isPaidCategory(data.type, data.category)) {
+@@ -610,6 +642,10 @@ router.put('/market/listings/:id', requireAuth, validateBody(schemas.listingUpda
+   if (req.valid.subcategory && !isValidSubcategory(listing.type, req.valid.category || listing.category, req.valid.subcategory)) {
+     return res.status(400).json({ error: 'INVALID_SUBCATEGORY' });
+   }
++  // Тип объявления менять нельзя, поэтому атрибуты сверяем с типом из БД.
++  if (req.valid.attributes && !isValidAttributes(listing.type, req.valid.attributes)) {
++    return res.status(400).json({ error: 'INVALID_ATTRIBUTES' });
++  }
+   const oldPrice = listing.price;
+   const closingNow = req.valid.status === 'closed' && listing.status === 'active';
+   const updated = await db.listings.update(listing.id, req.valid);
+diff --git a/backend/src/services/marketplace.ts b/backend/src/services/marketplace.ts
+index 4de7311..accba5a 100644
+--- a/backend/src/services/marketplace.ts
++++ b/backend/src/services/marketplace.ts
+@@ -455,3 +455,26 @@ export function isValidSubcategory(type: string, category: string, subcategory:
+   const subs = (SUBCATEGORIES as Record<string, Record<string, Subcategory[]>>)[type]?.[category];
+   return !!subs && subs.some((s) => s.id === subcategory);
+ }
++
++/**
++ * Проверка характеристик объявления против справочника ATTRIBUTES.
++ *
++ * Категория и подкатегория валидировались строго, а attributes — только по
++ * длине ключа и значения (см. middleware/validate.ts). То есть в карточку
++ * попадала любая пара «ключ → значение», которую прислал клиент, и она
++ * отрисовывалась в UI наравне с настоящими характеристиками.
++ *
++ * Здесь и ключ, и значение сверяются со списком: ключ должен быть id атрибута
++ * своего типа объявления, значение — id одного из его вариантов.
++ */
++export function isValidAttributes(type: string, attributes: Record<string, string> | undefined): boolean {
++  if (!attributes) return true;
++  const specs = (ATTRIBUTES as Record<string, AttributeSpec[]>)[type];
++  if (!specs) return false;
++  for (const [key, value] of Object.entries(attributes)) {
++    const spec = specs.find((a) => a.id === key);
++    if (!spec) return false;
++    if (!spec.options.some((o) => o.id === value)) return false;
++  }
++  return true;
++}
+diff --git a/backend/src/services/payments.ts b/backend/src/services/payments.ts
+index b37795d..28998b0 100644
+--- a/backend/src/services/payments.ts
++++ b/backend/src/services/payments.ts
+@@ -64,12 +64,35 @@ const chargilyApi = (): string => {
+   return live ? 'https://pay.chargily.net/api/v2' : 'https://pay.chargily.net/test/api/v2';
+ };
+ 
++/**
++ * Старшинство уровней продвижения. Нужно, чтобы покупка более дешёвого тарифа
++ * не понижала уже оплаченный более дорогой (см. applyPromotion).
++ */
++const PROMO_RANK: Record<PromoLevel, number> = { highlight: 1, premium: 2, vip: 3 };
++
++/**
++ * Новый срок действия: продлеваем от МАКСИМУМА (текущий срок, сейчас), а не от
++ * «сейчас». Иначе покупка второго тарифа поверх действующего обрезала бы
++ * оплаченный остаток — человек платил и получал меньше, чем у него уже было.
++ */
++function extendUntil(current: string | null | undefined, days: number): string {
++  const base = Math.max(current ? new Date(current).getTime() : 0, Date.now());
++  return new Date(base + days * 86400000).toISOString();
++}
++
+ /**
+  * Применить оплаченный тариф к объявлению. Идемпотентно на уровне вызова webhook
+  * (см. handleWebhookEvent). Переиндексирует объявление в Meilisearch (indexListing
+  * — no-op при SEARCH_DRIVER=db): без этого купленный буст (kind='promo') и даже
+  * поднятие даты (kind='bump', createdAt — тоже сортируемое поле индекса) не
+  * долетали бы до движка поиска, если он включён.
++ *
++ * Оплаченное не понижается и не обрезается:
++ *   - уровень promo берётся как МАКСИМУМ действующего и купленного;
++ *   - срок ПРОДЛЕВАЕТСЯ от действующего, а не отсчитывается заново.
++ * Раньше и то и другое перезаписывалось безусловно: highlight (400 DA, 7 дней),
++ * купленный поверх активного vip (2500 DA, 30 дней), ронял объявление до
++ * highlight и обрезал срок до недели.
+  */
+ export async function applyPromotion(payment: Payment): Promise<void> {
+   const tariff = TARIFFS[payment.tariffId];
+@@ -78,10 +101,24 @@ export async function applyPromotion(payment: Payment): Promise<void> {
+   if (tariff.kind === 'bump') {
+     await db.listings.bump(payment.listingId);
+     listing = await db.listings.findById(payment.listingId);
++  } else if (tariff.kind === 'xl') {
++    const current = await db.listings.findById(payment.listingId);
++    // xlUntil ортогонален promoLevel — продлеваем независимо от уровня promo.
++    const active = current?.xlUntil && new Date(current.xlUntil).getTime() > Date.now() ? current.xlUntil : null;
++    listing = await db.listings.update(payment.listingId, { xlUntil: extendUntil(active, tariff.days) });
+   } else {
+-    const until = new Date(Date.now() + tariff.days * 86400000).toISOString();
+-    const patch = tariff.kind === 'xl' ? { xlUntil: until } : { promoLevel: tariff.level!, promoUntil: until };
+-    listing = await db.listings.update(payment.listingId, patch);
++    const current = await db.listings.findById(payment.listingId);
++    // Действующим считаем только непросроченный уровень: истёкший promo не
++    // должен блокировать покупку более дешёвого тарифа.
++    const activeLevel = current?.promoLevel && current.promoUntil
++      && new Date(current.promoUntil).getTime() > Date.now()
++      ? current.promoLevel : null;
++    const bought = tariff.level!;
++    const keepsLevel = activeLevel != null && PROMO_RANK[activeLevel] > PROMO_RANK[bought];
++    listing = await db.listings.update(payment.listingId, {
++      promoLevel: keepsLevel ? activeLevel : bought,
++      promoUntil: extendUntil(activeLevel ? current!.promoUntil : null, tariff.days),
++    });
+   }
+   await indexListing(listing);
+ }
+diff --git a/backend/src/services/realtime.ts b/backend/src/services/realtime.ts
+index bf1ca0d..e90a772 100644
+--- a/backend/src/services/realtime.ts
++++ b/backend/src/services/realtime.ts
+@@ -35,6 +35,39 @@ interface AuthedSocket extends Socket {
+    *  всё равно читается и проверяется участие) — чтобы chat:typing не ходил
+    *  в БД на каждое событие: клиент шлёт их часто, а злонамеренный — потоком. */
+   peers: Map<string, string>;
++  /** Счётчики событий для лимита (см. allowEvent). */
++  rate: Map<string, { n: number; resetAt: number }>;
++}
++
++/**
++ * Лимит клиентских событий НА СОКЕТ.
++ *
++ * Кап peers (200) ограничивал только размер карты, но не число вызовов:
++ * чередование chat:join / chat:leave обходило его и давало неограниченный
++ * поток запросов в БД, а chat:typing не был ограничен вовсе и вдобавок
++ * размножался сервером по всей комнате. HTTP-лимитеры сюда не достают —
++ * это сокет, а не запрос через Express.
++ *
++ * Простое окно на сокет: соединение всё равно однопользовательское, а при
++ * разрыве счётчики уходят вместе с сокетом.
++ */
++const EVENT_LIMITS: Record<string, { max: number; windowMs: number }> = {
++  'chat:join':   { max: 60,  windowMs: 60_000 },  // вход в комнату — редкое действие
++  'chat:leave':  { max: 60,  windowMs: 60_000 },
++  'chat:typing': { max: 120, windowMs: 60_000 },  // 2/сек — с запасом на живой набор
++};
++
++function allowEvent(s: AuthedSocket, event: string): boolean {
++  const limit = EVENT_LIMITS[event];
++  if (!limit) return true;
++  const now = Date.now();
++  const cur = s.rate.get(event);
++  if (!cur || now >= cur.resetAt) {
++    s.rate.set(event, { n: 1, resetAt: now + limit.windowMs });
++    return true;
++  }
++  cur.n += 1;
++  return cur.n <= limit.max;
+ }
+ 
+ let io: Server | null = null;
+@@ -121,6 +154,10 @@ export async function initRealtime(httpServer: HttpServer): Promise<Server> {
+       const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as jwt.JwtPayload;
+       const user = await db.users.findById(payload.sub as string);
+       if (!user) return next(new Error('USER_NOT_FOUND'));
++      // Та же сверка версии сессий, что в requireAuth: иначе отозванный токен
++      // (смена пароля, «выйти везде») продолжал бы держать живой сокет с чатом.
++      const tv = typeof payload.tv === 'number' ? payload.tv : 0;
++      if (tv !== (user.tokenVersion ?? 0)) return next(new Error('TOKEN_REVOKED'));
+       (socket as AuthedSocket).userId = user.id;
+       next();
+     } catch (e) {
+@@ -131,6 +168,7 @@ export async function initRealtime(httpServer: HttpServer): Promise<Server> {
+   io.on('connection', (socket) => {
+     const s = socket as AuthedSocket;
+     s.peers = new Map();
++    s.rate = new Map();
+     onlineUsers.inc();
+     presenceUp(s.userId);
+     // личная комната — для событий "новое сообщение" на список чатов
+@@ -139,6 +177,8 @@ export async function initRealtime(httpServer: HttpServer): Promise<Server> {
+     // Войти в комнату беседы (только если участник)
+     s.on('chat:join', async (conversationId: string) => {
+       if (typeof conversationId !== 'string') return;
++      // До обращения к БД: иначе поток join'ов = поток запросов к базе.
++      if (!allowEvent(s, 'chat:join')) return;
+       // Кап на число комнат: peers растёт от клиентских событий, без предела
+       // поток chat:join с разными id раздувал бы память процесса.
+       if (s.peers.size >= 200) return;
+@@ -151,6 +191,7 @@ export async function initRealtime(httpServer: HttpServer): Promise<Server> {
+ 
+     s.on('chat:leave', (conversationId: string) => {
+       if (typeof conversationId !== 'string') return;
++      if (!allowEvent(s, 'chat:leave')) return;
+       s.leave(`chat:${conversationId}`);
+       s.peers.delete(conversationId);
+     });
+@@ -163,6 +204,7 @@ export async function initRealtime(httpServer: HttpServer): Promise<Server> {
+     // typing-событие превращал бы частый клиентский сигнал в поток запросов к БД.
+     s.on('chat:typing', ({ conversationId, typing }: { conversationId?: string; typing?: boolean } = {}) => {
+       if (typeof conversationId !== 'string') return;
++      if (!allowEvent(s, 'chat:typing')) return;
+       if (!s.rooms.has(`chat:${conversationId}`)) return;
+       const payload = { conversationId, userId: s.userId, typing: !!typing };
+       s.to(`chat:${conversationId}`).emit('chat:typing', payload);
+@@ -173,6 +215,7 @@ export async function initRealtime(httpServer: HttpServer): Promise<Server> {
+     s.on('disconnect', () => {
+       onlineUsers.dec();
+       s.peers.clear();
++      s.rate.clear();
+       presenceDown(s.userId).catch(() => {});
+     });
+   });
+diff --git a/backend/src/services/storage.ts b/backend/src/services/storage.ts
+index f029311..3fbf025 100644
+--- a/backend/src/services/storage.ts
++++ b/backend/src/services/storage.ts
+@@ -16,6 +16,7 @@ import fs from 'fs';
+ import path from 'path';
+ import { createRequire } from 'module';
+ import type { Response } from 'express';
++import { isDocKey } from './fileTokens.js';
+ 
+ const require = createRequire(import.meta.url);
+ const DRIVER = (process.env.STORAGE_DRIVER || 'local').toLowerCase();
+@@ -64,14 +65,25 @@ export async function putObject(key: string, buffer: Buffer, contentType: string
+  */
+ export async function serveObject(res: Response, name: string): Promise<void> {
+   const key = path.basename(name); // защита от path traversal
++  const isDoc = isDocKey(key);
+   if (DRIVER === 's3') {
+     let url: string;
+-    if (PUBLIC_URL) {
++    // ВАЖНО: документы НИКОГДА не отдаются через PUBLIC_URL, даже если он задан.
++    // Публичный бакет/CDN означает, что объект доступен по прямой ссылке без
++    // подписи и бессрочно — тогда весь контур защиты резюме (подпись на 5 минут,
++    // журнал раскрытий, лимит) охранял бы только редирект, а не сам PDF с
++    // телефоном, адресом и биографией соискателя. Фото — наоборот, публичны
++    // намеренно (лента, кэш, CDN), для них PUBLIC_URL и нужен.
++    if (PUBLIC_URL && !isDoc) {
+       url = `${PUBLIC_URL}/${key}`; // публичный бакет / CDN — кэшируемо
+     } else {
+       const { GetObjectCommand } = require('@aws-sdk/client-s3');
+       const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+-      url = await getSignedUrl(s3client(), new GetObjectCommand({ Bucket: BUCKET, Key: key }), { expiresIn: 3600 });
++      url = await getSignedUrl(s3client(), new GetObjectCommand({
++        Bucket: BUCKET, Key: key,
++        // Документ скачивается, а не открывается в браузере как активный контент.
++        ...(isDoc ? { ResponseContentDisposition: 'attachment' } : {}),
++      }), { expiresIn: isDoc ? 300 : 3600 });
+     }
+     res.redirect(302, url);
+     return;
+@@ -81,8 +93,15 @@ export async function serveObject(res: Response, name: string): Promise<void> {
+   const full = path.join(baseDir, key);
+   if (!full.startsWith(baseDir)) { res.status(400).json({ error: 'BAD_PATH' }); return; }
+   if (!fs.existsSync(full)) { res.status(404).json({ error: 'NOT_FOUND' }); return; }
+-  // Ключ файла случайный и контент неизменяемый → агрессивный кэш (как в S3-ветке).
+-  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
++  if (isDoc) {
++    // Документ доступен только по подписи с TTL 5 минут — кэшировать его
++    // в общих кэшах нельзя, а отдавать надо вложением, а не инлайн.
++    res.setHeader('Cache-Control', 'private, no-store');
++    res.setHeader('Content-Disposition', 'attachment');
++  } else {
++    // Ключ файла случайный и контент неизменяемый → агрессивный кэш (как в S3-ветке).
++    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
++  }
+   res.sendFile(full);
+ }
+ 
+diff --git a/backend/src/services/uploads.ts b/backend/src/services/uploads.ts
+index 4723342..8af17c4 100644
+--- a/backend/src/services/uploads.ts
++++ b/backend/src/services/uploads.ts
+@@ -69,6 +69,51 @@ export const uploadDoc = multer({
+ // Расширение по mime документа (для ключа объекта).
+ export function docExt(mimetype: string): string { return ALLOWED_DOCS[mimetype] || '.bin'; }
+ 
++/* ============================================================
++ * Проверка по СОДЕРЖИМОМУ, а не по заявленному типу.
++ *
++ * file.mimetype в multipart приходит от клиента и подделывается тривиально.
++ * Для картинок это до сих пор нейтрализовал sharp: он перекодирует ввод, и
++ * произвольные байты через него не проходят. Но перекодирование включается,
++ * только если sharp есть в сборке (иначе processImage сохраняет буфер как
++ * есть), а документы не перекодируются НИКОГДА — там заявленный клиентом тип
++ * был единственной проверкой.
++ *
++ * Внешнюю зависимость не тянем: сигнатур ровно шесть, и все короткие.
++ * ========================================================== */
++
++const startsWith = (b: Buffer, bytes: number[], offset = 0): boolean =>
++  b.length >= offset + bytes.length && bytes.every((v, i) => b[offset + i] === v);
++
++/** Определить реальный тип по первым байтам. null — не из разрешённых. */
++export function sniffType(buf: Buffer): string | null {
++  if (startsWith(buf, [0xff, 0xd8, 0xff])) return 'image/jpeg';
++  if (startsWith(buf, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return 'image/png';
++  // WEBP: 'RIFF' <4 байта размера> 'WEBP'
++  if (startsWith(buf, [0x52, 0x49, 0x46, 0x46]) && startsWith(buf, [0x57, 0x45, 0x42, 0x50], 8)) return 'image/webp';
++  if (startsWith(buf, [0x25, 0x50, 0x44, 0x46, 0x2d])) return 'application/pdf'; // '%PDF-'
++  // DOC — OLE2 compound file
++  if (startsWith(buf, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])) return 'application/msword';
++  // DOCX — это ZIP. Отличить его здесь от произвольного zip нельзя, но сам
++  // факт «это архив, а не html/скрипт» уже отсекает подмену контента.
++  if (startsWith(buf, [0x50, 0x4b, 0x03, 0x04]) || startsWith(buf, [0x50, 0x4b, 0x05, 0x06])) {
++    return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
++  }
++  return null;
++}
++
++/** Байты соответствуют одному из разрешённых изображений? */
++export function isAllowedImageBuffer(buf: Buffer): boolean {
++  const t = sniffType(buf);
++  return t != null && t in ALLOWED;
++}
++
++/** Байты соответствуют одному из разрешённых документов? */
++export function isAllowedDocBuffer(buf: Buffer): boolean {
++  const t = sniffType(buf);
++  return t != null && t in ALLOWED_DOCS;
++}
++
+ const randomName = () => crypto.randomBytes(16).toString('hex');
+ 
+ export interface ProcessedImage {
+diff --git a/backend/src/types.ts b/backend/src/types.ts
+index 057178f..50350b3 100644
+--- a/backend/src/types.ts
++++ b/backend/src/types.ts
+@@ -38,6 +38,13 @@ export interface User {
+   // Подтверждён ли email кодом из письма. Google-аккаунты создаются сразу
+   // с true (email проверен Google, см. email_verified в id-токене).
+   emailVerified: boolean;
++  /**
++   * Версия сессий. Кладётся в JWT при выпуске и сверяется на каждом запросе:
++   * несовпадение = токен отозван. Инкремент при смене пароля и при «выйти на
++   * всех устройствах» — без этого stateless-токен на 30 дней нечем погасить,
++   * и сброс пароля не выгонял угонщика аккаунта.
++   */
++  tokenVersion: number;
+   createdAt: string;
+ }
+ 
+@@ -385,8 +392,15 @@ export interface DbDriver {
+     findByGoogleId(googleId: string): Promise<User | null>;
+     update(id: string, patch: UserPatch): Promise<User | null>;
+     clearPushTokenForOthers(token: string, keepUserId: string): Promise<void>;
+-    /** Смена пароля (сброс по коду из письма). */
+-    setPassword(id: string, passwordHash: string): Promise<void>;
++    /**
++     * Смена пароля. revokeSessions=true инкрементит tokenVersion в том же
++     * UPDATE — так сброс пароля гасит ранее выданные токены атомарно.
++     * Перехеширование на входе (см. needsRehash) вызывает БЕЗ отзыва: пароль
++     * тот же, выгонять пользователя не за что.
++     */
++    setPassword(id: string, passwordHash: string, revokeSessions?: boolean): Promise<void>;
++    /** «Выйти на всех устройствах»: гасит все выданные токены. Новая версия. */
++    revokeSessions(id: string): Promise<number>;
+     /** Удаление аккаунта (требование сторов) — каскадом сносит его данные. */
+     deleteCascade(userId: string): Promise<void>;
+   };
+diff --git a/backend/src/utils/password.ts b/backend/src/utils/password.ts
+index a34c7ea..8c88540 100644
+--- a/backend/src/utils/password.ts
++++ b/backend/src/utils/password.ts
+@@ -3,26 +3,96 @@ import { promisify } from 'util';
+ 
+ /**
+  * Хеширование паролей через встроенный scrypt (без внешних зависимостей).
+- * Формат хранения: scrypt$<salt_hex>$<hash_hex>
++ *
++ * Формат хранения: scrypt$<N>$<r>$<p>$<salt_hex>$<hash_hex>
++ *
++ * Параметры стоимости лежат В САМОЙ СТРОКЕ. Раньше формат был
++ * `scrypt$<salt>$<hash>`, а scrypt вызывался на дефолтах Node (N=16384=2¹⁴) —
++ * это вдвое-восьмеро ниже текущей рекомендации OWASP (минимум 2¹⁷) и, что
++ * важнее, поднять коэффициент было НЕЛЬЗЯ: проверка старых хешей молча
++ * сломалась бы, потому что записанного N в них нет. Теперь параметры читаются
++ * из строки, поэтому их можно ужесточать в любой момент — старые хеши
++ * продолжают проверяться своими, а на успешном входе перехешируются на текущие
++ * (см. needsRehash + вызов в POST /auth/login).
++ *
++ * Старый двухсегментный формат по-прежнему проверяется (LEGACY_N) — иначе
++ * все существующие пользователи разом не смогли бы войти.
+  *
+  * Асинхронный scrypt: синхронная версия блокировала event loop на ~50-100 мс
+  * на каждый логин/регистрацию — под нагрузкой это выливалось в отказ всего API
+  * (все запросы стоят в очереди, пока считается хеш).
+  */
+-const scrypt = promisify<crypto.BinaryLike, crypto.BinaryLike, number, Buffer>(crypto.scrypt);
++const scrypt = promisify<crypto.BinaryLike, crypto.BinaryLike, number, crypto.ScryptOptions, Buffer>(crypto.scrypt);
++
++/** Текущие параметры. N=2¹⁷ — рекомендация OWASP Password Storage для scrypt. */
++export const SCRYPT_N = 131072;
++export const SCRYPT_R = 8;
++export const SCRYPT_P = 1;
++const KEYLEN = 64;
++
++/** N, на котором считались хеши старого формата `scrypt$salt$hash` (дефолт Node). */
++const LEGACY_N = 16384;
++
++/**
++ * maxmem по умолчанию — 32 МБ, а scrypt при N=2¹⁷,r=8 требует ~128 МБ
++ * (примерно 128·N·r байт). Без подъёма лимита вызов падает с ERR_CRYPTO_*.
++ */
++const maxmem = (n: number, r: number) => 256 * n * r;
++
++async function derive(plain: string, salt: string, n: number, r: number, p: number): Promise<Buffer> {
++  return scrypt(plain, salt, KEYLEN, { N: n, r, p, maxmem: maxmem(n, r) });
++}
+ 
+ export async function hashPassword(plain: string): Promise<string> {
+   const salt = crypto.randomBytes(16).toString('hex');
+-  const hash = (await scrypt(plain, salt, 64)).toString('hex');
+-  return `scrypt$${salt}$${hash}`;
++  const hash = (await derive(plain, salt, SCRYPT_N, SCRYPT_R, SCRYPT_P)).toString('hex');
++  return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${salt}$${hash}`;
++}
++
++/** Разобрать хеш обоих форматов. null — строка не наша или битая. */
++function parse(stored: string): { n: number; r: number; p: number; salt: string; hash: string } | null {
++  const parts = stored.split('$');
++  if (parts[0] !== 'scrypt') return null;
++  // Новый формат: scrypt$N$r$p$salt$hash
++  if (parts.length === 6) {
++    const [, n, r, p, salt, hash] = parts;
++    const N = Number(n), R = Number(r), P = Number(p);
++    if (!Number.isFinite(N) || !Number.isFinite(R) || !Number.isFinite(P) || !salt || !hash) return null;
++    return { n: N, r: R, p: P, salt, hash };
++  }
++  // Старый формат: scrypt$salt$hash (параметров нет — они были дефолтными).
++  if (parts.length === 3) {
++    const [, salt, hash] = parts;
++    if (!salt || !hash) return null;
++    return { n: LEGACY_N, r: 8, p: 1, salt, hash };
++  }
++  return null;
+ }
+ 
+ export async function verifyPassword(plain: string, stored: string | null | undefined): Promise<boolean> {
+-  if (!stored || !stored.startsWith('scrypt$')) return false;
+-  const [, salt, hash] = stored.split('$');
+-  if (!salt || !hash) return false;
+-  const calc = await scrypt(plain, salt, 64);
++  if (!stored) return false;
++  const parsed = parse(stored);
++  if (!parsed) return false;
++  let calc: Buffer;
++  try {
++    calc = await derive(plain, parsed.salt, parsed.n, parsed.r, parsed.p);
++  } catch (e) {
++    // Неадекватные параметры в строке (битая запись) — это не «пароль верный».
++    return false;
++  }
+   // сравнение в постоянное время
+-  const a = Buffer.from(hash, 'hex');
++  const a = Buffer.from(parsed.hash, 'hex');
+   return a.length === calc.length && crypto.timingSafeEqual(a, calc);
+ }
++
++/**
++ * Нужно ли перехешировать: хеш старого формата или посчитан на параметрах
++ * слабее текущих. Вызывается после УСПЕШНОЙ проверки пароля — только там есть
++ * открытый пароль, чтобы посчитать новый хеш.
++ */
++export function needsRehash(stored: string | null | undefined): boolean {
++  if (!stored) return false;
++  const parsed = parse(stored);
++  if (!parsed) return false;
++  return parsed.n < SCRYPT_N || parsed.r < SCRYPT_R || parsed.p < SCRYPT_P;
++}
+diff --git a/backend/tests/auditFixes.test.ts b/backend/tests/auditFixes.test.ts
+index 1f3713f..0b5bb07 100644
+--- a/backend/tests/auditFixes.test.ts
++++ b/backend/tests/auditFixes.test.ts
+@@ -34,6 +34,14 @@ const base = {
+   price: 3000, priceUnit: 'day', wilaya: 'Alger', phone: '0550123456',
+ };
+ 
++/**
++ * Настоящий JPEG 1×1 (не Buffer.from('fake')): загрузка теперь проверяет тип по
++ * СИГНАТУРЕ файла, а не по заявленному в multipart Content-Type, поэтому
++ * произвольные байты честно отклоняются с 415. Там, где тест проверяет гейты
++ * ДО чтения содержимого (401/403), фиктивного буфера по-прежнему достаточно.
++ */
++const JPEG_1PX = Buffer.from('/9j/2wBDAAoHBwgHBgoICAgLCgoLDhgQDg0NDh0VFhEYIx8lJCIfIiEmKzcvJik0KSEiMEExNDk7Pj4+JS5ESUM8SDc9Pjv/2wBDAQoLCw4NDhwQEBw7KCIoOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozv/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCqATSn/9k=', 'base64');
++
+ beforeEach(() => db.reset!());
+ 
+ describe('загрузка файлов требует подтверждённого email', () => {
+@@ -252,7 +260,7 @@ describe('фото доступны кросс-доменно (веб-верси
+     const u = await auth('Photo');
+     const up = await request(app).post('/api/uploads')
+       .set(bearer(u.token))
+-      .attach('photos', Buffer.from('fake'), { filename: 'a.jpg', contentType: 'image/jpeg' });
++      .attach('photos', JPEG_1PX, { filename: 'a.jpg', contentType: 'image/jpeg' });
+     expect(up.status).toBe(201);
+     const path = up.body.urls[0] as string;
+ 
+diff --git a/backend/tests/reviewFixes.test.ts b/backend/tests/reviewFixes.test.ts
+new file mode 100644
+index 0000000..0966ee3
+--- /dev/null
++++ b/backend/tests/reviewFixes.test.ts
+@@ -0,0 +1,228 @@
++import { describe, it, expect, beforeEach } from 'vitest';
++import request from 'supertest';
++import { createApp } from '../src/app.js';
++import db from '../src/models/db.js';
++import { applyPromotion, TARIFFS } from '../src/services/payments.js';
++import { hashPassword, verifyPassword, needsRehash, SCRYPT_N } from '../src/utils/password.js';
++import { sniffType, isAllowedImageBuffer, isAllowedDocBuffer } from '../src/services/uploads.js';
++import { isValidAttributes } from '../src/services/marketplace.js';
++import { resetLimiters } from '../src/services/limiter.js';
++import type { Payment } from '../src/types.js';
++
++/**
++ * Регрессии на находки ревью от 24.07.2026.
++ * Каждый блок держит одно исправление — если поведение вернётся, упадёт
++ * именно тот тест, который называет проблему.
++ */
++
++const app = createApp();
++const bearer = (t: string) => ({ Authorization: `Bearer ${t}` });
++
++let seq = 0;
++async function auth(name = 'User', password = 'secret123') {
++  const email = `${name.toLowerCase()}${seq++}@test.dz`;
++  const res = await request(app).post('/api/auth/register').send({ name, email, password });
++  await db.users.update(res.body.user.id, { emailVerified: true });
++  return { ...res.body, email, password };
++}
++
++const base = {
++  type: 'service', category: 'cleaning', title: 'Ménage à domicile',
++  wilaya: 'Alger', phone: '0550123456',
++};
++
++beforeEach(() => { db.reset!(); resetLimiters(); });
++
++// ─────────────────────────────────────────────────────────────
++describe('S1 · оплаченное продвижение не понижается и не обрезается', () => {
++  async function listingWithPromo(level: 'highlight' | 'premium' | 'vip', days: number) {
++    const u = await auth('Vendeur');
++    const l = await request(app).post('/api/market/listings').set(bearer(u.token)).send(base);
++    const until = new Date(Date.now() + days * 86400000).toISOString();
++    await db.listings.update(l.body.id, { promoLevel: level, promoUntil: until });
++    return { id: l.body.id as string, userId: u.user.id as string, until };
++  }
++
++  const pay = (listingId: string, userId: string, tariffId: string): Payment => ({
++    id: 'p1', userId, listingId, tariffId,
++    amount: TARIFFS[tariffId]!.amount, status: 'paid', provider: 'mock',
++    providerRef: null, checkoutUrl: null, promoApplied: false,
++    createdAt: new Date().toISOString(), paidAt: new Date().toISOString(),
++  } as Payment);
++
++  it('highlight поверх активного vip НЕ понижает уровень', async () => {
++    const { id, userId } = await listingWithPromo('vip', 30);
++    await applyPromotion(pay(id, userId, 'highlight'));
++    const after = await db.listings.findById(id);
++    expect(after!.promoLevel).toBe('vip'); // раньше становилось 'highlight'
++  });
++
++  it('highlight поверх активного vip НЕ обрезает срок, а продлевает', async () => {
++    const { id, userId, until } = await listingWithPromo('vip', 30);
++    await applyPromotion(pay(id, userId, 'highlight'));
++    const after = await db.listings.findById(id);
++    const was = new Date(until).getTime();
++    const now = new Date(after!.promoUntil!).getTime();
++    // Было 30 дней, купили ещё 7 → срок вырос, а не упал до недели.
++    expect(now).toBeGreaterThan(was);
++  });
++
++  it('vip поверх активного highlight повышает уровень', async () => {
++    const { id, userId } = await listingWithPromo('highlight', 7);
++    await applyPromotion(pay(id, userId, 'vip'));
++    const after = await db.listings.findById(id);
++    expect(after!.promoLevel).toBe('vip');
++  });
++
++  it('истёкший уровень не мешает купить более дешёвый тариф', async () => {
++    const u = await auth('Vendeur');
++    const l = await request(app).post('/api/market/listings').set(bearer(u.token)).send(base);
++    await db.listings.update(l.body.id, {
++      promoLevel: 'vip', promoUntil: new Date(Date.now() - 86400000).toISOString(),
++    });
++    await applyPromotion(pay(l.body.id, u.user.id, 'highlight'));
++    const after = await db.listings.findById(l.body.id);
++    expect(after!.promoLevel).toBe('highlight');
++  });
++});
++
++// ─────────────────────────────────────────────────────────────
++describe('S2 · параметры scrypt лежат в самой строке хеша', () => {
++  it('новый хеш содержит N/r/p', async () => {
++    const h = await hashPassword('motdepasse1');
++    expect(h.split('$')[0]).toBe('scrypt');
++    expect(h.split('$')).toHaveLength(6);
++    expect(Number(h.split('$')[1])).toBe(SCRYPT_N);
++    expect(await verifyPassword('motdepasse1', h)).toBe(true);
++    expect(await verifyPassword('autre', h)).toBe(false);
++  });
++
++  it('хеш старого формата всё ещё проверяется (иначе разлогинило бы всех)', async () => {
++    // Ровно то, что писала прежняя реализация: scrypt$salt$hash на дефолтах Node.
++    const crypto = await import('crypto');
++    const salt = crypto.randomBytes(16).toString('hex');
++    const legacy = `scrypt$${salt}$${crypto.scryptSync('motdepasse1', salt, 64).toString('hex')}`;
++    expect(await verifyPassword('motdepasse1', legacy)).toBe(true);
++    expect(needsRehash(legacy)).toBe(true);   // и помечается к перехешированию
++  });
++
++  it('свежий хеш перехешировать не нужно', async () => {
++    expect(needsRehash(await hashPassword('motdepasse1'))).toBe(false);
++  });
++});
++
++// ─────────────────────────────────────────────────────────────
++describe('S3 · сброс пароля гасит ранее выданные токены', () => {
++  it('старый токен перестаёт работать, новый — работает', async () => {
++    const u = await auth('Cible');
++    // Токен живой до сброса.
++    expect((await request(app).get('/api/auth/me').set(bearer(u.token))).status).toBe(200);
++
++    // Сброс по коду из письма.
++    await request(app).post('/api/auth/password/forgot').send({ email: u.email });
++    const row = await db.emailCodes.findActive(u.user.id, 'reset');
++    expect(row).toBeTruthy();
++    // Кода в открытом виде нет (хранится хеш) — подставляем свой.
++    const crypto = await import('crypto');
++    const code = '424242';
++    await db.emailCodes.create(u.user.id, 'reset',
++      crypto.createHash('sha256').update(code).digest('hex'),
++      new Date(Date.now() + 600000).toISOString());
++    const reset = await request(app).post('/api/auth/password/reset')
++      .send({ email: u.email, code, newPassword: 'nouveaupass1' });
++    expect(reset.status).toBe(200);
++
++    // Старый токен отозван.
++    const old = await request(app).get('/api/auth/me').set(bearer(u.token));
++    expect(old.status).toBe(401);
++    expect(old.body.error).toBe('TOKEN_REVOKED');
++
++    // Токен, выданный вместе с ответом на сброс, — рабочий.
++    expect((await request(app).get('/api/auth/me').set(bearer(reset.body.token))).status).toBe(200);
++  });
++
++  it('«выйти на всех устройствах» обесценивает текущий токен', async () => {
++    const u = await auth('Sortie');
++    expect((await request(app).post('/api/auth/logout-all').set(bearer(u.token))).status).toBe(200);
++    const after = await request(app).get('/api/auth/me').set(bearer(u.token));
++    expect(after.status).toBe(401);
++    expect(after.body.error).toBe('TOKEN_REVOKED');
++  });
++});
++
++// ─────────────────────────────────────────────────────────────
++describe('S5 · минимальная длина пароля 8', () => {
++  it('шестизначный пароль больше не принимается', async () => {
++    const r = await request(app).post('/api/auth/register')
++      .send({ name: 'Court', email: `court${seq++}@test.dz`, password: 'abc123' });
++    expect(r.status).toBe(400);
++  });
++
++  it('восьмизначный принимается', async () => {
++    const r = await request(app).post('/api/auth/register')
++      .send({ name: 'Long', email: `long${seq++}@test.dz`, password: 'abcd1234' });
++    expect(r.status).toBe(201);
++  });
++});
++
++// ─────────────────────────────────────────────────────────────
++describe('S6 · тип файла определяется по содержимому', () => {
++  const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
++  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
++  const PDF = Buffer.from('%PDF-1.7\n...');
++
++  it('сигнатуры распознаются', () => {
++    expect(sniffType(JPEG)).toBe('image/jpeg');
++    expect(sniffType(PNG)).toBe('image/png');
++    expect(sniffType(PDF)).toBe('application/pdf');
++    expect(sniffType(Buffer.from('<html>hello</html>'))).toBeNull();
++  });
++
++  it('произвольные байты не считаются картинкой или документом', () => {
++    const evil = Buffer.from('<script>alert(1)</script>');
++    expect(isAllowedImageBuffer(evil)).toBe(false);
++    expect(isAllowedDocBuffer(evil)).toBe(false);
++  });
++
++  it('PDF не проходит как изображение, JPEG — как документ', () => {
++    expect(isAllowedImageBuffer(PDF)).toBe(false);
++    expect(isAllowedDocBuffer(JPEG)).toBe(false);
++  });
++
++  it('загрузка отклоняет файл с подделанным Content-Type', async () => {
++    const u = await auth('Faux');
++    const r = await request(app).post('/api/uploads').set(bearer(u.token))
++      .attach('photos', Buffer.from('<html>not an image</html>'),
++              { filename: 'a.jpg', contentType: 'image/jpeg' });
++    expect(r.status).toBe(415);
++    expect(r.body.error).toBe('INVALID_FILE_TYPE');
++  });
++});
++
++// ─────────────────────────────────────────────────────────────
++describe('S11 · характеристики сверяются со справочником', () => {
++  it('произвольная пара ключ-значение отклоняется', async () => {
++    const u = await auth('Attr');
++    const r = await request(app).post('/api/market/listings').set(bearer(u.token))
++      .send({ ...base, attributes: {'не-из-справочника': 'что-угодно' } });
++    expect(r.status).toBe(400);
++    expect(r.body.error).toBe('INVALID_ATTRIBUTES');
++  });
++
++  it('известный ключ с неизвестным значением тоже отклоняется', () => {
++    expect(isValidAttributes('service', { home_visit: 'peut-être' })).toBe(false);
++  });
++
++  it('корректные характеристики принимаются', async () => {
++    const u = await auth('AttrOk');
++    const r = await request(app).post('/api/market/listings').set(bearer(u.token))
++      .send({ ...base, attributes: { home_visit: 'yes' } });
++    expect(r.status).toBe(201);
++  });
++
++  it('атрибут чужого типа не подходит', () => {
++    // schedule есть только у вакансий.
++    expect(isValidAttributes('service', { schedule: 'full' })).toBe(false);
++    expect(isValidAttributes('job', { schedule: 'full' })).toBe(true);
++  });
++});
+-- 
+2.43.0
+
+From e180604a347e58641669635bae0aa507c1653eaa Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 25 Jul 2026 06:57:57 +0000
+Subject: [PATCH 2/3] =?UTF-8?q?=D0=94=D0=B8=D0=B7=D0=B0=D0=B9=D0=BD,=20?=
+ =?UTF-8?q?=D0=B2=D0=B5=D0=B1=20=D0=B8=20=D0=BF=D1=80=D0=B8=D0=BB=D0=BE?=
+ =?UTF-8?q?=D0=B6=D0=B5=D0=BD=D0=B8=D0=B5=20=D0=BF=D0=BE=20=D0=B8=D1=82?=
+ =?UTF-8?q?=D0=BE=D0=B3=D0=B0=D0=BC=20=D1=80=D0=B5=D0=B2=D1=8C=D1=8E?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Дизайн (без замены иконок — она вынесена отдельно):
+D4. На карточке объявления цена была самым мелким текстом (13 против 15 у
+заголовка) и шла второй строкой, хотя выдачу маркетплейса сканируют по цене.
+Порядок теперь цена → заголовок → место, цена font.title/800, заголовок
+спокойнее по весу.
+D5. Бейджи promo/XL/intent набирались 9-10px — ниже нижней ступени шкалы и
+нечитаемо для арабской вязи. Переведены на font.tiny.
+D6. Сердечко в сетке было белым контуром поверх пользовательского фото и
+пропадало на светлых снимках. Добавлена круглая затемнённая подложка.
+D8. Avatar брал colors.accent под белой буквой — ровно тот случай, ради
+которого заведён accentFill (белый на accent в тёмной теме даёт 3.03:1).
+D9. Страница возврата после оплаты была вне дизайн-системы: sans-serif,
+эмодзи и три цвета-почти-попадания. Переписана на токены палитры, с тёмной
+темой и inline-SVG вместо эмодзи.
+D10. Уведомления склеивали французский и арабский через слэш, хотя
+user.language известен, а payments.ts уже локализовал правильно. Добавлен
+общий словарь services/notifyText.ts; эмодзи из заголовков убраны.
+D11. Резерв под две строки заголовка (minHeight 38 = 2x19) держался только
+на латинице: Text поднимает интерлиньяж арабского до 1.6, и две строки
+требуют 2x24. Резерв считается от фактического интерлиньяжа.
+D13. Скелетон в WalletScreen не зеркалился — забыт row().
+
+Веб и CI:
+S7. У сайта не было ни одного заголовка безопасности. Добавлены CSP,
+Referrer-Policy, X-Content-Type-Options, X-Frame-Options,
+Permissions-Policy, HSTS.
+S8. Убран фолбэк NEXT_PUBLIC_API_URL на сырой IP инфраструктуры, который
+попадал в публичный бандл. Без переменной сборка падает с внятной ошибкой.
+P1. Каталог web/ не проверялся в CI вообще. Добавлена задача web-check:
+типы, линт, сборка.
+
+Приложение:
+A5. Ширина экрана снималась через Dimensions.get() при импорте модуля и не
+переживала поворот, планшет, разделённый экран и складные устройства.
+Переведено на useWindowDimensions.
+A8. Text звал StyleSheet.flatten на каждый рендер каждого текстового узла;
+результат мемоизирован по ссылке на стиль и языку.
+
+Тесты: бэкенд 179, приложение 141, веб собирается и проходит линт. Тест
+отступа под сердечко обновлён — его несёт первая строка тела карточки,
+а это теперь цена.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01QkXjYVhyvbFYQojwaiPpTr
+---
+ .github/workflows/ci.yml                      |  27 +++++
+ app/src/components/ListingCard.tsx            |  69 ++++++++----
+ app/src/components/Text.tsx                   |  18 ++-
+ app/src/components/UI.tsx                     |   6 +-
+ .../components/__tests__/ListingCard.test.tsx |  14 ++-
+ app/src/screens/ChatScreen.tsx                |  11 +-
+ app/src/screens/MarketDetailScreen.tsx        |  14 ++-
+ app/src/screens/WalletScreen.tsx              |   2 +-
+ backend/src/routes/index.ts                   | 106 ++++++++++++++----
+ backend/src/services/notifyText.ts            |  51 +++++++++
+ web/next.config.ts                            |  56 ++++++++-
+ 11 files changed, 313 insertions(+), 61 deletions(-)
+ create mode 100644 backend/src/services/notifyText.ts
+
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 9d5cea5..19a8c3a 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -49,6 +49,33 @@ jobs:
+       # а из чистого npm ci не запускалось ни одного теста.
+       - run: npm test
+ 
++  # Каталог web/ не проверялся в CI вообще: 7 000+ строк Next.js без typecheck,
++  # без lint и без проверки сборки — сломанная страница обнаруживалась только
++  # на деплое. Конфиг ESLint при этом в репозитории лежал и просто не запускался.
++  web-check:
++    name: Web · типы, линт и сборка
++    runs-on: ubuntu-latest
++    defaults:
++      run:
++        working-directory: web
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-node@v4
++        with:
++          node-version: 22
++          cache: npm
++          cache-dependency-path: web/package-lock.json
++      - run: npm ci
++      - name: Проверка типов (tsc)
++        run: npx tsc --noEmit
++      - run: npm run lint
++      - name: Сборка
++        # Адрес API обязателен на сборке: фолбэка на боевой IP больше нет
++        # (см. web/next.config.ts). Для CI годится любой валидный URL.
++        run: npx next build
++        env:
++          NEXT_PUBLIC_API_URL: https://api.example.test
++
+   docker-build:
+     name: Docker · образ собирается
+     runs-on: ubuntu-latest
+diff --git a/app/src/components/ListingCard.tsx b/app/src/components/ListingCard.tsx
+index 5b8f132..0011daa 100644
+--- a/app/src/components/ListingCard.tsx
++++ b/app/src/components/ListingCard.tsx
+@@ -9,7 +9,7 @@ import { spacing, radius, font, shadow } from '../theme';
+ import { t } from '../services/i18n';
+ import Icon from './Icon';
+ import CategoryIcon from './CategoryIcon';
+-import { textAlign, row as rtlRow, edge, side } from '../services/rtl';
++import { textAlign, row as rtlRow, edge, side, isRTL } from '../services/rtl';
+ import { priceLabel, intentBadgeLabel, isPromoted, isXl, type Listing, dateLabel } from '../services/market';
+ import { useRequireAuth } from '../services/useRequireAuth';
+ import type { StyleProp, ViewStyle, TextStyle } from 'react-native';
+@@ -75,6 +75,16 @@ function ListingCard({ listing, onPress, onFavChange, style, variant = 'grid' }:
+   // Отступ под сердечко в углу строки — с той же стороны, где само сердечко.
+   const titleInset = { [`padding${edge('Right')}`]: 26 } as TextStyle;
+ 
++  // Резерв под две строки заголовка. Считать его константой нельзя: Text
++  // поднимает интерлиньяж арабского до 1.6·кегль (см. components/Text.tsx),
++  // поэтому 38 = 2×19 держалось только на латинице, а на арабском две строки
++  // требуют 2×24 — сетка, ровная по-французски, шла рваной по-арабски.
++  // Язык переключается без рестарта, поэтому значение берём на рендере,
++  // а не в мемоизированном makeStyles — как это уже сделано с side()/edge().
++  const twoLines = (size: number, latinLineHeight: number): TextStyle => ({
++    minHeight: 2 * (isRTL() ? Math.round(size * 1.6) : latinLineHeight),
++  });
++
+   const photoBlock = (
+     <View>
+       {listing.photos && listing.photos.length > 0 ? (
+@@ -113,9 +123,15 @@ function ListingCard({ listing, onPress, onFavChange, style, variant = 'grid' }:
+   const heartBtn = (
+     <TouchableOpacity style={[isRow ? styles.heartRow : styles.heart, heartCorner]} onPress={toggleFav} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+       accessibilityRole="button" accessibilityLabel={t('tabFavorites')} accessibilityState={{ selected: fav }}>
+-      <Icon name="heart" size={20}
+-        color={fav ? colors.danger : (isRow ? colors.textMuted : '#FFFFFF')}
+-        fill={fav ? colors.danger : (isRow ? 'none' : 'rgba(0,0,0,0.28)')} strokeWidth={2} />
++      {/* В сетке сердечко лежит поверх пользовательского фото: белый контур
++          пропадал на светлом снимке (стена, небо, бумага). Круглая затемнённая
++          подложка даёт постоянный контраст независимо от кадра. В строчном
++          варианте фото сбоку, сердечко на карточке — подложка не нужна. */}
++      <View style={isRow ? undefined : styles.heartScrim}>
++        <Icon name="heart" size={20}
++          color={fav ? colors.danger : (isRow ? colors.textMuted : colors.white)}
++          fill={fav ? colors.danger : 'none'} strokeWidth={2} />
++      </View>
+     </TouchableOpacity>
+   );
+ 
+@@ -125,8 +141,8 @@ function ListingCard({ listing, onPress, onFavChange, style, variant = 'grid' }:
+       <TouchableOpacity style={[styles.card, styles.cardRow, promoted && styles.cardPromoted, rtlRow(), style]} activeOpacity={0.85} onPress={onPress}>
+         {photoBlock}
+         <View style={styles.rowBody}>
+-          <Text style={[styles.title, styles.titleRow, titleInset, textAlign()]} numberOfLines={2}>{listing.title}</Text>
+-          <Text style={[styles.price, styles.priceRow, textAlign()]} numberOfLines={1}>{priceLabel(listing)}</Text>
++          <Text style={[styles.price, styles.priceRow, titleInset, textAlign()]} numberOfLines={1}>{priceLabel(listing)}</Text>
++          <Text style={[styles.title, styles.titleRow, textAlign()]} numberOfLines={2}>{listing.title}</Text>
+           <Text style={[styles.meta, textAlign()]} numberOfLines={1}>
+             {listing.wilaya} · {dateLabel(listing.createdAt)}
+           </Text>
+@@ -143,9 +159,12 @@ function ListingCard({ listing, onPress, onFavChange, style, variant = 'grid' }:
+         {heartBtn}
+       </View>
+       <View style={{ padding: spacing.sm, paddingTop: 10 }}>
+-        {/* Порядок: сперва название объявления, затем цена, затем место/дата. */}
+-        <Text style={[styles.title, xl && styles.titleXl, textAlign()]} numberOfLines={2}>{listing.title}</Text>
+-        <Text style={[styles.price, textAlign()]} numberOfLines={1}>{priceLabel(listing)}</Text>
++        {/* Порядок: ЦЕНА, затем название, затем место/дата. Выдачу маркетплейса
++            сканируют по цене — раньше она шла второй строкой и была самым
++            МЕЛКИМ текстом карточки (13 против 15 у заголовка). */}
++        <Text style={[styles.price, xl && styles.priceXl, textAlign()]} numberOfLines={1}>{priceLabel(listing)}</Text>
++        <Text style={[styles.title, xl && styles.titleXl, twoLines(xl ? font.title : font.body, xl ? 23 : 19), textAlign()]}
++          numberOfLines={2}>{listing.title}</Text>
+         <Text style={[styles.meta, textAlign()]} numberOfLines={1}>
+           {listing.wilaya} · {dateLabel(listing.createdAt)}
+         </Text>
+@@ -175,11 +194,19 @@ function makeStyles(colors: Colors) {
+     // 44×44 — минимальный тач-таргет (сердечко раньше было ~36×36: 20px иконка
+     // + hitSlop 8, без явного width/height) — как heart в MarketDetailScreen.
+     heartRow: { position: 'absolute', top: 10, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+-    titleRow: { minHeight: 0 },
+-    priceRow: { fontSize: font.body, marginTop: 4 },
++    titleRow: { minHeight: 0, marginTop: 2 },
++    priceRow: { fontSize: font.title, marginTop: 0 },
++    // Подложка под сердечком в сетке: постоянный контраст поверх любого фото.
++    heartScrim: {
++      width: 32, height: 32, borderRadius: 16,
++      alignItems: 'center', justifyContent: 'center',
++      backgroundColor: 'rgba(20,14,8,0.42)',
++    },
+     // Золото = премиум-тариф. Текст и иконка ТЁМНЫЕ: белый на золоте 2.04.
+     promoBadge: { position: 'absolute', bottom: 8, alignItems: 'center', gap: 3, backgroundColor: colors.gold, borderRadius: radius.round, paddingHorizontal: 7, paddingVertical: 3 },
+-    promoBadgeText: { fontSize: 9, fontWeight: '800', color: colors.primaryDark, letterSpacing: 0.4 },
++    // font.tiny (11) — нижняя ступень шкалы. Было 9: для латиницы на пределе,
++    // для арабской вязи с диакритикой нечитаемо (там кегль надо поднимать).
++    promoBadgeText: { fontSize: font.tiny, fontWeight: '800', color: colors.primaryDark, letterSpacing: 0.4 },
+     // Выше прежних 132 — фото продаёт: больше «витрины», меньше рамки.
+     photo: { width: '100%', height: 148, backgroundColor: colors.cardAlt },
+     // XL-тариф: та же ячейка сетки (2 колонки не меняем), но фото заметно
+@@ -190,18 +217,20 @@ function makeStyles(colors: Colors) {
+     // 44×44 тач-таргет — та же логика, что у heartRow выше.
+     heart: { position: 'absolute', top: 8, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+     intentBadge: { position: 'absolute', top: 8, backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: radius.round, paddingHorizontal: 8, paddingVertical: 3, maxWidth: '70%' },
+-    intentBadgeText: { fontSize: 10, fontWeight: '800', color: '#FFFFFF', letterSpacing: 0.2 },
++    intentBadgeText: { fontSize: font.tiny, fontWeight: '800', color: colors.white, letterSpacing: 0.2 },
+     // Бейдж формата — не про ранжирование (как gold promoBadge), поэтому свой
+     // цвет: акцентный зелёный, тот же, что и у цены.
+     xlBadge: { position: 'absolute', bottom: 8, backgroundColor: colors.accent, borderRadius: radius.round, paddingHorizontal: 7, paddingVertical: 3 },
+-    xlBadgeText: { fontSize: 9, fontWeight: '800', color: '#FFFFFF', letterSpacing: 0.4 },
+-    // Название — первым, самый крупный текст карточки; minHeight = 2 строки,
+-    // чтобы сетка не «пляшла» при коротком и длинном заголовке.
+-    title: { fontSize: font.body, fontWeight: '800', color: colors.text, lineHeight: 19, minHeight: 38 },
++    xlBadgeText: { fontSize: font.tiny, fontWeight: '800', color: colors.white, letterSpacing: 0.4 },
++    // Название — второй строкой, спокойнее цены по весу и размеру.
++    // minHeight приходит из twoLines() на рендере (зависит от языка, см. выше).
++    title: { fontSize: font.body, fontWeight: '600', color: colors.text, lineHeight: 19, marginTop: 3 },
+     // XL: заголовок на ступень крупнее по шкале (font.title вместо font.body).
+-    titleXl: { fontSize: font.title, lineHeight: 23, minHeight: 46 },
+-    // Цена — второй строкой, акцентным зелёным.
+-    price: { fontSize: font.small, fontWeight: '800', letterSpacing: -0.2, color: colors.accent, marginTop: 3 },
++    titleXl: { fontSize: font.title, lineHeight: 23 },
++    // Цена — ПЕРВОЙ и самым крупным текстом карточки: это главный признак,
++    // по которому сканируют выдачу.
++    price: { fontSize: font.title, fontWeight: '800', letterSpacing: -0.3, color: colors.accent },
++    priceXl: { fontSize: font.h3 },
+     meta: { fontSize: font.tiny, color: colors.textMuted, marginTop: 5 },
+   });
+ }
+diff --git a/app/src/components/Text.tsx b/app/src/components/Text.tsx
+index 992425c..aa6b4ac 100644
+--- a/app/src/components/Text.tsx
++++ b/app/src/components/Text.tsx
+@@ -34,10 +34,20 @@ const DEFAULT_FONT_SIZE = 15;
+ export default function Text({ style, maxFontSizeMultiplier = 1.3, ...rest }: TextProps) {
+   // Плющим один раз и переиспользуем: extractFontWeight делал это отдельно,
+   // а стиль тут разбирается ещё и ради арабских поправок.
+-  const flat = StyleSheet.flatten(style) as TextStyle | undefined;
+-  const family = fontFamilyForWeight(flat?.fontWeight);
+-  // Поправки идут ПОСЛЕ style, иначе внешний стиль перекрыл бы их обратно.
+-  const arabic = isRTL() ? arabicTypography(flat) : null;
++  //
++  // useMemo по ссылке на style: в списках стили приходят из StyleSheet.create
++  // и массивов-литералов, но ссылка стабильна между рендерами одной ячейки —
++  // без мемоизации сетка из 20 карточек звала flatten ~80 раз за рендер.
++  // rtl входит в зависимости: язык переключается без рестарта приложения.
++  const rtl = isRTL();
++  const { family, arabic } = React.useMemo(() => {
++    const flat = StyleSheet.flatten(style) as TextStyle | undefined;
++    return {
++      family: fontFamilyForWeight(flat?.fontWeight),
++      // Поправки идут ПОСЛЕ style, иначе внешний стиль перекрыл бы их обратно.
++      arabic: rtl ? arabicTypography(flat) : null,
++    };
++  }, [style, rtl]);
+   return (
+     <RNText
+       {...rest}
+diff --git a/app/src/components/UI.tsx b/app/src/components/UI.tsx
+index 004ceee..f7e3750 100644
+--- a/app/src/components/UI.tsx
++++ b/app/src/components/UI.tsx
+@@ -566,8 +566,12 @@ export function Avatar({ name, size = 56, uri }: { name?: string; size?: number;
+     return <Image source={{ uri: fileUrl(uri) || undefined }} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.cardAlt }} contentFit="cover" transition={150} />;
+   }
+   const letter = (name || '?').trim()[0] || '?';
++  // accentFill, а не accent: под белой буквой нужен затемнённый вариант.
++  // В тёмной теме белый на accent даёт 3.03:1 — это проходит AA только для
++  // крупного текста, а буква здесь size*0.42, то есть при аватарах мельче
++  // ~45px (список чатов, отзывы) порог не держится. См. theme.ts:49–53.
+   return (
+-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' }}>
++    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.accentFill, alignItems: 'center', justifyContent: 'center' }}>
+       <Text style={{ color: colors.white, fontWeight: '800', fontSize: size * 0.42 }}>{letter.toUpperCase()}</Text>
+     </View>
+   );
+diff --git a/app/src/components/__tests__/ListingCard.test.tsx b/app/src/components/__tests__/ListingCard.test.tsx
+index 96d71fb..87780ca 100644
+--- a/app/src/components/__tests__/ListingCard.test.tsx
++++ b/app/src/components/__tests__/ListingCard.test.tsx
+@@ -157,18 +157,20 @@ describe('ListingCard', () => {
+       expect(ar.right).toBeUndefined();
+     });
+ 
+-    it('строка: сердечко зеркалится вместе с отступом заголовка', async () => {
++    it('строка: сердечко зеркалится вместе с отступом первой строки', async () => {
+       await setLanguage('ar');
+       const ar = await heartStyle(listing(), { variant: 'row' });
+       expect(ar.left).toBe(10);
+       expect(ar.right).toBeUndefined();
+ 
+       const r = draw(listing(), { variant: 'row' });
+-      const title = await r.findByText('Nettoyage professionnel');
+-      const ts = StyleSheet.flatten(title.props.style) as Record<string, number | undefined>;
+-      // Отступ под сердечко — с той же стороны, где сердечко.
+-      expect(ts.paddingLeft).toBe(26);
+-      expect(ts.paddingRight).toBeUndefined();
++      // Отступ под сердечко несёт ПЕРВАЯ строка тела карточки, а это теперь
++      // цена: порядок сменился на «цена → заголовок → место» (иерархия
++      // выдачи маркетплейса — сканируют по цене).
++      const price = await r.findByText(/3\s*000/);
++      const ps = StyleSheet.flatten(price.props.style) as Record<string, number | undefined>;
++      expect(ps.paddingLeft).toBe(26);
++      expect(ps.paddingRight).toBeUndefined();
+     });
+   });
+ });
+diff --git a/app/src/screens/ChatScreen.tsx b/app/src/screens/ChatScreen.tsx
+index d19b4f3..b4654b4 100644
+--- a/app/src/screens/ChatScreen.tsx
++++ b/app/src/screens/ChatScreen.tsx
+@@ -1,5 +1,5 @@
+ import React, { useState, useEffect, useRef, useCallback } from 'react';
+-import { View, StyleSheet, FlatList, TouchableOpacity, ScrollView, Alert, Modal, ActivityIndicator, Dimensions } from 'react-native';
++import { View, StyleSheet, FlatList, TouchableOpacity, ScrollView, Alert, Modal, ActivityIndicator, useWindowDimensions } from 'react-native';
+ import { Image } from 'expo-image';
+ import * as ImagePicker from 'expo-image-picker';
+ import Text from '../components/Text';
+@@ -19,7 +19,6 @@ import { useKeyboardInset } from '../services/keyboard';
+ import { useSafeAreaInsets } from 'react-native-safe-area-context';
+ import { TypingDots, Skeleton } from '../components/UI';
+ 
+-const SCREEN_W = Dimensions.get('window').width;
+ 
+ // Каркас переписки на время загрузки: чередуем свои/чужие бабблы и ширины,
+ // чтобы «скелет» читался как диалог, а не как ряд одинаковых полос.
+@@ -67,7 +66,11 @@ interface ChatRouteParams {
+ export default function ChatScreen({ navigation, route }: { navigation: any; route: { params?: ChatRouteParams } }) {
+   const { colors } = useTheme();
+   const insets = useSafeAreaInsets();
+-  const styles = React.useMemo(() => makeStyles(colors), [colors]);
++  // useWindowDimensions вместо снятого при импорте Dimensions.get(): то
++  // значение не переживало поворот экрана и было неверным на планшетах,
++  // в разделённом экране Android и на складных устройствах.
++  const { width: SCREEN_W } = useWindowDimensions();
++  const styles = React.useMemo(() => makeStyles(colors, SCREEN_W), [colors, SCREEN_W]);
+   const { id, listing, otherId } = route.params || ({} as ChatRouteParams);
+   const kbInset = useKeyboardInset();
+ 
+@@ -428,7 +431,7 @@ export default function ChatScreen({ navigation, route }: { navigation: any; rou
+   );
+ }
+ 
+-function makeStyles(colors: Colors) {
++function makeStyles(colors: Colors, SCREEN_W: number) {
+   return StyleSheet.create({
+     container: { flex: 1, backgroundColor: colors.bg },
+     listingBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.card, padding: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+diff --git a/app/src/screens/MarketDetailScreen.tsx b/app/src/screens/MarketDetailScreen.tsx
+index d19a46f..71d06c1 100644
+--- a/app/src/screens/MarketDetailScreen.tsx
++++ b/app/src/screens/MarketDetailScreen.tsx
+@@ -1,5 +1,5 @@
+ import React, { useState, useEffect, useCallback } from 'react';
+-import { View, StyleSheet, ScrollView, TouchableOpacity, Linking, Alert, ActivityIndicator, Dimensions, Share, Modal, type ViewStyle } from 'react-native';
++import { View, StyleSheet, ScrollView, TouchableOpacity, Linking, Alert, ActivityIndicator, useWindowDimensions, Share, Modal, type ViewStyle } from 'react-native';
+ import { Image } from 'expo-image';
+ import Text from '../components/Text';
+ import { useSafeAreaInsets } from 'react-native-safe-area-context';
+@@ -21,7 +21,6 @@ import { recordView } from '../services/interests';
+ import { useRequireAuth } from '../services/useRequireAuth';
+ import { MONETIZATION_UI_ENABLED } from '../config';
+ 
+-const SCREEN_W = Dimensions.get('window').width;
+ 
+ const REPORT_REASONS: { id: string; key: TranslationKey }[] = [
+   { id: 'spam', key: 'reportSpam' },
+@@ -40,7 +39,14 @@ const REPORT_REASONS: { id: string; key: TranslationKey }[] = [
+ export default function MarketDetailScreen({ navigation, route }: { navigation: any; route: { params?: { id: string } } }) {
+   const { colors } = useTheme();
+   const insets = useSafeAreaInsets();
+-  const styles = React.useMemo(() => makeStyles(colors), [colors]);
++  /**
++ * Ширина берётся хуком useWindowDimensions, а НЕ Dimensions.get() на уровне
++ * модуля: то значение снималось один раз при загрузке JS и больше не
++ * обновлялось — после поворота, на планшете, в разделённом экране Android и
++ * на складных устройствах галерея считалась от неверной ширины.
++ */
++  const { width: SCREEN_W } = useWindowDimensions();
++  const styles = React.useMemo(() => makeStyles(colors, SCREEN_W), [colors, SCREEN_W]);
+   const { id } = route.params || ({} as { id: string });
+   const { me } = useUser();
+   const toast = useToast();
+@@ -488,7 +494,7 @@ export default function MarketDetailScreen({ navigation, route }: { navigation:
+   );
+ }
+ 
+-function makeStyles(colors: Colors) {
++function makeStyles(colors: Colors, SCREEN_W: number) {
+   return StyleSheet.create({
+     container: { flex: 1, backgroundColor: colors.bg },
+     center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
+diff --git a/app/src/screens/WalletScreen.tsx b/app/src/screens/WalletScreen.tsx
+index 25e6626..b72984f 100644
+--- a/app/src/screens/WalletScreen.tsx
++++ b/app/src/screens/WalletScreen.tsx
+@@ -58,7 +58,7 @@ export default function WalletScreen({ navigation }: { navigation: any }) {
+     return (
+       <View style={[styles.container, { padding: spacing.md, gap: spacing.sm }]}>
+         {[0, 1, 2].map((i) => (
+-          <View key={i} style={styles.card}>
++          <View key={i} style={[styles.card, row()]}>
+             <Skeleton width={46} height={46} radius={radius.sm} />
+             <View style={{ flex: 1, marginLeft: spacing.md }}>
+               <Skeleton width={'55%'} height={15} radius={5} />
+diff --git a/backend/src/routes/index.ts b/backend/src/routes/index.ts
+index 3fe81f5..248c146 100644
+--- a/backend/src/routes/index.ts
++++ b/backend/src/routes/index.ts
+@@ -16,6 +16,7 @@ import { signFileToken, verifyFileToken, isDocKey } from '../services/fileTokens
+ import { shouldCountView } from '../services/views.js';
+ import { sendPush } from '../services/push.js';
+ import { sendCodeEmail } from '../services/mail.js';
++import { notifyText } from '../services/notifyText.js';
+ import crypto from 'node:crypto';
+ import { OAuth2Client } from 'google-auth-library';
+ import type { User, Listing, Conversation, Message, SearchFilters } from '../types.js';
+@@ -89,12 +90,21 @@ const emailSendLimiter = makeLimiter('email', {
+ // явно (type='search' пушится не отсюда, а дневным дайджестом — см. digest.ts).
+ async function notify(
+   userId: string,
+-  { type, title, body = '', data = {} }: { type: string; title: string; body?: string; data?: Record<string, unknown> },
++  build: { type: string; title: string; body?: string; data?: Record<string, unknown> }
++        // lang может быть undefined: пользователя могли удалить между публикацией
++        // и рассылкой. notifyText в этом случае берёт французский.
++        | ((lang: User['language'] | undefined) => { type: string; title: string; body?: string; data?: Record<string, unknown> }),
+   opts: { push?: boolean } = {}
+ ): Promise<void> {
++  // Текст зависит от языка получателя, поэтому пользователя читаем ДО записи
++  // в центр уведомлений (раньше он читался только ради pushToken, а тексты
++  // склеивались из двух языков через слэш — см. services/notifyText.ts).
++  const user = await db.users.findById(userId);
++  const { type, title, body = '', data = {} } = typeof build === 'function'
++    ? build(user?.language)
++    : build;
+   await db.notifications.create({ userId, type, title, body, data });
+   if (opts.push === false) return;
+-  const user = await db.users.findById(userId);
+   if (!user || !user.pushToken) return;
+   const sent = await sendPush(user.pushToken, title, body, { type, ...data });
+   notificationsTotal.inc({ result: sent ? 'sent' : 'failed', type });
+@@ -607,10 +617,10 @@ async function notifySavedSearches(listing: Listing): Promise<Set<string>> {
+   for (const s of matched) {
+     if (notified.has(s.userId)) continue; // один пользователь — одно уведомление
+     notified.add(s.userId);
+-    await notify(s.userId, {
+-      type: 'search', title: s.name ? `🔔 ${s.name}` : '🔔 Khadamni',
++    await notify(s.userId, (lang) => ({
++      type: 'search', title: notifyText.savedSearch(lang, s.name),
+       body: listing.title, data: { searchId: s.id, listingId: listing.id },
+-    }, { push: false });
++    }), { push: false });
+   }
+   return notified;
+ }
+@@ -665,12 +675,12 @@ async function notifyPriceDrop(listing: Listing, oldPrice: number) {
+   const userIds = await db.favorites.userIdsOf(listing.id);
+   for (const userId of userIds) {
+     if (userId === listing.userId) continue;
+-    await notify(userId, {
++    await notify(userId, (lang) => ({
+       type: 'price',
+-      title: `💚 ${listing.title}`,
+-      body: `${oldPrice} → ${listing.price} DA`,
++      title: listing.title,
++      body: notifyText.priceDropBody(lang, oldPrice, listing.price!),
+       data: { listingId: listing.id },
+-    });
++    }));
+   }
+ }
+ 
+@@ -679,12 +689,12 @@ async function notifyClosed(listing: Listing) {
+   const userIds = await db.favorites.userIdsOf(listing.id);
+   for (const userId of userIds) {
+     if (userId === listing.userId) continue;
+-    await notify(userId, {
++    await notify(userId, (lang) => ({
+       type: 'favorite_closed',
+       title: listing.title,
+-      body: "Cette annonce n'est plus disponible / لم يعد الإعلان متاحًا",
++      body: notifyText.closedBody(lang),
+       data: { listingId: listing.id },
+-    });
++    }));
+   }
+ }
+ 
+@@ -821,7 +831,7 @@ async function notifyNewMessage(conv: Conversation, sender: User, msg: Message)
+   if (!target || !target.pushToken) return;
+   // Сообщение может быть только из фото — в пуше показываем это явно,
+   // иначе собеседник получил бы уведомление с пустым телом.
+-  const photoNote = msg.photos.length ? `📷 ${msg.photos.length > 1 ? `${msg.photos.length} photos` : 'Photo'}` : '';
++  const photoNote = msg.photos.length ? notifyText.photoNote(target.language, msg.photos.length) : '';
+   const preview = (msg.text
+     ? (photoNote ? `${photoNote} · ${msg.text}` : msg.text)
+     : photoNote).slice(0, 90);
+@@ -1056,14 +1066,14 @@ router.post('/admin/verifications/:id/approve', requireAuth, requireAdmin, valid
+   const v = await db.verifications.setStatus((req.params.id as string), 'approved', req.valid.note);
+   if (!v) return res.status(404).json({ error: 'VERIFICATION_NOT_FOUND' });
+   await db.users.update(v.userId, { verified: true });
+-  notify(v.userId, { type: 'verification', title: '✅ Compte vérifié', body: req.valid.note || '' }).catch(() => {});
++  notify(v.userId, (lang) => ({ type: 'verification', title: notifyText.verifiedTitle(lang), body: req.valid.note || '' })).catch(() => {});
+   res.json({ ok: true });
+ }));
+ 
+ router.post('/admin/verifications/:id/reject', requireAuth, requireAdmin, validateBody(schemas.verificationReview), wrap(async (req, res) => {
+   const v = await db.verifications.setStatus((req.params.id as string), 'rejected', req.valid.note);
+   if (!v) return res.status(404).json({ error: 'VERIFICATION_NOT_FOUND' });
+-  notify(v.userId, { type: 'verification', title: '❌ Vérification refusée', body: req.valid.note || '' }).catch(() => {});
++  notify(v.userId, (lang) => ({ type: 'verification', title: notifyText.rejectedTitle(lang), body: req.valid.note || '' })).catch(() => {});
+   res.json({ ok: true });
+ }));
+ 
+@@ -1117,11 +1127,67 @@ router.post('/payments/webhook', wrap(async (req, res) => {
+ // нечего делать — просим вернуться в приложение, где статус доедет поллингом.
+ router.get('/payments/done', (req: Request, res: Response) => {
+   res.setHeader('Content-Type', 'text/html; charset=utf-8');
+-  res.send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
+-<body style="font-family:sans-serif;background:#F7F1E6;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
+-<div style="text-align:center;padding:24px"><div style="font-size:56px">✅</div>
+-<h2 style="color:#241C14">Paiement terminé · اكتمل الدفع</h2>
+-<p style="color:#6B5D4C">Revenez dans l'application Khadamni.<br>عد إلى تطبيق خدمني.</p></div>`);
++  // Цвета — ТОЧНО из палитры приложения (app/src/theme.ts «Souk Modern»):
++  // bg #F6EFE0, text #221A12, textMuted #6E5E49, accent #0B4436. Раньше здесь
++  // стояли #F7F1E6 / #241C14 / #6B5D4C — не другие цвета, а почти те же, и
++  // такие промахи заметнее откровенно чужих. Плюс поддержана тёмная тема.
++  // Галочка — inline-SVG в акцентном круге вместо эмодзи ✅ (см. регламент
++  // «Avoid: emojis» в CLAUDE.md): эмодзи рисуется шрифтом системы и выглядит
++  // по-разному на Android, iOS и в вебе.
++  res.send(`<!doctype html>
++<html lang="fr">
++<head>
++<meta charset="utf-8">
++<meta name="viewport" content="width=device-width,initial-scale=1">
++<meta name="color-scheme" content="light dark">
++<title>Paiement terminé · Khadamni</title>
++<style>
++  :root {
++    --bg:#F6EFE0; --card:#FFFFFF; --text:#221A12; --muted:#6E5E49;
++    --accent:#0B4436; --border:#E9DEC8;
++  }
++  @media (prefers-color-scheme: dark) {
++    :root {
++      --bg:#16120D; --card:#231C15; --text:#F5EFE3; --muted:#9C8B72;
++      --accent:#1FA968; --border:#3A3024;
++    }
++  }
++  * { box-sizing: border-box; margin: 0; }
++  body {
++    background: var(--bg); color: var(--text);
++    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
++    display: flex; align-items: center; justify-content: center;
++    min-height: 100dvh; padding: 24px; line-height: 1.5;
++  }
++  .card {
++    background: var(--card); border: 1px solid var(--border); border-radius: 26px;
++    padding: 32px 28px; max-width: 380px; width: 100%; text-align: center;
++    box-shadow: 0 8px 20px rgba(43,32,19,.10);
++  }
++  .mark {
++    width: 64px; height: 64px; border-radius: 50%; margin: 0 auto 20px;
++    background: var(--accent); display: flex; align-items: center; justify-content: center;
++  }
++  h1 { font-size: 21px; font-weight: 800; letter-spacing: -.3px; }
++  .ar { font-size: 19px; font-weight: 700; margin-top: 4px; }
++  p { color: var(--muted); font-size: 15px; margin-top: 14px; }
++</style>
++</head>
++<body>
++  <div class="card">
++    <div class="mark" aria-hidden="true">
++      <svg width="30" height="30" viewBox="0 0 24 24" fill="none"
++           stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
++        <polyline points="4,12.5 9.5,18 20,6.5"></polyline>
++      </svg>
++    </div>
++    <h1>Paiement terminé</h1>
++    <div class="ar" lang="ar" dir="rtl">اكتمل الدفع</div>
++    <p>Revenez dans l'application Khadamni.</p>
++    <p lang="ar" dir="rtl">عد إلى تطبيق خدمني.</p>
++  </div>
++</body>
++</html>`);
+ });
+ 
+ // Доступность оплаты (приложение показывает «скоро», если disabled).
+diff --git a/backend/src/services/notifyText.ts b/backend/src/services/notifyText.ts
+new file mode 100644
+index 0000000..4cef585
+--- /dev/null
++++ b/backend/src/services/notifyText.ts
+@@ -0,0 +1,51 @@
++import type { Lang } from '../types.js';
++
++/**
++ * Тексты уведомлений на языке получателя.
++ *
++ * Было две разные практики: payments.ts выбирал язык по user.language
++ * (`const ar = user.language === 'ar'`), а routes/index.ts склеивал оба языка
++ * в одну строку через слэш — «Cette annonce n'est plus disponible / لم يعد
++ * الإعلان متاحًا». Такой пуш вдвое длиннее лимита превью на Android и
++ * показывает половину текста на языке, которого человек не выбирал.
++ *
++ * Здесь общий словарь: ключ → {fr, ar}. Значения — функции там, где в текст
++ * подставляются данные.
++ *
++ * Эмодзи в заголовках (🔔 💚 ✅ ❌) убраны: регламент проекта их запрещает
++ * (CLAUDE.md, «Avoid: emojis»), а у уведомления и так есть поле `type` —
++ * по нему клиент рисует иконку своим набором.
++ */
++
++export const pick = (lang: Lang | undefined, fr: string, ar: string): string =>
++  lang === 'ar' ? ar : fr;
++
++export const notifyText = {
++  /** Новое объявление по сохранённому поиску. Без имени — общий заголовок. */
++  savedSearch: (lang: Lang | undefined, name: string): string =>
++    name || pick(lang, 'Nouvelle annonce', 'إعلان جديد'),
++
++  /** Цена снизилась у объявления в избранном. */
++  priceDropBody: (lang: Lang | undefined, oldPrice: number, newPrice: number): string =>
++    pick(lang,
++      `Prix baissé : ${oldPrice} → ${newPrice} DA`,
++      `انخفض السعر: ${oldPrice} ← ${newPrice} دج`),
++
++  /** Объявление из избранного снято с публикации. */
++  closedBody: (lang: Lang | undefined): string =>
++    pick(lang, "Cette annonce n'est plus disponible", 'لم يعد الإعلان متاحًا'),
++
++  /** Заявка на верификацию одобрена. */
++  verifiedTitle: (lang: Lang | undefined): string =>
++    pick(lang, 'Compte vérifié', 'تم توثيق الحساب'),
++
++  /** Заявка на верификацию отклонена. */
++  rejectedTitle: (lang: Lang | undefined): string =>
++    pick(lang, 'Vérification refusée', 'تم رفض التوثيق'),
++
++  /** Пометка «сообщение с фото» в превью пуша. */
++  photoNote: (lang: Lang | undefined, count: number): string =>
++    count > 1
++      ? pick(lang, `${count} photos`, `${count} صور`)
++      : pick(lang, 'Photo', 'صورة'),
++};
+diff --git a/web/next.config.ts b/web/next.config.ts
+index 0c0e649..29894d3 100644
+--- a/web/next.config.ts
++++ b/web/next.config.ts
+@@ -5,7 +5,17 @@ import type { NextConfig } from 'next';
+  * (lib/api/client.ts) — держим в одном месте, чтобы смена домена не требовала
+  * правок в двух файлах.
+  */
+-const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://141-98-84-135.sslip.io';
++// Фолбэка на боевой адрес здесь СОЗНАТЕЛЬНО нет. Раньше стояло
++// 'https://141-98-84-135.sslip.io' — сырой IP инфраструктуры, который попадал
++// в публичный клиентский бандл и молча становился боевым адресом при забытой
++// переменной. Пусть сборка падает с внятной ошибкой, а не уезжает на IP.
++const apiUrl = process.env.NEXT_PUBLIC_API_URL;
++if (!apiUrl) {
++  throw new Error(
++    'NEXT_PUBLIC_API_URL не задан. Укажи адрес API на сборке, например ' +
++    'NEXT_PUBLIC_API_URL=https://api.khadamni.dz (для локальной разработки — http://localhost:3000).',
++  );
++}
+ const { protocol, hostname, port } = new URL(apiUrl);
+ 
+ const nextConfig: NextConfig = {
+@@ -24,6 +34,50 @@ const nextConfig: NextConfig = {
+       },
+     ],
+   },
++
++  /**
++   * Заголовки безопасности. У API их ставит helmet, а у сайта не было ничего —
++   * при том что он рендерит пользовательский контент: заголовки объявлений,
++   * описания, сообщения чата.
++   *
++   * CSP получается строгой: сторонних скриптов на сайте нет. Исключения:
++   *   - 'unsafe-inline' для стилей — Next инлайнит критический CSS и
++   *     styled-jsx, а nonce на них не навесить без кастомного сервера;
++   *   - connect-src включает API и его же по ws/wss — там живёт Socket.io чата;
++   *   - img-src включает сам API (фото объявлений) и data:/blob: — превью
++   *     выбранных файлов до загрузки.
++   */
++  async headers() {
++    const api = apiUrl.replace(/\/$/, '');
++    const wsApi = api.replace(/^http/, 'ws');
++    const csp = [
++      "default-src 'self'",
++      "base-uri 'self'",
++      "object-src 'none'",
++      "frame-ancestors 'none'",
++      "form-action 'self'",
++      "script-src 'self'",
++      "style-src 'self' 'unsafe-inline'",
++      "font-src 'self' data:",
++      `img-src 'self' data: blob: ${api}`,
++      `connect-src 'self' ${api} ${wsApi}`,
++      'upgrade-insecure-requests',
++    ].join('; ');
++
++    return [{
++      source: '/:path*',
++      headers: [
++        { key: 'Content-Security-Policy', value: csp },
++        { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
++        { key: 'X-Content-Type-Options', value: 'nosniff' },
++        { key: 'X-Frame-Options', value: 'DENY' },
++        // Функции, которые сайту не нужны ни на одной странице.
++        { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=()' },
++        // HSTS: домен ходит только по https (сертификат от cert-manager).
++        { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
++      ],
++    }];
++  },
+ };
+ 
+ export default nextConfig;
+-- 
+2.43.0
+
+From 759aa58c2f0644113257f67089ca54ba1d8b533b Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 25 Jul 2026 07:04:13 +0000
+Subject: [PATCH 3/3] =?UTF-8?q?=D0=96=D1=83=D1=80=D0=BD=D0=B0=D0=BB=20?=
+ =?UTF-8?q?=D0=BC=D0=BE=D0=B4=D0=B5=D1=80=D0=B0=D1=86=D0=B8=D0=B8,=20?=
+ =?UTF-8?q?=D1=81=D1=82=D1=80=D0=B0=D0=B6=20RTL=20=D0=B8=20=D0=BF=D0=BE?=
+ =?UTF-8?q?=D1=80=D1=8F=D0=B4=D0=BE=D0=BA=20=D0=B2=20=D1=80=D0=B5=D0=BF?=
+ =?UTF-8?q?=D0=BE=D0=B7=D0=B8=D1=82=D0=BE=D1=80=D0=B8=D0=B8?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+S9. Модератор задаётся списком email в ADMIN_EMAILS и может снимать чужие
+объявления и решать по заявкам на верификацию — следов эти действия не
+оставляли вовсе. Добавлена append-only таблица admin_audit, запись при
+блокировке, отклонении жалоб, одобрении и отказе по верификации, и чтение
+через GET /admin/audit (тоже только для модератора).
+
+A6. Ручное зеркалирование под RTL имеет тихий отказ: забыл row()/edge() —
+экран рендерится по-латински, ошибки нет ни в типах, ни в рантайме, видно
+только на арабском и только глазами. RTL-тесты покрывают 2 экрана из 19,
+писать их на все дорого. Вместо этого добавлен тест-страж: он сканирует
+исходники и запрещает сам класс записи, который не умеет зеркалиться —
+textAlign: left/right, marginLeft/paddingRight с числом, абсолютные
+left/right. Тот же приём, что в tokens.test.ts. Проверено, что страж ловит
+регрессию и показывает файл со строкой. Единственное найденное нарушение
+(marginLeft: 2 в ProfileScreen) убрано.
+
+P3. Одиннадцать мегабайт референсов лежали в корне репозитория и тянулись
+при каждом клоне. Перенесены в docs/reference/ с описанием, что есть что;
+там же заметка про Git LFS, если подборка будет расти. В коде на эти файлы
+ничего не ссылалось.
+
+Тесты: бэкенд 181, приложение 145 (включая 4 стража RTL), веб проходит
+типы, линт и сборку.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01QkXjYVhyvbFYQojwaiPpTr
+---
+ app/src/screens/ProfileScreen.tsx             |   2 +-
+ .../services/__tests__/rtlDiscipline.test.ts  |  86 ++++++++++++++++++
+ backend/src/db/pg.ts                          |  26 +++++-
+ backend/src/db/schema.sql                     |  19 ++++
+ backend/src/models/memory.ts                  |  17 ++++
+ backend/src/routes/index.ts                   |  26 ++++++
+ backend/src/types.ts                          |  26 ++++++
+ backend/tests/reviewFixes.test.ts             |  39 ++++++++
+ IMG_2225.png => docs/reference/IMG_2225.png   | Bin
+ IMG_2226.png => docs/reference/IMG_2226.png   | Bin
+ IMG_2227.png => docs/reference/IMG_2227.png   | Bin
+ IMG_2228.png => docs/reference/IMG_2228.png   | Bin
+ IMG_2229.png => docs/reference/IMG_2229.png   | Bin
+ IMG_2230.png => docs/reference/IMG_2230.png   | Bin
+ docs/reference/README.md                      |  22 +++++
+ .../reference/categories-icon-sheet-2.png     | Bin
+ .../reference/categories-icon-sheet.png       | Bin
+ .../reference/khadamni-logo.png               | Bin
+ 18 files changed, 261 insertions(+), 2 deletions(-)
+ create mode 100644 app/src/services/__tests__/rtlDiscipline.test.ts
+ rename IMG_2225.png => docs/reference/IMG_2225.png (100%)
+ rename IMG_2226.png => docs/reference/IMG_2226.png (100%)
+ rename IMG_2227.png => docs/reference/IMG_2227.png (100%)
+ rename IMG_2228.png => docs/reference/IMG_2228.png (100%)
+ rename IMG_2229.png => docs/reference/IMG_2229.png (100%)
+ rename IMG_2230.png => docs/reference/IMG_2230.png (100%)
+ create mode 100644 docs/reference/README.md
+ rename DAF2521D-B9ED-4A69-9CC9-B1D686FE4FC9.png => docs/reference/categories-icon-sheet-2.png (100%)
+ rename C835336D-5BC5-4BEA-A2BC-CC5528E367B8.png => docs/reference/categories-icon-sheet.png (100%)
+ rename "\320\270\320\267\320\276\320\261\321\200\320\260\320\266\320\265\320\275\320\270\320\265.png" => docs/reference/khadamni-logo.png (100%)
+
+diff --git a/app/src/screens/ProfileScreen.tsx b/app/src/screens/ProfileScreen.tsx
+index 346eac9..39bc2c2 100644
+--- a/app/src/screens/ProfileScreen.tsx
++++ b/app/src/screens/ProfileScreen.tsx
+@@ -239,7 +239,7 @@ function makeStyles(colors: Colors) {
+     statValue: { ...typo.h2, color: colors.text },
+     statLabel: { fontSize: font.tiny, color: colors.textMuted, marginTop: 2, fontWeight: '600' },
+     section: { marginTop: spacing.lg },
+-    sectionLabel: { ...typo.label, color: colors.textMuted, textTransform: 'uppercase', marginBottom: spacing.sm, marginLeft: 2 },
++    sectionLabel: { ...typo.label, color: colors.textMuted, textTransform: 'uppercase', marginBottom: spacing.sm },
+     sectionBody: { backgroundColor: colors.card, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+     row: { alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderLight },
+     rowIcon: { width: 28, alignItems: 'center' },
+diff --git a/app/src/services/__tests__/rtlDiscipline.test.ts b/app/src/services/__tests__/rtlDiscipline.test.ts
+new file mode 100644
+index 0000000..250a75e
+--- /dev/null
++++ b/app/src/services/__tests__/rtlDiscipline.test.ts
+@@ -0,0 +1,86 @@
++import fs from 'fs';
++import path from 'path';
++
++/**
++ * Страж RTL-инварианта.
++ *
++ * Приложение сознательно НЕ включает I18nManager.forceRTL (см. services/rtl.ts):
++ * язык переключается без перезапуска. Плата за это — зеркалить приходится
++ * вручную, через row() / textAlign() / side() / edge(). И у такого подхода есть
++ * тихий отказ: забыл вызов — экран просто рендерится по-латински, ошибки нет
++ * ни в типах, ни в рантайме, видно только глазами и только на арабском.
++ * Скелетон в WalletScreen так и жил сломанным.
++ *
++ * RTL-тесты покрывают два экрана из девятнадцати, писать их на все — дорого.
++ * Этот тест дешевле: он не проверяет вёрстку, а запрещает сам класс записи,
++ * который не умеет зеркалиться. Тот же приём, что в tokens.test.ts, где один
++ * тест стережёт согласованность палитры приложения и веба.
++ *
++ * Почему нельзя просто разрешить нативные start/end: forceRTL выключен, значит
++ * I18nManager.isRTL всегда false, и RN разложит marginStart в marginLeft на
++ * обоих языках. Отсюда edge()/side(), считающие сторону по текущему языку.
++ */
++
++const SRC = path.resolve(__dirname, '../..');
++
++/** Стороннезависимые свойства, которые в арабском уедут не в ту сторону. */
++const FORBIDDEN: { re: RegExp; what: string; instead: string }[] = [
++  {
++    re: /textAlign:\s*'(left|right)'/g,
++    what: "textAlign: 'left' | 'right'",
++    instead: "textAlign() из services/rtl",
++  },
++  {
++    re: /(margin|padding)(Left|Right):\s*[\d-]/g,
++    what: 'marginLeft/Right, paddingLeft/Right с числом',
++    instead: "[`margin${edge('Left')}`] или симметричные marginHorizontal",
++  },
++  {
++    re: /^\s*(left|right):\s*[\d-]/gm,
++    what: 'абсолютные left/right',
++    instead: "{ [side('right')]: N } — сторона считается по языку",
++  },
++];
++
++function sourceFiles(dir: string, acc: string[] = []): string[] {
++  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
++    const full = path.join(dir, entry.name);
++    if (entry.isDirectory()) {
++      if (entry.name === '__tests__' || entry.name === 'node_modules') continue;
++      sourceFiles(full, acc);
++    } else if (/\.tsx?$/.test(entry.name)) {
++      acc.push(full);
++    }
++  }
++  return acc;
++}
++
++describe('RTL: в стилях нет свойств, которые не зеркалятся', () => {
++  const files = sourceFiles(SRC);
++
++  it('находит исходники приложения', () => {
++    expect(files.length).toBeGreaterThan(30);
++  });
++
++  for (const { re, what, instead } of FORBIDDEN) {
++    it(`нигде не используется ${what}`, () => {
++      const hits: string[] = [];
++      for (const file of files) {
++        const text = fs.readFileSync(file, 'utf8');
++        const rx = new RegExp(re.source, re.flags);
++        let m: RegExpExecArray | null;
++        while ((m = rx.exec(text)) !== null) {
++          const line = text.slice(0, m.index).split('\n').length;
++          hits.push(`${path.relative(SRC, file)}:${line}  ${m[0].trim()}`);
++        }
++      }
++      // Сообщение кладём в само сравниваемое значение: jest, в отличие от
++      // vitest, второй аргумент expect не принимает, а список нарушений
++      // должен быть виден прямо в выводе упавшего теста.
++      const report = hits.length
++        ? `Не зеркалится в арабском — используй ${instead}:\n${hits.join('\n')}`
++        : '';
++      expect(report).toBe('');
++    });
++  }
++});
+diff --git a/backend/src/db/pg.ts b/backend/src/db/pg.ts
+index 88dcd7f..ea32116 100644
+--- a/backend/src/db/pg.ts
++++ b/backend/src/db/pg.ts
+@@ -8,6 +8,7 @@ import type {
+   VerificationRequest, CreateVerificationInput, VerificationStatus,
+   Payment, CreatePaymentInput, PaymentStatus,
+   EmailCode, EmailCodePurpose,
++  AdminAudit, CreateAdminAuditInput,
+ } from '../types.js';
+ import { buildSearchFields, parseQuery, W, FUZZY_MIN } from '../services/searchText.js';
+ 
+@@ -145,6 +146,29 @@ const users = {
+   },
+ };
+ 
++function mapAudit(r: any): AdminAudit {
++  return {
++    id: r.id, adminId: r.admin_id, adminEmail: r.admin_email,
++    action: r.action, targetType: r.target_type, targetId: r.target_id,
++    note: r.note || '', createdAt: r.created_at,
++  };
++}
++
++const adminAudit = {
++  async create({ adminId, adminEmail, action, targetType, targetId, note = '' }: CreateAdminAuditInput): Promise<AdminAudit> {
++    const { rows } = await q(
++      `INSERT INTO admin_audit(admin_id,admin_email,action,target_type,target_id,note)
++       VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,
++      [adminId, adminEmail, action, targetType, targetId, note]
++    );
++    return mapAudit(rows[0]);
++  },
++  async recent(limit: number): Promise<AdminAudit[]> {
++    const { rows } = await q('SELECT * FROM admin_audit ORDER BY created_at DESC LIMIT $1', [limit]);
++    return rows.map(mapAudit);
++  },
++};
++
+ function mapEmailCode(r: any): EmailCode | null {
+   if (!r) return null;
+   return {
+@@ -760,6 +784,6 @@ const payments = {
+   },
+ };
+ 
+-const driver = { now, users, listings, searchMisses, favorites, conversations, messages, reviews, reports, phoneReveals, savedSearches, follows, notifications, blocks, verifications, payments, emailCodes, getPool } satisfies DbDriver;
++const driver = { now, users, adminAudit, listings, searchMisses, favorites, conversations, messages, reviews, reports, phoneReveals, savedSearches, follows, notifications, blocks, verifications, payments, emailCodes, getPool } satisfies DbDriver;
+ 
+ export default driver;
+diff --git a/backend/src/db/schema.sql b/backend/src/db/schema.sql
+index 649d3a4..cd71f8d 100644
+--- a/backend/src/db/schema.sql
++++ b/backend/src/db/schema.sql
+@@ -357,3 +357,22 @@ ALTER TABLE payments ADD COLUMN IF NOT EXISTS promo_applied BOOLEAN NOT NULL DEF
+ -- requireAuth/maybeAuth — пользователь и так читается из БД на каждый запрос,
+ -- поэтому сверка бесплатна. Инкремент: смена пароля, явный «выйти везде».
+ ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0;
++
++-- ============ Журнал действий модератора ============
++-- Модератор задаётся списком email в ADMIN_EMAILS и может снимать чужие
++-- объявления, одобрять и отклонять верификацию — но следов эти действия не
++-- оставляли: кто и когда заблокировал объявление, восстановить было нечем.
++-- Для роли с такими правами это обязательный минимум подотчётности.
++-- Таблица только на запись из кода (append-only), читается вручную/скриптом.
++CREATE TABLE IF NOT EXISTS admin_audit (
++  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
++  admin_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
++  admin_email TEXT NOT NULL,          -- копией: список ADMIN_EMAILS меняется
++  action      TEXT NOT NULL,          -- listing_block | listing_dismiss | verification_approve | verification_reject
++  target_type TEXT NOT NULL,          -- listing | verification
++  target_id   TEXT NOT NULL,
++  note        TEXT NOT NULL DEFAULT '',
++  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
++);
++CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit(created_at DESC);
++CREATE INDEX IF NOT EXISTS idx_admin_audit_admin ON admin_audit(admin_id, created_at DESC);
+diff --git a/backend/src/models/memory.ts b/backend/src/models/memory.ts
+index e48573d..0fbf627 100644
+--- a/backend/src/models/memory.ts
++++ b/backend/src/models/memory.ts
+@@ -12,6 +12,7 @@ import type {
+   Block, VerificationRequest, CreateVerificationInput, VerificationStatus,
+   Payment, CreatePaymentInput, PaymentStatus,
+   EmailCode, EmailCodePurpose,
++  AdminAudit, CreateAdminAuditInput,
+ } from '../types.js';
+ import { parseQuery, buildSearchFields, scoreListing } from '../services/searchText.js';
+ import { matchesFilters } from '../services/savedSearchMatch.js';
+@@ -33,6 +34,7 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
+ 
+ const tables = {
+   users: new Map<string, User>(),
++  adminAudit: new Map<string, AdminAudit>(),
+   listings: new Map<string, Listing>(),
+   favorites: new Map<string, Favorite>(), // key `${userId}:${listingId}`
+   conversations: new Map<string, Conversation>(),
+@@ -599,9 +601,24 @@ const searchMissesRepo = {
+   },
+ };
+ 
++const adminAuditRepo = {
++  async create({ adminId, adminEmail, action, targetType, targetId, note = '' }: CreateAdminAuditInput): Promise<AdminAudit> {
++    const id = nextId();
++    const row: AdminAudit = { id, adminId, adminEmail, action, targetType, targetId, note, createdAt: now() };
++    tables.adminAudit.set(id, row);
++    return row;
++  },
++  async recent(limit: number): Promise<AdminAudit[]> {
++    return [...tables.adminAudit.values()]
++      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
++      .slice(0, limit);
++  },
++};
++
+ const driver = {
+   reset, now,
+   users: usersRepo,
++  adminAudit: adminAuditRepo,
+   listings: listingsRepo,
+   searchMisses: searchMissesRepo,
+   favorites: favoritesRepo,
+diff --git a/backend/src/routes/index.ts b/backend/src/routes/index.ts
+index 248c146..df7d291 100644
+--- a/backend/src/routes/index.ts
++++ b/backend/src/routes/index.ts
+@@ -34,6 +34,21 @@ const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
+   next();
+ };
+ 
++/**
++ * Запись в журнал действий модератора.
++ *
++ * Модератор задаётся переменной окружения и может снимать чужие объявления и
++ * решать судьбу верификации — следов эти действия не оставляли вовсе. Пишем
++ * не в await: журнал не должен ронять само действие, но и молча теряться —
++ * тоже, поэтому ошибка идёт в лог.
++ */
++function audit(req: Request, action: string, targetType: string, targetId: string, note = ''): void {
++  const admin = req.auth!.user;
++  db.adminAudit.create({
++    adminId: admin.id, adminEmail: admin.email, action, targetType, targetId, note,
++  }).catch((e) => console.error('[audit] не удалось записать действие модератора:', action, targetId, e));
++}
++
+ /**
+  * API Khedma — маркетплейс работы и услуг (стиль Авито, Алжир).
+  *
+@@ -1009,6 +1024,13 @@ router.get('/admin/search-misses', requireAuth, requireAdmin, wrap(async (req, r
+   res.json({ misses: await db.searchMisses.top(limit) });
+ }));
+ 
++// Журнал действий модерации: кто и когда блокировал объявления и решал по
++// заявкам на верификацию. Только чтение — записи не редактируются и не удаляются.
++router.get('/admin/audit', requireAuth, requireAdmin, wrap(async (req, res) => {
++  const limit = Math.min(Math.max(Number((req.query as { limit?: string }).limit) || 100, 1), 500);
++  res.json({ entries: await db.adminAudit.recent(limit) });
++}));
++
+ // Объявления с открытыми жалобами
+ router.get('/admin/reports', requireAuth, requireAdmin, wrap(async (req, res) => {
+   const byListing = await db.reports.openByListing();
+@@ -1034,6 +1056,7 @@ router.post('/admin/listings/:id/block', requireAuth, requireAdmin, wrap(async (
+   await db.listings.update(listing.id, { status: 'blocked' });
+   await db.reports.resolveForListing(listing.id);
+   removeListing(listing.id).catch(() => {});
++  audit(req, 'listing_block', 'listing', listing.id);
+   res.json({ ok: true, status: 'blocked' });
+ }));
+ 
+@@ -1042,6 +1065,7 @@ router.post('/admin/listings/:id/dismiss', requireAuth, requireAdmin, wrap(async
+   const listing = await db.listings.findById((req.params.id as string));
+   if (!listing) return res.status(404).json({ error: 'LISTING_NOT_FOUND' });
+   await db.reports.resolveForListing(listing.id);
++  audit(req, 'listing_dismiss', 'listing', listing.id);
+   res.json({ ok: true, status: listing.status });
+ }));
+ 
+@@ -1066,6 +1090,7 @@ router.post('/admin/verifications/:id/approve', requireAuth, requireAdmin, valid
+   const v = await db.verifications.setStatus((req.params.id as string), 'approved', req.valid.note);
+   if (!v) return res.status(404).json({ error: 'VERIFICATION_NOT_FOUND' });
+   await db.users.update(v.userId, { verified: true });
++  audit(req, 'verification_approve', 'verification', v.id, req.valid.note || '');
+   notify(v.userId, (lang) => ({ type: 'verification', title: notifyText.verifiedTitle(lang), body: req.valid.note || '' })).catch(() => {});
+   res.json({ ok: true });
+ }));
+@@ -1073,6 +1098,7 @@ router.post('/admin/verifications/:id/approve', requireAuth, requireAdmin, valid
+ router.post('/admin/verifications/:id/reject', requireAuth, requireAdmin, validateBody(schemas.verificationReview), wrap(async (req, res) => {
+   const v = await db.verifications.setStatus((req.params.id as string), 'rejected', req.valid.note);
+   if (!v) return res.status(404).json({ error: 'VERIFICATION_NOT_FOUND' });
++  audit(req, 'verification_reject', 'verification', v.id, req.valid.note || '');
+   notify(v.userId, (lang) => ({ type: 'verification', title: notifyText.rejectedTitle(lang), body: req.valid.note || '' })).catch(() => {});
+   res.json({ ok: true });
+ }));
+diff --git a/backend/src/types.ts b/backend/src/types.ts
+index 50350b3..9c5cc29 100644
+--- a/backend/src/types.ts
++++ b/backend/src/types.ts
+@@ -300,6 +300,27 @@ export interface CreateUserWithGoogle {
+   language?: Lang;
+ }
+ 
++/** Запись журнала действий модератора (append-only, см. schema.sql). */
++export interface AdminAudit {
++  id: string;
++  adminId: string;
++  adminEmail: string;
++  action: string;
++  targetType: string;
++  targetId: string;
++  note: string;
++  createdAt: string;
++}
++
++export interface CreateAdminAuditInput {
++  adminId: string;
++  adminEmail: string;
++  action: string;
++  targetType: string;
++  targetId: string;
++  note?: string;
++}
++
+ export type UserPatch = Partial<Pick<User, 'name' | 'phone' | 'language' | 'avatar' | 'pushToken' | 'googleId' | 'lastSeenAt' | 'verified' | 'emailVerified'>>;
+ 
+ export interface CreateListingInput {
+@@ -404,6 +425,11 @@ export interface DbDriver {
+     /** Удаление аккаунта (требование сторов) — каскадом сносит его данные. */
+     deleteCascade(userId: string): Promise<void>;
+   };
++  /** Журнал действий модератора: только запись из кода и чтение списком. */
++  adminAudit: {
++    create(input: CreateAdminAuditInput): Promise<AdminAudit>;
++    recent(limit: number): Promise<AdminAudit[]>;
++  };
+   // Одноразовые коды из писем (подтверждение email / сброс пароля).
+   emailCodes: {
+     /** Инвалидирует прежние коды этого назначения и создаёт новый. */
+diff --git a/backend/tests/reviewFixes.test.ts b/backend/tests/reviewFixes.test.ts
+index 0966ee3..f86eb3a 100644
+--- a/backend/tests/reviewFixes.test.ts
++++ b/backend/tests/reviewFixes.test.ts
+@@ -226,3 +226,42 @@ describe('S11 · характеристики сверяются со справ
+     expect(isValidAttributes('job', { schedule: 'full' })).toBe(true);
+   });
+ });
++
++// ─────────────────────────────────────────────────────────────
++describe('S9 · действия модератора попадают в журнал', () => {
++  const ADMIN = 'moderateur@khadamni.dz';
++
++  async function admin() {
++    const res = await request(app).post('/api/auth/register')
++      .send({ name: 'Moderateur', email: ADMIN, password: 'secret123' });
++    await db.users.update(res.body.user.id, { emailVerified: true });
++    return res.body;
++  }
++
++  it('блокировка объявления записывается с автором действия', async () => {
++    process.env.ADMIN_EMAILS = ADMIN;
++    const a = await admin();
++    const owner = await auth('Proprio');
++    const l = await request(app).post('/api/market/listings').set(bearer(owner.token)).send(base);
++
++    const r = await request(app).post(`/api/admin/listings/${l.body.id}/block`).set(bearer(a.token));
++    expect(r.status).toBe(200);
++
++    const log = await request(app).get('/api/admin/audit').set(bearer(a.token));
++    expect(log.status).toBe(200);
++    const entry = log.body.entries.find((e: any) => e.targetId === l.body.id);
++    expect(entry).toBeTruthy();
++    expect(entry.action).toBe('listing_block');
++    expect(entry.adminEmail).toBe(ADMIN);
++    expect(entry.targetType).toBe('listing');
++    delete process.env.ADMIN_EMAILS;
++  });
++
++  it('журнал закрыт для обычного пользователя', async () => {
++    delete process.env.ADMIN_EMAILS;
++    const u = await auth('Curieux');
++    const r = await request(app).get('/api/admin/audit').set(bearer(u.token));
++    expect(r.status).toBe(403);
++    expect(r.body.error).toBe('ADMIN_ONLY');
++  });
++});
+diff --git a/IMG_2225.png b/docs/reference/IMG_2225.png
+similarity index 100%
+rename from IMG_2225.png
+rename to docs/reference/IMG_2225.png
+diff --git a/IMG_2226.png b/docs/reference/IMG_2226.png
+similarity index 100%
+rename from IMG_2226.png
+rename to docs/reference/IMG_2226.png
+diff --git a/IMG_2227.png b/docs/reference/IMG_2227.png
+similarity index 100%
+rename from IMG_2227.png
+rename to docs/reference/IMG_2227.png
+diff --git a/IMG_2228.png b/docs/reference/IMG_2228.png
+similarity index 100%
+rename from IMG_2228.png
+rename to docs/reference/IMG_2228.png
+diff --git a/IMG_2229.png b/docs/reference/IMG_2229.png
+similarity index 100%
+rename from IMG_2229.png
+rename to docs/reference/IMG_2229.png
+diff --git a/IMG_2230.png b/docs/reference/IMG_2230.png
+similarity index 100%
+rename from IMG_2230.png
+rename to docs/reference/IMG_2230.png
+diff --git a/docs/reference/README.md b/docs/reference/README.md
+new file mode 100644
+index 0000000..5837575
+--- /dev/null
++++ b/docs/reference/README.md
+@@ -0,0 +1,22 @@
++# Референсы
++
++Исходники и подборки, на которые опирался дизайн. В коде они не используются —
++лежат здесь как справочный материал, поэтому вынесены из корня репозитория.
++
++| Файл | Что это |
++|---|---|
++| `khadamni-logo.png` | Знак и логотип Khadamni (зелёный/красный, полумесяц флага Алжира) |
++| `categories-icon-sheet.png`, `categories-icon-sheet-2.png` | Лист сгенерированных 3D-иконок категорий (26 вакансий + 30 услуг) |
++| `IMG_2225…2230.png` | Скриншоты Авито — референс раскладки главной, выдачи и карточки |
++
++## Замечание про вес
++
++Подборка занимает ~11 МБ и лежит в истории git, то есть скачивается при каждом
++клоне. Если она будет расти, разумно перевести каталог на Git LFS:
++
++```
++git lfs track "docs/reference/*.png"
++```
++
++Скриншоты чужого приложения (Авито) — рабочий материал для сравнения раскладок,
++не ассеты продукта: в сборку они не попадают.
+diff --git a/DAF2521D-B9ED-4A69-9CC9-B1D686FE4FC9.png b/docs/reference/categories-icon-sheet-2.png
+similarity index 100%
+rename from DAF2521D-B9ED-4A69-9CC9-B1D686FE4FC9.png
+rename to docs/reference/categories-icon-sheet-2.png
+diff --git a/C835336D-5BC5-4BEA-A2BC-CC5528E367B8.png b/docs/reference/categories-icon-sheet.png
+similarity index 100%
+rename from C835336D-5BC5-4BEA-A2BC-CC5528E367B8.png
+rename to docs/reference/categories-icon-sheet.png
+diff --git "a/\320\270\320\267\320\276\320\261\321\200\320\260\320\266\320\265\320\275\320\270\320\265.png" b/docs/reference/khadamni-logo.png
+similarity index 100%
+rename from "\320\270\320\267\320\276\320\261\321\200\320\260\320\266\320\265\320\275\320\270\320\265.png"
+rename to docs/reference/khadamni-logo.png
+-- 
+2.43.0
+
