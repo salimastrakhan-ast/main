@@ -12,6 +12,53 @@
 В этот раз доступ на запись к обоим репозиториям был, поэтому изменения
 запушены ветками, а не отданы патчем.
 
+## Статус выкатки (30 июля 2026)
+
+**Бэкенд — выкачен, работает.** `main` → `34f3fe3`.
+
+```
+✅ Окружение в порядке (JWT_SECRET, DATABASE_URL)
+  ✅ 001_baseline
+  ✅ 002_review_fixes
+✅ Применено миграций: 2
+[PM2] [depanini](0) ✓
+{"status":"ok","service":"depanini"} — OK
+```
+
+Проверено снаружи: `/health` отвечает, `/admin/admin.js` отдаётся (200),
+заголовок CSP на `/admin` — новый строгий `script-src 'self'`, то есть
+исправление XSS действительно в бою.
+
+Первый успешный деплой как минимум с июня. Прошлые падали по двум разным
+причинам, обе устранены:
+- 24 июля — `git pull` спотыкался о локальные правки `package-lock.json`
+  на сервере; теперь файл откатывается перед подтягиванием;
+- 30 июля (первая попытка) — `set -a; source .env` падал с
+  `syntax error near unexpected token 'newline'`. Дело не в `.env`:
+  его формат допускает значения вроде
+  `MAIL_FROM=Depanini <noreply@depanini.dz>`, а для bash угловые скобки —
+  перенаправления. Чтение `.env` через shell убрано совсем, всё работает
+  через dotenv.
+
+**Приложение — сборка не запускается.** Требует вашего действия:
+
+```
+An Expo user account is required to proceed.
+Either log in with eas login or set the EXPO_TOKEN environment variable
+```
+
+В репозитории не задан секрет `EXPO_TOKEN` — по этой же причине падали все
+предыдущие сборки, начиная с июня. Код в `main` (`6db687b`), собрать его
+можно двумя способами:
+
+```bash
+# вариант 1 — включить CI: Expo → Account → Access Tokens,
+# затем GitHub → Settings → Secrets and variables → Actions → EXPO_TOKEN
+# вариант 2 — собрать локально
+npm install
+npx eas-cli build --platform android --profile preview
+```
+
 ## Проверено
 
 ```
