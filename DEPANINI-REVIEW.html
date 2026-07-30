@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Ревью кода Depanini (backend @ a653b93, app @ 1c4b7c7): 39 находок по безопасности, логике заказов, производительности и мобильному клиенту.">
+<title>Depanini · Ревью кода</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; padding: 0; }
+img, svg { display: block; max-width: 100%; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+
+/* Палитра взята из самого продукта — app/src/theme.js:
+   глубокий синий Depanini, янтарь для акцентов. Своих цветов не вводим. */
+:root {
+  --bg:        #F2F5F9;
+  --surface:   #FFFFFF;
+  --surface-2: #F7F9FC;
+  --ink:       #0E1C2B;
+  --ink-2:     #46586B;
+  --ink-3:     #5B6B7B;
+  --line:      #E2E8F0;
+  --line-2:    #EDF1F6;
+  --primary:   #0B2A4A;
+  --accent:    #1E6FD9;
+  --accent-soft:#EAF2FB;
+  --amber:     #F5A623;
+
+  --sev-crit:  #C0392B;
+  --sev-high:  #D98A0A;
+  --sev-med:   #1E6FD9;
+  --sev-low:   #5B6B7B;
+  --sev-good:  #1E9E62;
+  --crit-bg:   #FBEAEA;
+  --high-bg:   #FDF3E0;
+  --med-bg:    #EAF2FB;
+  --low-bg:    #EDF1F6;
+  --good-bg:   #E6F6EE;
+
+  --shadow-sm: 0 2px 8px rgba(11,42,74,.06);
+  --shadow-md: 0 8px 24px rgba(11,42,74,.10);
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:        #0A1422;
+    --surface:   #13243A;
+    --surface-2: #1A2C44;
+    --ink:       #EAF2FB;
+    --ink-2:     #B9CCE0;
+    --ink-3:     #9FB6CE;
+    --line:      #243C56;
+    --line-2:    #1C2E46;
+    --primary:   #0B2A4A;
+    --accent:    #5C9CE8;
+    --accent-soft: rgba(59,138,224,.16);
+    --sev-crit:  #F08379;
+    --sev-high:  #F5B84E;
+    --sev-med:   #6FAAEC;
+    --sev-low:   #9FB6CE;
+    --sev-good:  #4FCB93;
+    --crit-bg:   #3D1A1A;
+    --high-bg:   #3A2C12;
+    --med-bg:    rgba(59,138,224,.14);
+    --low-bg:    #1C2E46;
+    --good-bg:   #0F3D2E;
+    --shadow-sm: 0 2px 8px rgba(0,0,0,.34);
+    --shadow-md: 0 10px 28px rgba(0,0,0,.44);
+  }
+}
+:root[data-theme="dark"] {
+  --bg:#0A1422; --surface:#13243A; --surface-2:#1A2C44;
+  --ink:#EAF2FB; --ink-2:#B9CCE0; --ink-3:#9FB6CE;
+  --line:#243C56; --line-2:#1C2E46; --primary:#0B2A4A;
+  --accent:#5C9CE8; --accent-soft:rgba(59,138,224,.16);
+  --sev-crit:#F08379; --sev-high:#F5B84E; --sev-med:#6FAAEC; --sev-low:#9FB6CE; --sev-good:#4FCB93;
+  --crit-bg:#3D1A1A; --high-bg:#3A2C12; --med-bg:rgba(59,138,224,.14); --low-bg:#1C2E46; --good-bg:#0F3D2E;
+  --shadow-sm:0 2px 8px rgba(0,0,0,.34); --shadow-md:0 10px 28px rgba(0,0,0,.44);
+}
+
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--sans); font-size: 16.5px; line-height: 1.68;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+
+.hero {
+  background: linear-gradient(160deg, #0B2A4A 0%, #061B30 100%);
+  color: #EAF2FB; padding: clamp(40px, 7vw, 76px) 0 clamp(32px, 5vw, 56px);
+}
+.wrap { width: min(100% - 40px, 860px); margin-inline: auto; }
+.hero .wrap { width: min(100% - 40px, 1160px); }
+.eyebrow { font-size: 12.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--amber); font-weight: 700; }
+.hero h1 { font-size: clamp(34px, 6.5vw, 58px); line-height: 1.06; font-weight: 800; letter-spacing: -.022em; margin: 14px 0 18px; }
+.hero .lede { font-size: clamp(15.5px, 2vw, 18px); color: #9FB6CE; max-width: 62ch; }
+.meta { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 13.5px; color: #7E97B3; }
+.meta code { background: rgba(255,255,255,.08); color: #C9DCF0; padding: 2px 7px; border-radius: 5px; font-family: var(--mono); font-size: 12.5px; }
+
+.scores { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 12px; margin-top: 34px; }
+.score { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); border-radius: 14px; padding: 16px 18px; }
+.score .num { font-size: 32px; font-weight: 800; line-height: 1; letter-spacing: -.02em; }
+.score .lbl { font-size: 12px; letter-spacing: .07em; text-transform: uppercase; color: #7E97B3; margin-top: 7px; font-weight: 600; }
+.score.crit .num { color: #F08379; } .score.high .num { color: #F5B84E; }
+.score.med .num { color: #6FAAEC; }  .score.low .num { color: #9FB6CE; }
+
+.layout { display: grid; grid-template-columns: 268px minmax(0,1fr); gap: 46px; width: min(100% - 40px, 1160px); margin: 0 auto; padding: 46px 0 90px; align-items: start; }
+@media (max-width: 940px) { .layout { grid-template-columns: 1fr; gap: 0; } .toc { display: none; } }
+
+.toc { position: sticky; top: 22px; max-height: calc(100vh - 44px); overflow-y: auto; font-size: 13.5px; padding-right: 8px; }
+.toc-hd { font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); font-weight: 700; margin-bottom: 12px; }
+.toc a { display: flex; gap: 9px; text-decoration: none; color: var(--ink-2); padding: 4px 0; line-height: 1.4; }
+.toc a:hover { color: var(--accent); }
+.toc-sec { font-weight: 700; color: var(--ink) !important; margin-top: 16px; padding-bottom: 5px !important; border-bottom: 1px solid var(--line); }
+.toc-sec:first-child { margin-top: 0; }
+.tid { font-family: var(--mono); font-size: 11.5px; font-weight: 700; flex: 0 0 30px; padding-top: 2px; }
+.toc-f.s-crit .tid { color: var(--sev-crit); } .toc-f.s-high .tid { color: var(--sev-high); }
+.toc-f.s-med .tid { color: var(--sev-med); }   .toc-f.s-low .tid { color: var(--sev-low); }
+
+article h2 { font-size: clamp(24px, 3.6vw, 32px); font-weight: 800; letter-spacing: -.018em; margin: 62px 0 20px; padding-bottom: 12px; border-bottom: 2px solid var(--line); scroll-margin-top: 20px; }
+article > h2:first-child { margin-top: 0; }
+article h3 { font-size: 20px; font-weight: 700; margin: 44px 0 14px; letter-spacing: -.012em; scroll-margin-top: 20px; }
+article h4 { font-size: 16.5px; font-weight: 700; margin: 30px 0 10px; }
+article p { margin: 0 0 17px; }
+article ul, article ol { margin: 0 0 19px; padding-left: 25px; }
+article li { margin-bottom: 8px; }
+article li::marker { color: var(--ink-3); }
+article strong { font-weight: 700; color: var(--ink); }
+article hr { border: 0; border-top: 1px solid var(--line); margin: 46px 0; }
+article a { color: var(--accent); }
+
+h3.finding { display: grid; grid-template-columns: auto auto; gap: 5px 11px; align-items: center; margin: 52px 0 18px; padding: 15px 19px; border-radius: 13px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--sev-low); box-shadow: var(--shadow-sm); }
+h3.finding .fid { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--ink-3); }
+h3.finding .sev { font-size: 10.5px; font-weight: 800; letter-spacing: .1em; padding: 3px 9px; border-radius: 999px; justify-self: start; }
+h3.finding .ftitle { grid-column: 1 / -1; font-size: 19.5px; font-weight: 700; line-height: 1.34; letter-spacing: -.012em; }
+h3.s-crit { border-left-color: var(--sev-crit); } h3.s-crit .sev { background: var(--crit-bg); color: var(--sev-crit); }
+h3.s-high { border-left-color: var(--sev-high); } h3.s-high .sev { background: var(--high-bg); color: var(--sev-high); }
+h3.s-med  { border-left-color: var(--sev-med); }  h3.s-med .sev  { background: var(--med-bg);  color: var(--sev-med); }
+h3.s-low  { border-left-color: var(--sev-low); }  h3.s-low .sev  { background: var(--low-bg);  color: var(--sev-low); }
+
+code { font-family: var(--mono); font-size: .855em; background: var(--surface-2); border: 1px solid var(--line-2); padding: 1.5px 5px; border-radius: 5px; word-break: break-word; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin: 0 0 20px; overflow-x: auto; box-shadow: var(--shadow-sm); }
+pre.code code { background: none; border: 0; padding: 0; font-size: 13.4px; line-height: 1.62; white-space: pre; }
+
+.tw { overflow-x: auto; margin: 0 0 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-sm); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; padding: 11px 15px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+th { background: var(--surface-2); font-weight: 700; font-size: 12.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+
+.themer { position: fixed; right: 18px; bottom: 18px; z-index: 50; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); font-size: 19px; cursor: pointer; box-shadow: var(--shadow-md); display: grid; place-items: center; }
+.themer:hover { color: var(--accent); }
+@media print { .toc, .themer { display: none; } .layout { display: block; } h3.finding { break-inside: avoid; } }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Ревью кода · 30 июля 2026</div>
+    <h1>Depanini</h1>
+    <p class="lede">Сервис дорожной помощи для Алжира: мобильное приложение на Expo, Express + PostgreSQL,
+    реалтайм на Socket.io и веб-админка. Ниже — 39 находок, четыре из них подтверждены исполняемым тестом.</p>
+    <div class="meta">
+      <span>backend <code>a653b93</code> · 3 001 строка</span>
+      <span>app <code>1c4b7c7</code> · 5 723 строки</span>
+    </div>
+    <div class="scores">
+      <div class="score crit"><div class="num">3</div><div class="lbl">критичных</div></div>
+      <div class="score high"><div class="num">10</div><div class="lbl">высоких</div></div>
+      <div class="score med"><div class="num">17</div><div class="lbl">средних</div></div>
+      <div class="score low"><div class="num">9</div><div class="lbl">низких</div></div>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="toc" aria-label="Содержание">
+    <div class="toc-hd">Содержание</div>
+    <a class="toc-sec" href="#h2">Краткий вывод</a>
+<a class="toc-sec" href="#h3">Что не надо трогать</a>
+<a class="toc-sec" href="#h4">Критичные</a>
+<a class="toc-f s-crit" href="#h5"><span class="tid">C1</span><span>админка: XSS из формы регистрации водителя → захват аккаунта админа</span></a>
+<a class="toc-f s-crit" href="#h6"><span class="tid">C2</span><span>сервер стартует с зашитым JWT-секретом, если .env не подхватился</span></a>
+<a class="toc-f s-crit" href="#h7"><span class="tid">C3</span><span>любой клиент видит GPS любого водителя в реальном времени</span></a>
+<a class="toc-sec" href="#h8">Высокие</a>
+<a class="toc-f s-high" href="#h9"><span class="tid">H1</span><span>занятый водитель принимает второй заказ [проверено]</span></a>
+<a class="toc-f s-high" href="#h10"><span class="tid">H2</span><span>код сброса пароля можно перебрать</span></a>
+<a class="toc-f s-high" href="#h11"><span class="tid">H3</span><span>фоновая задача читает всю таблицу заказов каждые 5 секунд</span></a>
+<a class="toc-f s-high" href="#h12"><span class="tid">H4</span><span>рейтинг водителя накручивается повторными оценками [проверено]</span></a>
+<a class="toc-f s-high" href="#h13"><span class="tid">H5</span><span>в приложении нет удаления аккаунта → отклонение в Google Play</span></a>
+<a class="toc-f s-high" href="#h14"><span class="tid">H6</span><span>позиция водителя перестаёт обновляться, как только он открывает навигатор</span></a>
+<a class="toc-f s-high" href="#h15"><span class="tid">H7</span><span>при недоступности OSRM цена молча падает на 20–40%</span></a>
+<a class="toc-f s-high" href="#h16"><span class="tid">H8</span><span>арабский язык без RTL</span></a>
+<a class="toc-f s-high" href="#h17"><span class="tid">H9</span><span>лимит запросов по IP + агрессивный опрос = 429 за оператором NAT</span></a>
+<a class="toc-f s-high" href="#h18"><span class="tid">H10</span><span>деплой в продакшен без прогона тестов, и в main лежит падающий тест [проверено]</span></a>
+<a class="toc-sec" href="#h19">Средние</a>
+<a class="toc-f s-med" href="#h20"><span class="tid">M1</span><span>Google-аккаунты не находятся по email → дубли аккаунтов</span></a>
+<a class="toc-f s-med" href="#h21"><span class="tid">M2</span><span>JWT в query-строке</span></a>
+<a class="toc-f s-med" href="#h22"><span class="tid">M3</span><span>Любой авторизованный пользователь может скачать документы любого водителя</span></a>
+<a class="toc-f s-med" href="#h23"><span class="tid">M4</span><span>Время на ответ водителя задано в трёх местах и везде разное</span></a>
+<a class="toc-f s-med" href="#h24"><span class="tid">M5</span><span>schema.sql переписывает настройки владельца при каждом деплое</span></a>
+<a class="toc-f s-med" href="#h25"><span class="tid">M6</span><span>/admin/orders: N+1 и полная выгрузка без пагинации</span></a>
+<a class="toc-f s-med" href="#h26"><span class="tid">M7</span><span>Экран отслеживания качает всю историю заказов каждые 4 секунды</span></a>
+<a class="toc-f s-med" href="#h27"><span class="tid">M8</span><span>После переназначения водителя карта замирает: устаревшее замыкание</span></a>
+<a class="toc-f s-med" href="#h28"><span class="tid">M9</span><span>Перебор водителей: гонка и мусор в истории клиента</span></a>
+<a class="toc-f s-med" href="#h29"><span class="tid">M10</span><span>Смена языка не перерисовывает интерфейс</span></a>
+<a class="toc-f s-med" href="#h30"><span class="tid">M11</span><span>scryptSync блокирует цикл событий</span></a>
+<a class="toc-f s-med" href="#h31"><span class="tid">M12</span><span>Рассылка нового заказа перебирает все открытые сокеты</span></a>
+<a class="toc-f s-med" href="#h32"><span class="tid">M13</span><span>Сбой сети при запуске выкидывает пользователя на экран входа</span></a>
+<a class="toc-f s-med" href="#h33"><span class="tid">M14</span><span>Телефоны всех водителей отдаются любому клиенту</span></a>
+<a class="toc-f s-med" href="#h34"><span class="tid">M15</span><span>Файлы лежат на локальном диске одного инстанса</span></a>
+<a class="toc-f s-med" href="#h35"><span class="tid">M16</span><span>Пустое поле в админке тарифов обнуляет тариф</span></a>
+<a class="toc-f s-med" href="#h36"><span class="tid">M17</span><span>Пуш-уведомления: нет пакетной отправки и очистки мёртвых токенов</span></a>
+<a class="toc-sec" href="#h37">Низкие</a>
+<a class="toc-f s-low" href="#h38"><span class="tid">L1</span><span>Ни одного атрибута доступности во всём приложении</span></a>
+<a class="toc-f s-low" href="#h39"><span class="tid">L2</span><span>Дублирующийся ключ в объекте API</span></a>
+<a class="toc-f s-low" href="#h40"><span class="tid">L3</span><span>Хуки после раннего выхода в SafeMarker</span></a>
+<a class="toc-f s-low" href="#h41"><span class="tid">L4</span><span>Обязательные 2,6 секунды заставки</span></a>
+<a class="toc-f s-low" href="#h42"><span class="tid">L5</span><span>Тёмная тема игнорирует системную настройку</span></a>
+<a class="toc-f s-low" href="#h43"><span class="tid">L6</span><span>Пользователю показываются служебные коды ошибок</span></a>
+<a class="toc-f s-low" href="#h44"><span class="tid">L7</span><span>Сборка iOS не воспроизводится из чистого клона</span></a>
+<a class="toc-f s-low" href="#h45"><span class="tid">L8</span><span>Ошибки проглатываются повсеместно, отчётности нет</span></a>
+<a class="toc-f s-low" href="#h46"><span class="tid">L9</span><span>Документация разошлась с кодом</span></a>
+<a class="toc-sec" href="#h47">Порядок работ</a>
+<a class="toc-sec" href="#h48">Приложение: как проверялись находки</a>
+  </nav>
+  <article>
+    <h1 id="h1">Depanini — ревью кода</h1>
+<p><strong>Репозитории:</strong> <code>salimastrakhan-ast/depanini-backend</code> @ <code>a653b93</code> · <code>salimastrakhan-ast/depanini-app</code> @ <code>1c4b7c7</code> <strong>Дата:</strong> 30 июля 2026 <strong>Объём:</strong> backend 3 001 строка (Node + Express + PostgreSQL + Socket.io) · app 5 723 строки (Expo / React Native)</p>
+<p><strong>Итого 39 находок:</strong> 3 критичных · 10 высоких · 17 средних · 9 низких.</p>
+<p>Три из них проверены запуском кода, а не чтением — они помечены <strong>[проверено]</strong>, подробности в приложении в конце.</p>
+<hr>
+<h2 id="h2">Краткий вывод</h2>
+<p>Сервис дорожной помощи для Алжира: клиент, водитель, админка, реалтайм-карта, чат, пуши. Для проекта такого размера архитектура на удивление аккуратная — цена считается только на сервере, статусы заказа ходят по явной таблице переходов, документы водителя невозможно одобрить самому себе. Это не набросок, это продуманная система.</p>
+<p>Но между «продумано» и «выдержит боевую нагрузку» есть разрыв, и он в трёх местах:</p>
+<ol>
+<li><strong>Админка собирает HTML строками из данных, которые вводит любой желающий.</strong> Регистрация водителя — открытая форма. Фамилия водителя попадает в <code>innerHTML</code> админки без экранирования. Это не теоретический XSS: чтобы одобрить водителя, админ <strong>обязан</strong> открыть эту карточку. Полный захват админского аккаунта одной заявкой.</li>
+</ol>
+<ol>
+<li><strong>Появилось поле <code>availability</code>, но старое <code>isOnline</code> никто не убрал.</strong> Поиск водителей смотрит на новое поле, расчёт цены — на старое. Занятый водитель принимает второй заказ. Проверено тестом.</li>
+</ol>
+<ol>
+<li><strong>Приложение считает, что телефон водителя всегда на экране и разблокирован.</strong> Геолокация шлётся <code>setInterval</code>&#x27;ом раз в 5 секунд из foreground. Водитель включает навигацию — грузовик на карте клиента замирает. Это не оптимизация, это ядро продукта.</li>
+</ol>
+<p>Ни одна из трёх не требует переписывания. Первая — одна функция экранирования, вторая — одна строка в <code>quote()</code>, третья — переход на <code>expo-task-manager</code>.</p>
+<hr>
+<h2 id="h3">0. Что не надо трогать</h2>
+<p>Шесть вещей сделаны правильно, и правильно по неочевидным причинам:</p>
+<ul>
+<li><strong>Цену нельзя подделать.</strong> Клиент присылает только координаты; <code>priceFromDistances</code> считает на сервере и кладёт <code>tariffSnapshot</code> в заказ — историю не переписать задним числом при смене тарифа. Покрыто тестом. — <code>src/services/pricing.js:77</code>, <code>src/services/orders.js:59</code></li>
+<li><strong>Машина состояний — таблица, а не набор <code>if</code>.</strong> <code>TRANSITIONS</code> явно перечисляет разрешённые переходы, права проверяются отдельно от перехода. Перепрыгнуть <code>requested → delivered</code> нельзя. — <code>src/services/orders.js:10–20</code></li>
+<li><strong>Водитель не может одобрить себя сам.</strong> <code>withPendingDocs</code> принудительно ставит любому присланному документу <code>status: &#x27;pending&#x27;</code>, а схема Zod физически не даёт прислать поле <code>status</code>. Два барьера на одну угрозу — так и надо. — <code>src/routes/index.js:315</code></li>
+<li><strong>Удаление аккаунта — анонимизация, а не <code>DELETE</code>.</strong> Заказы и чаты второй стороны остаются целыми, персональные данные стираются. Это осознанное решение, и оно верное. — <code>src/db/pg.js:198</code></li>
+<li><strong>Один пуш-токен = один аккаунт.</strong> <code>clearPushTokenForOthers</code> снимает токен со всех остальных при входе. Мелочь, о которой обычно вспоминают после первой жалобы «мне приходят чужие заказы». — <code>src/db/pg.js:144</code></li>
+<li><strong>Сервис не падает от внешних сбоев.</strong> OSRM, Nominatim, карта, пуши — у каждого свой фолбэк. Приложение продолжает работать при недоступности любого из них.</li>
+</ul>
+<hr>
+<h2 id="h4">1. Критичные</h2>
+<h3 id="h5" class="finding s-crit"><span class="fid">C1</span><span class="sev">КРИТИЧНО</span><span class="ftitle">админка: XSS из формы регистрации водителя → захват аккаунта админа</span></h3>
+<p><code>cardHtml()</code> собирает карточку водителя конкатенацией строк и присваивает в <code>innerHTML</code>. Экранирования нет ни у одного поля:</p>
+<pre class="code"><code>// src/admin/index.html:218, 237
+&lt;div class=&quot;card-title&quot;&gt;${name}&lt;/div&gt;          // firstName + lastName
+&lt;div class=&quot;field&quot;&gt;&lt;b&gt;Описание&lt;/b&gt;${d.description}&lt;/div&gt;</code></pre>
+<p><code>firstName</code>, <code>lastName</code>, <code>plateNumber</code>, <code>wilaya</code>, <code>description</code>, <code>phones</code>, <code>email</code> приходят из <code>POST /api/drivers/register</code> — открытой формы, доступной любому, кто скачал приложение. Zod проверяет только длину: <code>lastName</code> до 60 символов, <code>description</code> до 1000. Полезная нагрузка вида <code>&lt;img src=x onerror=...&gt;</code> укладывается в 36 символов.</p>
+<p>Ключевая деталь: карточка отображается на вкладке <strong>«Заявки»</strong>, и админ обязан её открыть, чтобы нажать «Одобрить». Payload срабатывает гарантированно, при обычной работе.</p>
+<p>Дальше идёт цепочка, где каждое звено усиливает предыдущее:</p>
+<ul>
+<li><strong>CSP для <code>/admin</code> отключён вручную.</strong> <code>default-src &#x27;self&#x27; &#x27;unsafe-inline&#x27; data: blob: *</code> и <code>connect-src *</code> — helmet ставит нормальную политику, а этот роут её перетирает. Инлайн-скрипты разрешены, отправка данных на любой домен разрешена. — <code>src/app.js:79</code></li>
+<li><strong>Админский JWT лежит в <code>localStorage</code></strong> — доступен любому скрипту на странице. — <code>src/admin/index.html:109</code></li>
+<li><strong>Токен подставляется в <code>src</code> каждой картинки:</strong> <code>imgUrl()</code> даёт <code>/api/files/xxx.jpg?token=&lt;JWT&gt;</code>. Токен утекает не только через XSS, но и в access-логи nginx на каждый просмотр документа. — <code>src/admin/index.html:113</code></li>
+</ul>
+<p>Итог: заявка водителя → выполнение произвольного кода в админке → админский токен на 7 дней без возможности отзыва → изменение тарифов, доступ к паспортам всех водителей, блокировка кого угодно.</p>
+<p><strong>Что сделать.</strong></p>
+<ol>
+<li>Функция <code>esc(s)</code> (<code>String(s).replace(/[&amp;&lt;&gt;&quot;&#x27;]/g, c =&gt; ({&#x27;&amp;&#x27;:&#x27;&amp;amp;&#x27;,&#x27;&lt;&#x27;:&#x27;&amp;lt;&#x27;,&#x27;&gt;&#x27;:&#x27;&amp;gt;&#x27;,&#x27;&quot;&#x27;:&#x27;&amp;quot;&#x27;,&quot;&#x27;&quot;:&#x27;&amp;#39;&#x27;}[c]))</code>) и обернуть в неё <strong>каждую</strong> интерполяцию в <code>cardHtml</code>, <code>tripCard</code>, <code>renderDrivers</code>, <code>renderTariffs</code>. Правка механическая, риска не несёт.</li>
+<li>Убрать <code>*</code> и <code>&#x27;unsafe-inline&#x27;</code> из CSP админки. Скрипт вынести в отдельный файл — тогда <code>script-src &#x27;self&#x27;</code> работает, и XSS перестаёт быть исполняемым даже при промахе в п.1.</li>
+<li>Токен админки — в <code>httpOnly</code>-cookie, а не в <code>localStorage</code>. Из <code>?token=</code> в URL картинок убрать: отдавать документы через <code>fetch</code> с заголовком и <code>URL.createObjectURL</code>.</li>
+</ol>
+<h3 id="h6" class="finding s-crit"><span class="fid">C2</span><span class="sev">КРИТИЧНО</span><span class="ftitle">сервер стартует с зашитым JWT-секретом, если <code>.env</code> не подхватился</span></h3>
+<pre class="code"><code>// src/middleware/auth.js:12
+const JWT_SECRET = process.env.JWT_SECRET || &#x27;dev-secret-change-me&#x27;;</code></pre>
+<p>Секрет опубликован в исходниках. Если <code>.env</code> не прочитался — переименовали файл, потеряли при переносе на новый сервер, <code>source .env</code> не отработал в деплое — сервер поднимется <strong>молча</strong>, <code>/health</code> вернёт <code>ok</code>, и всё будет работать. Ровно до момента, когда кто-то подпишет себе <code>{&quot;sub&quot;:&quot;&lt;любой id&gt;&quot;,&quot;role&quot;:&quot;admin&quot;}</code> этим общеизвестным секретом.</p>
+<p>Деплой делает <code>set -a; source .env; set +a</code> (<code>.github/workflows/deploy.yml</code>) — то есть переменные живут ровно в этой SSH-сессии и зависят от того, что файл на месте и без опечаток.</p>
+<p><strong>Что сделать.</strong> Падать на старте, а не подставлять заглушку:</p>
+<pre class="code"><code>const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET.length &lt; 32) {
+  throw new Error(&#x27;JWT_SECRET не задан или короче 32 символов&#x27;);
+}</code></pre>
+<p>Для тестов — задать переменную в <code>package.json</code>, как уже сделано с <code>OSRM_TIMEOUT_MS</code>. Заодно добавить в токен <code>tokenVersion</code> из БД, чтобы существующие токены можно было отозвать.</p>
+<h3 id="h7" class="finding s-crit"><span class="fid">C3</span><span class="sev">КРИТИЧНО</span><span class="ftitle">любой клиент видит GPS любого водителя в реальном времени</span></h3>
+<pre class="code"><code>// src/services/realtime.js:73
+socket.on(&#x27;watch:driver&#x27;, (driverId) =&gt; {
+  if (typeof driverId === &#x27;string&#x27;) socket.join(`driver-watch:${driverId}`);
+});</code></pre>
+<p>Проверяется только тип аргумента. Ни участия в заказе, ни существования водителя, ни лимита на количество подписок.</p>
+<p>Соседний обработчик <code>join:order</code> <strong>делает</strong> нужную проверку — там честно грузится заказ и сверяется участник (<code>realtime.js:83–93</code>). То есть про эту угрозу думали, а на <code>watch:driver</code> не распространили.</p>
+<p>Идентификаторы водителей раздаёт <code>GET /api/drivers/nearby</code> любому клиенту — то есть их не надо даже угадывать. Клиент подписывается на всех разом и получает непрерывный поток координат всего парка: где живёт водитель, когда заканчивает смену, где стоит ночью. Для сервиса, где водители — частные лица со своими эвакуаторами, это прямая угроза их безопасности.</p>
+<p><strong>Что сделать.</strong> Та же проверка, что в <code>join:order</code>: подписка разрешена, только если у подписчика есть активный заказ с этим водителем.</p>
+<pre class="code"><code>socket.on(&#x27;watch:driver&#x27;, async (driverId) =&gt; {
+  if (typeof driverId !== &#x27;string&#x27; || role !== &#x27;client&#x27;) return;
+  const active = (await db.orders.byClient(id))
+    .find(o =&gt; o.driverId === driverId &amp;&amp; [&#x27;requested&#x27;,&#x27;accepted&#x27;,&#x27;arrived&#x27;,&#x27;en_route&#x27;].includes(o.status));
+  if (active) socket.join(`driver-watch:${driverId}`);
+});</code></pre>
+<p>И отписывать при смене статуса заказа на терминальный — сейчас <code>unwatch</code> шлёт только клиент, по своей воле.</p>
+<hr>
+<h2 id="h8">2. Высокие</h2>
+<h3 id="h9" class="finding s-high"><span class="fid">H1</span><span class="sev">ВЫСОКИЙ</span><span class="ftitle">занятый водитель принимает второй заказ <strong>[проверено]</strong></span></h3>
+<p>Два поля описывают одно и то же состояние, и разные части кода смотрят на разные:</p>
+<div class="tw"><table><thead><tr><th>Место</th><th>Проверяет</th></tr></thead><tbody><tr><td><code>drivers.activeOnline()</code> — поиск рядом</td><td><code>availability = &#x27;online&#x27;</code></td></tr><tr><td><code>quote()</code> — создание заказа</td><td><code>isOnline === true</code></td></tr></tbody></table></div>
+<p>Когда водитель принимает заказ, <code>/orders/:id/accept</code> ставит <code>availability: &#x27;busy&#x27;</code>, а <code>isOnline</code> <strong>не трогает</strong> — оно остаётся <code>true</code> (<code>src/routes/index.js:516</code>). Из поиска водитель пропадает, но <code>quote()</code> его по-прежнему считает доступным.</p>
+<p>Достаточно передать <code>driverId</code> напрямую в <code>POST /api/orders</code> — из своей же истории заказов, из кэша экрана, из ответа <code>/drivers/nearby</code> секундой раньше:</p>
+<pre class="code"><code>Клиент A заказывает водителя D  → D принимает → availability=busy, isOnline=true
+Клиент B шлёт POST /api/orders { driverId: D }  → 201 Created</code></pre>
+<p>Проверено интеграционным тестом: второй заказ создаётся со статусом 201. Водитель получает пуш о новом заказе, находясь под машиной первого клиента. Ошибка <code>DRIVER_UNAVAILABLE</code>, ради которой всё писалось, не срабатывает никогда.</p>
+<p><em>Адрес:</em> <code>src/services/orders.js:27</code> · <code>src/routes/index.js:516</code></p>
+<p><strong>Что сделать.</strong> В <code>quote()</code> проверять то же поле, что и поиск:</p>
+<pre class="code"><code>if (driver.status !== &#x27;active&#x27; || driver.availability !== &#x27;online&#x27;) {
+  throw new Error(&#x27;DRIVER_UNAVAILABLE&#x27;);
+}</code></pre>
+<p>И убрать <code>isOnline</code> совсем — оно осталось от предыдущей модели и сейчас только вводит в заблуждение (в <code>/admin/stats</code> счётчик «онлайн» тоже считает по нему, то есть показывает онлайн + занятых). Миграция: <code>UPDATE drivers SET availability = CASE WHEN is_online THEN &#x27;online&#x27; ELSE &#x27;offline&#x27; END</code> уже есть в <code>schema.sql:163</code>, осталось удалить колонку.</p>
+<p>Отдельно: между <code>quote()</code> и <code>db.orders.create()</code> нет блокировки, поэтому два одновременных запроса всё равно проскочат. Правильное решение — условный <code>UPDATE</code>: <code>UPDATE drivers SET availability=&#x27;busy&#x27; WHERE id=$1 AND availability=&#x27;online&#x27; RETURNING id</code>, и создавать заказ только если вернулась строка.</p>
+<h3 id="h10" class="finding s-high"><span class="fid">H2</span><span class="sev">ВЫСОКИЙ</span><span class="ftitle">код сброса пароля можно перебрать</span></h3>
+<p>Строгий лимит (30 попыток / 15 минут) висит ровно на трёх путях:</p>
+<pre class="code"><code>// src/app.js:69–71
+app.use(&#x27;/api/auth/login&#x27;, authLimiter);
+app.use(&#x27;/api/auth/register&#x27;, authLimiter);
+app.use(&#x27;/api/auth/admin-login&#x27;, authLimiter);</code></pre>
+<p><code>/auth/reset-password</code> и <code>/auth/verify-email</code> под ним нет — на них действует общий лимит <strong>600 запросов в минуту</strong>. Код шестизначный, <code>checkResetCode</code> не считает неудачные попытки и не гасит код после промаха (<code>src/db/pg.js:184</code>).</p>
+<p>Считаем: 600 попыток/мин × 15 минут жизни кода = 9 000 попыток на окно из 1 000 000 — 0,9% за один цикл. Но <code>/auth/forgot-password</code> тоже без лимита, а каждый вызов выдаёт <strong>новый</strong> код и продлевает окно. Атака идёт непрерывно; с десятка адресов аккаунт вскрывается за часы. Успех даёт не только смену пароля — эндпоинт сразу возвращает валидный JWT (<code>routes/index.js:250</code>).</p>
+<p>Дополнительно: <code>setVerifyCode</code> и <code>setResetCode</code> пишут в <strong>одну колонку</strong> <code>verify_code</code> (<code>src/db/pg.js:148</code> и <code>:180</code>). Код подтверждения почты и код сброса пароля — это один и тот же секрет с разными правами. Запрос подтверждения почты затирает активный код сброса и наоборот.</p>
+<p><strong>Что сделать.</strong></p>
+<ol>
+<li><code>authLimiter</code> на <code>/auth/forgot-password</code>, <code>/auth/reset-password</code>, <code>/auth/verify-email</code>, <code>/auth/send-code</code>.</li>
+<li>Счётчик попыток в БД: <code>verify_attempts</code>, после 5 неудач код гасится (<code>verify_code = NULL</code>).</li>
+<li>Разнести колонки: <code>reset_code</code>/<code>reset_expires</code> отдельно от <code>verify_code</code>/<code>verify_expires</code>.</li>
+<li>Код из 6 цифр — 20 бит энтропии. Либо 8 символов, либо одноразовая ссылка с 128-битным токеном.</li>
+</ol>
+<h3 id="h11" class="finding s-high"><span class="fid">H3</span><span class="sev">ВЫСОКИЙ</span><span class="ftitle">фоновая задача читает всю таблицу заказов каждые 5 секунд</span></h3>
+<pre class="code"><code>// src/services/jobs.js:28, 80
+const orders = await db.orders.all();     // SELECT * FROM orders ORDER BY created_at DESC
+for (const o of orders) { if (o.status !== &#x27;requested&#x27;) continue; ... }
+setInterval(() =&gt; expireStaleOrders().catch(() =&gt; {}), 5 * 1000);</code></pre>
+<p>Каждые 5 секунд из базы вычитываются <strong>все заказы за всю историю</strong> — с <code>breakdown</code> и <code>tariff_snapshot</code> в JSONB — чтобы найти те несколько, что висят в <code>requested</code>. Отбор идёт в JavaScript. <code>autoConfirmDelivered</code> делает то же самое раз в минуту.</p>
+<p>На старте это незаметно. При 50 000 заказов — 50 000 строк каждые 5 секунд, 10 000 строк/сек постоянной нагрузки на базу и на GC Node, ради задачи, которая обычно не находит ничего. При <code>instances: 1</code> в PM2 (<code>ecosystem.config.cjs</code>) это тот же процесс, что обслуживает пользователей: сборка мусора после каждого прохода бьёт по латентности всех запросов.</p>
+<p><strong>Что сделать.</strong> Перенести отбор в SQL — задача превращается в один точечный запрос по индексу:</p>
+<pre class="code"><code>UPDATE orders SET status = &#x27;expired&#x27;
+ WHERE status = &#x27;requested&#x27; AND accept_deadline &lt; now() - interval &#x27;5 seconds&#x27;
+ RETURNING id, client_id, driver_id;</code></pre>
+<pre class="code"><code>CREATE INDEX idx_orders_pending ON orders(accept_deadline) WHERE status = &#x27;requested&#x27;;
+CREATE INDEX idx_orders_delivered ON orders(delivered_at) WHERE status = &#x27;delivered&#x27;;</code></pre>
+<p><code>expireSubscriptions</code> — то же самое, <code>WHERE status=&#x27;active&#x27; AND subscription_end &lt; now()</code>.</p>
+<h3 id="h12" class="finding s-high"><span class="fid">H4</span><span class="sev">ВЫСОКИЙ</span><span class="ftitle">рейтинг водителя накручивается повторными оценками <strong>[проверено]</strong></span></h3>
+<p><code>POST /orders/:id/rating</code> проверяет владельца и статус заказа, но **не проверяет, оценивал ли клиент этот заказ раньше**:</p>
+<pre class="code"><code>// src/routes/index.js:593–604
+if (order.status !== &#x27;completed&#x27;) return res.status(409).json({ error: &#x27;ORDER_NOT_COMPLETED&#x27; });
+const rating = await db.ratings.create({ ... });   // проверки на дубль нет</code></pre>
+<p><code>ratings.create</code> после вставки пересчитывает <code>rating_avg</code> водителя по всем строкам.</p>
+<p>Проверено тестом: 10 запросов с одной звездой по одному заказу → <code>ratingCount: 10</code>, средний рейтинг водителя падает с 5.0 до 1.0. Один недовольный клиент опускает водителя на дно выдачи; один сговорчивый — поднимает на верх.</p>
+<p>Соседний эндпоинт <code>rate-client</code> дубль проверяет (<code>routes/index.js:613</code>) — асимметрия, значит просто забыли.</p>
+<p>В PostgreSQL есть <code>UNIQUE(order_id)</code> (<code>schema.sql:107</code>), поэтому там накрутка не пройдёт — но необработанное нарушение констрейнта уйдёт в общий обработчик ошибок и вернёт клиенту <code>500 INTERNAL_ERROR</code> вместо понятного «уже оценено». А тесты гоняются на in-memory, где констрейнта нет, и потому молчат.</p>
+<p><strong>Что сделать.</strong> Явная проверка в роуте + корректный код ответа:</p>
+<pre class="code"><code>const existing = await db.ratings.byOrder(order.id);
+if (existing) return res.status(409).json({ error: &#x27;ALREADY_RATED&#x27; });</code></pre>
+<p>и <code>UNIQUE</code>-индекс продублировать в in-memory реализации, чтобы тесты ловили расхождение.</p>
+<h3 id="h13" class="finding s-high"><span class="fid">H5</span><span class="sev">ВЫСОКИЙ</span><span class="ftitle">в приложении нет удаления аккаунта → отклонение в Google Play</span></h3>
+<p>Бэкенд реализован полностью и грамотно — <code>DELETE /api/auth/account</code> с анонимизацией, и в комментарии прямо написано «требование Google Play» (<code>src/routes/index.js:260</code>).</p>
+<p>В приложении этот эндпоинт <strong>не вызывается ни разу</strong>. Поиск по всему <code>depanini-app</code> по <code>auth/account</code> и <code>deleteAccount</code> — ноль совпадений. В <code>ProfileScreen</code> есть смена аватара, язык, тема, тестовый пуш и выход — удаления нет.</p>
+<p>Политика Google Play (Data deletion, действует с 2023) требует для приложений с аккаунтами путь удаления <strong>внутри приложения</strong> плюс веб-ссылку. Это не «доработаем потом» — по этому пункту приложение не пройдёт ревью на публикацию.</p>
+<p><strong>Что сделать.</strong> Пункт в <code>ProfileScreen</code> с двойным подтверждением → <code>DELETE /api/auth/account</code> → <code>clearToken()</code> → экран входа. Работы на полчаса, серверная часть готова. Плюс страница с описанием процедуры удаления на публичном URL — её тоже требует форма подачи.</p>
+<h3 id="h14" class="finding s-high"><span class="fid">H6</span><span class="sev">ВЫСОКИЙ</span><span class="ftitle">позиция водителя перестаёт обновляться, как только он открывает навигатор</span></h3>
+<pre class="code"><code>// src/screens/DriverDashboardScreen.js:132–145
+const { status } = await Location.requestForegroundPermissionsAsync();
+const send = async () =&gt; {
+  const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+  await api.setLocation(loc.coords.latitude, loc.coords.longitude);      // REST
+  socketRef.current?.emit(&#x27;driver:location&#x27;, { lat, lng });              // и то же самое сокетом
+};
+locTimer.current = setInterval(send, 5000);</code></pre>
+<p>Три проблемы в одиннадцати строках:</p>
+<p><strong>Foreground-only.</strong> Запрашивается только <code>requestForegroundPermissionsAsync</code>. В <code>app.json</code> нет ни <code>ACCESS_BACKGROUND_LOCATION</code>, ни <code>FOREGROUND_SERVICE_LOCATION</code> для Android, а в <code>UIBackgroundModes</code> для iOS — только <code>remote-notification</code>, без <code>location</code>. Как только водитель блокирует экран или переключается в Google Maps (то есть <strong>всегда</strong>, потому что он едет), JS-таймеры замирают. Клиент на экране отслеживания видит застывший грузовик — при том, что экран отслеживания и есть главная ценность продукта для клиента.</p>
+<p><strong>Двойная отправка.</strong> Каждая позиция уходит и REST-запросом, и через сокет. Оба пути делают <code>UPDATE drivers SET lat=..., lng=...</code> — ровно вдвое больше записей в БД, чем нужно (<code>routes/index.js:443</code> и <code>realtime.js:64</code>).</p>
+<p><strong>Утечка интервала.</strong> <code>startLocationUpdates()</code> присваивает <code>locTimer.current</code> без очистки предыдущего, а <code>stopLocationUpdates()</code> не обнуляет ссылку. Вызов при инициализации (<code>DriverDashboardScreen.js:55</code>) и последующее переключение режима создают два интервала — позиция начинает уходить вдвое чаще, и так далее с каждым переключением.</p>
+<p><strong>Что сделать.</strong></p>
+<ol>
+<li><code>expo-location</code> + <code>expo-task-manager</code>: <code>Location.startLocationUpdatesAsync</code> с <code>foregroundService</code> на Android и <code>pausesUpdatesAutomatically: false</code> на iOS. Это единственный способ, которым продукт вообще может работать.</li>
+<li>Оставить один транспорт — сокет; REST-эндпоинт держать как фолбэк при обрыве сокета.</li>
+<li><code>distanceInterval: 50</code> вместо интервала по времени: стоящий в пробке эвакуатор перестаёт слать одинаковые точки, а едущий шлёт чаще 5 секунд.</li>
+<li>В <code>startLocationUpdates</code> — <code>if (locTimer.current) clearInterval(locTimer.current)</code> первой строкой, в <code>stopLocationUpdates</code> — <code>locTimer.current = null</code>.</li>
+</ol>
+<h3 id="h15" class="finding s-high"><span class="fid">H7</span><span class="sev">ВЫСОКИЙ</span><span class="ftitle">при недоступности OSRM цена молча падает на 20–40%</span></h3>
+<pre class="code"><code>// src/services/routing.js:53–56
+} catch (e) {
+  const km = haversineKm(aLat, aLng, bLat, bLng);
+  return { km: +km.toFixed(2), durationMin: null, source: &#x27;haversine&#x27; };
+}</code></pre>
+<p>Фолбэк сам по себе правильный — сервис не должен падать из-за чужого сервера. Проблема в том, что это <strong>денежный</strong> путь: расстояние по прямой в городе систематически меньше дорожного на 20–40%, и на эту же величину занижается цена каждого заказа. Водитель везёт за 2 000 DZD то, что стоит 3 000.</p>
+<p>Условия, при которых это происходит, — не редкость, а норма:</p>
+<ul>
+<li><code>OSRM_URL</code> по умолчанию — публичный демо-сервер OSM. Его условия использования не предполагают коммерческого трафика; блокировка по IP — вопрос времени.</li>
+<li>Таймаут 7 секунд; при мобильной сети из Алжира до европейского хоста промахи будут регулярно.</li>
+<li><code>source: &#x27;haversine&#x27;</code> записывается в <code>breakdown</code> заказа — но никто это поле не читает, алерта нет, в админке не видно.</li>
+</ul>
+<p><strong>Что сделать.</strong></p>
+<ol>
+<li>Поднять свой OSRM — контейнер с картой Алжира (~200 МБ) на том же сервере. Убирает и зависимость, и латентность, и юридический вопрос.</li>
+<li>Метрика <code>pricing_fallback_total</code> и алерт, если доля haversine превышает 5% за 15 минут.</li>
+<li>Коэффициент 1.3 к haversine-расстоянию, пока источник не OSRM. Лучше слегка завысить, чем систематически возить в убыток.</li>
+<li>Кэшировать пары координат, округлённые до ~100 м, — как уже сделано в <code>geocode.js</code>. Заказы в городе идут по одним и тем же маршрутам.</li>
+</ol>
+<h3 id="h16" class="finding s-high"><span class="fid">H8</span><span class="sev">ВЫСОКИЙ</span><span class="ftitle">арабский язык без RTL</span></h3>
+<p>Приложение заявляет два языка, <code>ar</code> — один из двух рабочих в Алжире, все строки переведены. При этом <code>I18nManager</code> не используется <strong>нигде</strong> — поиск по всему <code>depanini-app</code> даёт ноль совпадений.</p>
+<p>Что это значит на экране: весь интерфейс остаётся слева-направо. Строки арабского прижаты влево вместо правого края, иконки и стрелки «назад» смотрят не туда, <code>flexDirection: &#x27;row&#x27;</code> выстраивает элементы в обратном для арабского порядке, <code>marginLeft</code>/<code>marginRight</code> не зеркалятся. Формально язык поддержан, фактически — арабский интерфейс выглядит сломанным.</p>
+<p>Отдельно: в <code>theme/fonts.js</code> грузится Inter — латинская гарнитура без арабского начертания. Арабский отрисуется системным шрифтом, то есть по другим метрикам, чем заложены в вёрстке.</p>
+<p><strong>Что сделать.</strong></p>
+<ol>
+<li><code>I18nManager.forceRTL(lang === &#x27;ar&#x27;)</code> + <code>Updates.reloadAsync()</code> при смене языка — RTL в React Native применяется только после перезапуска, это ограничение платформы.</li>
+<li>Заменить <code>marginLeft</code>/<code>marginRight</code>/<code>left</code>/<code>right</code> на <code>marginStart</code>/<code>marginEnd</code>/<code>start</code>/<code>end</code> — они зеркалятся автоматически.</li>
+<li>Добавить арабскую гарнитуру (Cairo, Tajawal) и выбирать по языку.</li>
+<li>Иконки направления (<code>back</code>, стрелки в списках) — зеркалить через <code>scaleX: -1</code> при RTL.</li>
+</ol>
+<h3 id="h17" class="finding s-high"><span class="fid">H9</span><span class="sev">ВЫСОКИЙ</span><span class="ftitle">лимит запросов по IP + агрессивный опрос = 429 за оператором NAT</span></h3>
+<p>Лимит — 600 запросов в минуту <strong>на IP</strong> (<code>src/app.js:53</code>). Считаем расход одного водителя с открытым приложением:</p>
+<div class="tw"><table><thead><tr><th>Источник</th><th>Частота</th><th>Запросов/мин</th></tr></thead><tbody><tr><td><code>pendingOrders</code> + <code>activeOrder</code> (<code>DriverDashboardScreen.js:64</code>)</td><td>каждые 4 с</td><td>30</td></tr><tr><td><code>setLocation</code> (<code>DriverDashboardScreen.js:143</code>)</td><td>каждые 5 с</td><td>12</td></tr><tr><td><strong>Итого</strong></td><td></td><td><strong>~42</strong></td></tr></tbody></table></div>
+<p>Клиент на экране отслеживания: <code>api.history()</code> каждые 4 секунды — ещё 15/мин, плюс <code>nearbyDrivers</code> каждые 10 секунд на карте.</p>
+<p><strong>14 водителей за одним публичным адресом исчерпывают лимит.</strong> У алжирских мобильных операторов CGNAT — норма: за одним адресом сидят тысячи абонентов. Дальше все они получают <code>429 TOO_MANY_REQUESTS</code>, приложение молча глотает ошибку (<code>catch (e) {}</code> во всех опросах), и сервис для целого сегмента города просто перестаёт обновляться — без единого сообщения пользователю.</p>
+<p><strong>Что сделать.</strong></p>
+<ol>
+<li><code>keyGenerator</code> по <code>req.auth.userId</code> для авторизованных маршрутов, по IP — только для <code>/auth/*</code>. Тогда лимит защищает от одного злоупотребляющего аккаунта, а не от оператора связи.</li>
+<li>Убрать опрос там, где уже работает сокет: <code>pendingOrders</code>/<code>activeOrder</code> дублируют события <code>order:new</code> и <code>order:status</code>. Оставить один редкий опрос (30–60 с) как страховку от разрыва.</li>
+<li>Показывать пользователю, что связь потеряна, вместо тихого <code>catch (e) {}</code>.</li>
+</ol>
+<h3 id="h18" class="finding s-high"><span class="fid">H10</span><span class="sev">ВЫСОКИЙ</span><span class="ftitle">деплой в продакшен без прогона тестов, и в <code>main</code> лежит падающий тест <strong>[проверено]</strong></span></h3>
+<p><code>.github/workflows/deploy.yml</code> на каждый push в <code>main</code> заходит по SSH, делает <code>git pull</code>, <code>npm run migrate</code>, перезапускает PM2. Шага <code>npm test</code> нет. Нет и отдельного workflow с тестами — в репозитории один файл, и это деплой.</p>
+<p>При этом на чистом клоне <code>main</code>:</p>
+<pre class="code"><code>Test Files  1 failed | 6 passed (7)
+     Tests  1 failed | 69 passed (70)
+  Duration  10.97s (tests 24.17s)</code></pre>
+<p>Падает <code>features.test.js &gt; 5 отказов подряд переводят в offline</code> — по таймауту 5 секунд.</p>
+<p>Причина (проверено): тесты <strong>ходят в живой интернет</strong>. <code>createOrder</code> вызывает <code>reverseGeocode</code> для двух точек, а <code>GEOCODE_TIMEOUT_MS</code> в тестовом окружении не переопределён — остаётся 4 секунды (<code>package.json</code> задаёт только <code>OSRM_TIMEOUT_MS=300</code>). Тест создаёт 5 заказов подряд → до 40 секунд ожидания сети → таймаут.</p>
+<p>Доказательство: с <code>GEOCODE_TIMEOUT_MS=50</code> те же 7 тестов проходят за <strong>1,55 с</strong> вместо 24 с.</p>
+<p>Отсюда три следствия: тесты не воспроизводимы (зависят от доступности Nominatim), медленные (24 секунды сетевых ожиданий), и в CI без сети упадут целиком. И раз никто их не запускает, красный <code>main</code> никого не остановил.</p>
+<p><strong>Что сделать.</strong></p>
+<ol>
+<li>Workflow <code>test.yml</code> на pull request и push, и <code>needs: test</code> у джобы деплоя.</li>
+<li>Замокать <code>geocode.js</code> и <code>routing.js</code> в тестах — как уже сделано с <code>google-auth-library</code> через <code>tests/helpers/googleAuthMock.js</code>. Образец в проекте есть, надо применить.</li>
+<li>Пока моков нет — прописать <code>GEOCODE_TIMEOUT_MS=50</code> в скрипт <code>test</code> рядом с <code>OSRM_TIMEOUT_MS</code>.</li>
+</ol>
+<hr>
+<h2 id="h19">3. Средние</h2>
+<h3 id="h20" class="finding s-med"><span class="fid">M1</span><span class="sev">СРЕДНИЙ</span><span class="ftitle">Google-аккаунты не находятся по email → дубли аккаунтов</span></h3>
+<p><code>users.create</code> (путь Google) не заполняет колонку <code>email_lower</code>:</p>
+<pre class="code"><code>// src/db/pg.js:117 — вставка без email_lower
+INSERT INTO users(google_id,role,name,email,phone,language) VALUES($1,$2,$3,$4,$5,$6)
+// src/db/pg.js:162 — а поиск идёт именно по ней
+SELECT * FROM users WHERE email_lower=$1</code></pre>
+<p>Значит <code>findByEmail</code> <strong>никогда</strong> не находит пользователя, зарегистрированного через Google. Последствия:</p>
+<ul>
+<li>Вход через Google, потом регистрация по email с тем же адресом → создаётся второй аккаунт. История заказов раздваивается, водитель теряет одобренный профиль.</li>
+<li>Связывание аккаунтов в <code>/auth/google</code> (<code>routes/index.js:168</code>) работает только в одну сторону: email→Google да, Google→email нет.</li>
+<li>«Забыли пароль» для Google-аккаунта тихо возвращает <code>ok</code>, письмо не уходит — пользователь ждёт код, которого не будет.</li>
+</ul>
+<p><strong>Что сделать.</strong> Добавить <code>email_lower</code> в INSERT <code>users.create</code>; для существующих строк — <code>UPDATE users SET email_lower = lower(email) WHERE email_lower IS NULL AND email IS NOT NULL</code> (с проверкой на конфликты по уникальному индексу).</p>
+<p>Рядом: <code>users.email</code> объявлена <code>NOT NULL</code> (<code>schema.sql:13</code>), а код пишет <code>payload.email || null</code> (<code>routes/index.js:165</code>). Google-аккаунт без email-скоупа уронит вставку с 500.</p>
+<h3 id="h21" class="finding s-med"><span class="fid">M2</span><span class="sev">СРЕДНИЙ</span><span class="ftitle">JWT в query-строке</span></h3>
+<pre class="code"><code>// src/middleware/auth.js:26
+const token = header.startsWith(&#x27;Bearer &#x27;) ? header.slice(7) : (req.query &amp;&amp; req.query.token) || null;</code></pre>
+<p>Компромисс ради <code>&lt;Image&gt;</code> на Android понятен, но токен в URL попадает в access-логи nginx, в историю прокси, в <code>Referer</code> и в кэши. Живёт он 7 дней и не отзывается.</p>
+<p><strong>Что сделать.</strong> Отдельные короткоживущие подписанные ссылки на файлы (<code>?sig=...&amp;exp=...</code>, 5 минут, отдельный секрет) — либо грузить картинки через <code>fetch</code> с заголовком и <code>URL.createObjectURL</code>. Как минимум — убрать <code>token</code> из логов nginx.</p>
+<h3 id="h22" class="finding s-med"><span class="fid">M3</span><span class="sev">СРЕДНИЙ</span><span class="ftitle">Любой авторизованный пользователь может скачать документы любого водителя</span></h3>
+<p><code>GET /api/files/:name</code> требует только валидный токен — роль и владение не проверяются (<code>src/routes/index.js:141</code>, в комментарии это признано). В той же папке лежат паспорта (CIN), водительские права, страховки и техосмотры всех водителей.</p>
+<p>Защита — только неугадываемость имени (16 случайных байт). Но имена <strong>утекают штатно</strong>: <code>/drivers/nearby</code> отдаёт клиентам <code>documents.selfie</code> и <code>vehiclePhotos</code> каждого водителя рядом, а <code>/drivers/me</code> — весь объект <code>documents</code>. Достаточно один раз собрать URL, дальше он вечен.</p>
+<p><strong>Что сделать.</strong> Хранить в БД связь файл→владелец и в роуте отдавать только владельцу и админу. Быстрая версия: отдельный префикс для приватных документов и проверка <code>driver.userId === req.auth.userId || role === &#x27;admin&#x27;</code>.</p>
+<h3 id="h23" class="finding s-med"><span class="fid">M4</span><span class="sev">СРЕДНИЙ</span><span class="ftitle">Время на ответ водителя задано в трёх местах и везде разное</span></h3>
+<div class="tw"><table><thead><tr><th>Где</th><th>Значение</th></tr></thead><tbody><tr><td><code>settings.orderResponseTimeoutSec</code> (админка)</td><td>30 с</td></tr><tr><td><code>accept_deadline</code> при вставке заказа — <strong>захардкожено</strong></td><td>40 с (<code>src/db/pg.js:314</code>, <code>memory.js:201</code>)</td></tr><tr><td><code>expireStaleOrders</code> — дедлайн + запас</td><td>45 с (<code>jobs.js:34</code>)</td></tr><tr><td>Подпись в UI водителя</td><td>«Обратный отсчёт 30 сек» (<code>DriverDashboardScreen.js:99</code>)</td></tr><tr><td><code>setWaitLeft</code> после переназначения</td><td>40 (<code>OrderTrackingScreen.js:165</code>)</td></tr></tbody></table></div>
+<p>Настройка в админке существует, отображается, сохраняется — и ни на что не влияет.</p>
+<p><strong>Что сделать.</strong> Читать значение из настроек при создании заказа: <code>NOW() + ($15 || &#x27; seconds&#x27;)::interval</code> с передачей <code>settings.orderResponseTimeoutSec</code>. Убрать константы из UI — оба экрана уже умеют считать от <code>order.acceptDeadline</code>.</p>
+<h3 id="h24" class="finding s-med"><span class="fid">M5</span><span class="sev">СРЕДНИЙ</span><span class="ftitle"><code>schema.sql</code> переписывает настройки владельца при каждом деплое</span></h3>
+<p>Миграции лежат в конце <code>schema.sql</code> и включают изменения <strong>данных</strong>, а не только структуры:</p>
+<pre class="code"><code>-- src/db/schema.sql:174–181
+UPDATE settings SET value=&#x27;30&#x27;  WHERE key=&#x27;orderResponseTimeoutSec&#x27; AND value IN (&#x27;45&#x27;,&#x27;60&#x27;,&#x27;90&#x27;);
+UPDATE settings SET value=&#x27;500&#x27; WHERE key=&#x27;baseFare&#x27; AND value=&#x27;0&#x27;;
+UPDATE settings SET value=&#x27;50&#x27;  WHERE key=&#x27;pricePerKm&#x27; AND value=&#x27;0&#x27;;</code></pre>
+<p>Деплой выполняет <code>npm run migrate</code> на каждый push в <code>main</code> (<code>deploy.yml</code>), а <code>migrate.js</code> прогоняет файл целиком. Владелец выставил в админке 60 секунд на ответ — следующий деплой молча вернёт 30. Обнулил тариф намеренно — вернётся 50.</p>
+<p>Версионирования нет: один растущий файл без таблицы применённых миграций.</p>
+<p><strong>Что сделать.</strong> Разделить: <code>schema.sql</code> — только DDL, разовые правки данных — в пронумерованные файлы <code>migrations/00N_*.sql</code> с таблицей <code>schema_migrations</code> и проверкой, что миграция уже применялась. Инструмент не нужен, хватит 20 строк в <code>migrate.js</code>.</p>
+<h3 id="h25" class="finding s-med"><span class="fid">M6</span><span class="sev">СРЕДНИЙ</span><span class="ftitle"><code>/admin/orders</code>: N+1 и полная выгрузка без пагинации</span></h3>
+<pre class="code"><code>// src/routes/index.js:657–677
+let list = await db.orders.all();                     // все заказы за всю историю
+for (const o of list) {
+  const client = await db.users.findById(o.clientId);          // +1
+  const driver = o.driverId ? await db.drivers.findById(o.driverId) : null;  // +2 (внутри ещё загрузка телефонов)
+  const driverUser = driver ? await db.users.findById(driver.userId) : null; // +1
+}</code></pre>
+<p>Четыре запроса на заказ, последовательно. 5 000 заказов — 20 000 запросов и минуты ожидания; браузер получает мегабайты JSON и рисует их через <code>innerHTML</code>. <code>/admin/drivers</code> устроен так же.</p>
+<p><strong>Что сделать.</strong> Один запрос с <code>JOIN</code> + <code>LIMIT/OFFSET</code> и фильтр по датам. Сортировка уже делается в JS (<code>sort</code> на строке 661) — перенести в <code>ORDER BY</code>.</p>
+<h3 id="h26" class="finding s-med"><span class="fid">M7</span><span class="sev">СРЕДНИЙ</span><span class="ftitle">Экран отслеживания качает всю историю заказов каждые 4 секунды</span></h3>
+<pre class="code"><code>// src/screens/OrderTrackingScreen.js:118–130
+const res = await api.history();                                  // ВСЕ заказы клиента
+const mine = (res.orders || []).find((o) =&gt; o.id === orderIdRef.current);</code></pre>
+<p>Чтобы узнать статус одного заказа, скачивается вся история — с <code>breakdown</code>, <code>tariffSnapshot</code>, адресами и координатами по каждому. У клиента с 200 поездками это сотни килобайт каждые 4 секунды по мобильной сети, за его же трафик.</p>
+<p>Причина простая: эндпоинта <code>GET /api/orders/:id</code> в бэкенде <strong>нет</strong>.</p>
+<p><strong>Что сделать.</strong> Добавить <code>GET /api/orders/:id</code> с проверкой участия (функция <code>assertOrderParticipant</code> уже написана, <code>routes/index.js:717</code>) и опрашивать его.</p>
+<h3 id="h27" class="finding s-med"><span class="fid">M8</span><span class="sev">СРЕДНИЙ</span><span class="ftitle">После переназначения водителя карта замирает: устаревшее замыкание</span></h3>
+<p>Сокет-эффект объявлен с пустым списком зависимостей, но читает <code>order.id</code> и <code>driver.driverId</code> из первого рендера:</p>
+<pre class="code"><code>// src/screens/OrderTrackingScreen.js:100–133
+useEffect(() =&gt; {
+  socket.on(&#x27;order:status&#x27;, (data) =&gt; { if (data.orderId !== order.id) return; ... });
+  socket.on(&#x27;driver:location&#x27;, (data) =&gt; { if (data.driverId === driver.driverId) animateDriverTo(...); });
+}, []);                                                    // ← order и driver зафиксированы навсегда</code></pre>
+<p>Когда <code>reassignNext()</code> находит другого водителя и создаёт новый заказ, обработчики продолжают сравнивать со <strong>старыми</strong> значениями. Результат: события статуса нового заказа отбрасываются (остаётся только опрос раз в 4 секунды), а позиции нового водителя игнорируются полностью — грузовик на карте не двигается вообще. Плюс сокет так и не сделал <code>join:order</code> для нового заказа, то есть события в его комнату не придут.</p>
+<p><strong>Что сделать.</strong> Держать актуальные значения в <code>ref</code> (<code>orderIdRef</code> уже есть — завести такой же для водителя) и сравнивать с <code>ref.current</code>. При переназначении — <code>emit(&#x27;unwatch:driver&#x27;, old)</code>, <code>emit(&#x27;join:order&#x27;, newId)</code>, <code>emit(&#x27;watch:driver&#x27;, newDriverId)</code>.</p>
+<h3 id="h28" class="finding s-med"><span class="fid">M9</span><span class="sev">СРЕДНИЙ</span><span class="ftitle">Перебор водителей: гонка и мусор в истории клиента</span></h3>
+<p><code>reassignNext()</code> может быть вызван из трёх мест одновременно: обработчик сокета (<code>OrderTrackingScreen.js:111</code>), опрос каждые 4 с (<code>:124</code>) и таймер обратного отсчёта (<code>:142</code>). Флаг <code>searchingRef</code> проверяется только в опросе — таймер тикает каждые 500 мс и при <code>left &lt;= 0</code> вызывает <code>reassignNext()</code> без всякой проверки, до того как <code>setSearching(true)</code> доедет до следующего рендера.</p>
+<p>Дальше каждая итерация:</p>
+<ul>
+<li><strong>отменяет</strong> предыдущий заказ (<code>api.cancelOrder</code>) и создаёт новый. Клиент, у которого никто не ответил с пятого раза, получает в истории пять записей <code>cancelled</code> — притом что он ничего не отменял;</li>
+<li>дёргает 2 запроса к OSRM и 2 к Nominatim (внутри <code>createOrder</code>). Перебор десяти водителей — 40 обращений к внешним сервисам на одну поездку.</li>
+</ul>
+<p><strong>Что сделать.</strong> Логику перебора перенести на сервер: один заказ, поле <code>driver_id</code> меняется, статус остаётся <code>requested</code>, история клиента чистая. Это заодно снимает гонку — клиент перестаёт управлять диспетчеризацией. На клиенте, до переезда, — защитить вход в <code>reassignNext</code> синхронным флагом (<code>if (searchingRef.current) return; searchingRef.current = true</code>) и очищать таймер перед вызовом.</p>
+<h3 id="h29" class="finding s-med"><span class="fid">M10</span><span class="sev">СРЕДНИЙ</span><span class="ftitle">Смена языка не перерисовывает интерфейс</span></h3>
+<pre class="code"><code>// src/services/i18n.js:119, 137
+let currentLang = &#x27;fr&#x27;;
+export function t(key) { return translations[currentLang][key] || key; }</code></pre>
+<p><code>currentLang</code> — переменная модуля, не состояние React. <code>setLanguage()</code> её меняет, но никто не перерисовывается. В <code>ProfileScreen.switchLang()</code> после смены показывается <code>Alert(&#x27;OK&#x27;)</code> — и всё остаётся на прежнем языке до перезапуска приложения.</p>
+<p>Хуже того, большинство строк написаны не через <code>t()</code>, а инлайн: <code>ar ? &#x27;...&#x27; : &#x27;...&#x27;</code>, где <code>ar = getLanguage() === &#x27;ar&#x27;</code> вычисляется один раз в начале компонента. То есть язык фиксируется на момент первого монтирования экрана.</p>
+<p>Плюс <code>translations[currentLang][key]</code> упадёт с TypeError, если в <code>AsyncStorage</code> окажется неизвестный код языка.</p>
+<p><strong>Что сделать.</strong> Контекст <code>I18nProvider</code> со <code>state</code>, <code>useTranslation()</code> вместо прямого импорта <code>t</code>. Заодно <code>translations[currentLang] || translations.fr</code>. Поскольку арабский всё равно требует перезапуска ради RTL (H8), минимальный вариант — честно перезагружать приложение через <code>Updates.reloadAsync()</code> при смене языка.</p>
+<h3 id="h30" class="finding s-med"><span class="fid">M11</span><span class="sev">СРЕДНИЙ</span><span class="ftitle"><code>scryptSync</code> блокирует цикл событий</span></h3>
+<pre class="code"><code>// src/utils/password.js:9, 16
+const hash = crypto.scryptSync(plain, salt, 64).toString(&#x27;hex&#x27;);</code></pre>
+<p>Синхронный scrypt с параметрами по умолчанию (N=16384) занимает ~80–100 мс CPU. Node однопоточный: всё это время сервер не обрабатывает <strong>ничего</strong> — ни заказы, ни позиции водителей, ни health-check. Десять одновременных входов — секунда полной заморозки.</p>
+<p>Это же делает вход бесплатным вектором DoS: 30 запросов в 15 минут на IP (<code>authLimiter</code>) с десятка адресов дают устойчивую нагрузку в 100% одного ядра.</p>
+<p><strong>Что сделать.</strong> Асинхронный вариант — <code>crypto.scrypt</code> через <code>promisify</code>. Работа уходит в пул потоков libuv, цикл событий свободен. Правка на три строки, интерфейс функций не меняется.</p>
+<h3 id="h31" class="finding s-med"><span class="fid">M12</span><span class="sev">СРЕДНИЙ</span><span class="ftitle">Рассылка нового заказа перебирает все открытые сокеты</span></h3>
+<pre class="code"><code>// src/services/realtime.js:112–120
+for (const [, socket] of io.of(&#x27;/&#x27;).sockets) {
+  if (socket.user &amp;&amp; socket.user.id === driverUserId) socket.emit(&#x27;order:new&#x27;, order);
+}</code></pre>
+<p>Линейный перебор всех подключений на каждый заказ. При 2 000 онлайн-водителей — 2 000 итераций ради одной отправки, в синхронном коде.</p>
+<p><strong>Что сделать.</strong> Socket.io для этого и придумал комнаты: <code>socket.join(&#x27;user:&#x27; + user.id)</code> при подключении и <code>io.to(&#x27;user:&#x27; + driverUserId).emit(...)</code>. Константное время, минус цикл.</p>
+<h3 id="h32" class="finding s-med"><span class="fid">M13</span><span class="sev">СРЕДНИЙ</span><span class="ftitle">Сбой сети при запуске выкидывает пользователя на экран входа</span></h3>
+<pre class="code"><code>// App.js:152–161
+if (tok) {
+  try { const me = await api.me(); ... }
+  catch (e) { /* токен протух — обычный вход */ }
+}</code></pre>
+<p><code>catch</code> не различает <code>401 INVALID_TOKEN</code> и <code>NETWORK — нет связи с сервером</code>. Водитель в зоне слабого покрытия открывает приложение, <code>/auth/me</code> не отвечает — и он оказывается на экране входа, хотя токен валиден. Для приложения, которым пользуются на обочине, это худший сценарий из возможных.</p>
+<p><strong>Что сделать.</strong> Разбирать <code>e.status</code>: <code>401</code> → выход, всё остальное → оставить сессию и показать баннер «нет связи», роль взять из локального кэша.</p>
+<h3 id="h33" class="finding s-med"><span class="fid">M14</span><span class="sev">СРЕДНИЙ</span><span class="ftitle">Телефоны всех водителей отдаются любому клиенту</span></h3>
+<p><code>findNearbyDrivers</code> возвращает <code>phones: d.phones || []</code> (<code>src/services/drivers.js:35</code>) для каждого водителя в радиусе 50 км — до создания заказа, без каких-либо условий. Достаточно пройтись по координатной сетке Алжира и получить базу телефонов всех водителей сервиса.</p>
+<p><strong>Что сделать.</strong> Убрать <code>phones</code> из <code>nearby</code>; телефон отдавать только после принятия заказа и только его участникам. То же касается <code>documents.selfie</code> — фото водителя стоит показывать после назначения.</p>
+<h3 id="h34" class="finding s-med"><span class="fid">M15</span><span class="sev">СРЕДНИЙ</span><span class="ftitle">Файлы лежат на локальном диске одного инстанса</span></h3>
+<p><code>UPLOAD_DIR</code> по умолчанию — папка <code>uploads</code> рядом с кодом (<code>src/services/uploads.js:19</code>), PM2 запущен в <code>fork</code> с <code>instances: 1</code> (<code>ecosystem.config.cjs</code>). Значит:</p>
+<ul>
+<li>горизонтально масштабироваться нельзя — второй инстанс не увидит файлы первого;</li>
+<li>переезд на новый сервер = потеря всех документов водителей, если не помнить про <code>rsync</code>;</li>
+<li>бэкапа нет, ротации нет: перезалитые документы остаются на диске навсегда;</li>
+<li>падение процесса = недоступность сервиса целиком (нет второго инстанса).</li>
+</ul>
+<p>Плюс <code>fileFilter</code> доверяет <code>file.mimetype</code>, который приходит из запроса — расширение выбирается по нему же. Реальные байты не проверяются.</p>
+<p><strong>Что сделать.</strong> S3-совместимое хранилище (в <code>.env.example</code> переменные уже заведены) — и файлы переживают деплой, и инстансов можно поднять несколько. Проверять сигнатуру файла по первым байтам, а не по заголовку. Чистить осиротевшие файлы при перезаливке документа.</p>
+<h3 id="h35" class="finding s-med"><span class="fid">M16</span><span class="sev">СРЕДНИЙ</span><span class="ftitle">Пустое поле в админке тарифов обнуляет тариф</span></h3>
+<pre class="code"><code>// src/admin/index.html:353
+if(el) body[key] = Number(el.value);       // Number(&#x27;&#x27;) === 0</code></pre>
+<p>Поле рендерится пустым, если ключа нет в настройках (<code>const val = s[key] != null ? s[key] : &#x27;&#x27;</code>). Админ открывает вкладку «Тарифы», где <code>commissionRate</code> не показан, но <code>deliveryConfirmTimeoutMin</code> пуст, жмёт «Сохранить» — и в базу уходит <code>0</code>. Zod пропускает: у всех тарифов <code>min(0)</code>. <code>pricePerKm: 0</code> означает, что все поездки становятся бесплатными (до <code>minFare</code>), и заметят это по выручке, а не по ошибке.</p>
+<p><strong>Что сделать.</strong> Пропускать пустые поля (<code>if (el &amp;&amp; el.value !== &#x27;&#x27;) ...</code>), поднять нижнюю границу в схеме (<code>min(1)</code> для <code>pricePerKm</code>, <code>minFare</code>), показывать подтверждение при снижении тарифа более чем вдвое. И вывести в форму недостающие ключи — <code>commissionEnabled</code>, <code>commissionRate</code>, <code>commissionLimitDZD</code>, <code>deliveryConfirmTimeoutMin</code> сейчас управляются только через API.</p>
+<h3 id="h36" class="finding s-med"><span class="fid">M17</span><span class="sev">СРЕДНИЙ</span><span class="ftitle">Пуш-уведомления: нет пакетной отправки и очистки мёртвых токенов</span></h3>
+<p><code>sendPush</code> шлёт по одному сообщению за запрос (<code>src/services/push.js:39</code>) и возвращает <code>res.ok</code>. Expo отвечает <code>200</code> даже когда доставка не удалась — детали лежат в теле ответа (<code>DeviceNotRegistered</code>, <code>MessageTooBig</code>), которое не читается. Квитанции (receipts) не запрашиваются.</p>
+<p>Следствие: токены удалённых приложений накапливаются в БД навсегда, каждый заказ тратит на них запросы, а реальные ошибки доставки невидимы. Expo при большом проценте невалидных токенов начинает ограничивать отправителя.</p>
+<p><strong>Что сделать.</strong> Батч по 100 сообщений (Expo это поддерживает), разбор тела ответа, <code>push_token = NULL</code> при <code>DeviceNotRegistered</code>, опрос квитанций через 15 минут.</p>
+<hr>
+<h2 id="h37">4. Низкие</h2>
+<h3 id="h38" class="finding s-low"><span class="fid">L1</span><span class="sev">НИЗКИЙ</span><span class="ftitle">Ни одного атрибута доступности во всём приложении</span></h3>
+<p>Поиск по <code>accessibilityLabel</code> и <code>accessibilityRole</code> в <code>depanini-app</code> — ноль совпадений на 5 723 строки. Кнопки с одними иконками (<code>Icon name=&quot;back&quot;</code>, звёзды рейтинга, переключатели режима водителя) для TalkBack и VoiceOver — безымянные элементы. <code>hitSlop</code> тоже не используется нигде: мелкие иконки трудно попасть пальцем в дождь на обочине.</p>
+<p><strong>Что сделать.</strong> <code>accessibilityLabel</code> + <code>accessibilityRole=&quot;button&quot;</code> на все <code>TouchableOpacity</code> без текста, <code>hitSlop={{top:8,bottom:8,left:8,right:8}}</code> на иконки меньше 44 pt.</p>
+<h3 id="h39" class="finding s-low"><span class="fid">L2</span><span class="sev">НИЗКИЙ</span><span class="ftitle">Дублирующийся ключ в объекте API</span></h3>
+<pre class="code"><code>// src/services/api.js:76 и 79
+authGoogle: (profile) =&gt; request(&#x27;/api/auth/google&#x27;, { ... body: profile ... }),
+...
+authGoogle: (idToken, role, language) =&gt; request(&#x27;/api/auth/google&#x27;, { ... }),</code></pre>
+<p>Второй молча затирает первый. Работает верный вариант, но это ровно тот класс ошибок, который ловит линтер за ноль усилий — а линтера в проекте нет ни в приложении, ни в бэкенде.</p>
+<p><strong>Что сделать.</strong> ESLint с <code>no-dupe-keys</code>, <code>no-unused-vars</code>, <code>react-hooks/exhaustive-deps</code> (последний нашёл бы и M8) в оба репозитория, шагом в CI.</p>
+<h3 id="h40" class="finding s-low"><span class="fid">L3</span><span class="sev">НИЗКИЙ</span><span class="ftitle">Хуки после раннего выхода в <code>SafeMarker</code></span></h3>
+<pre class="code"><code>// src/components/SafeMap.js:54–58
+export const SafeMarker = ({ tracksViewChanges, children, ...props }) =&gt; {
+  if (!MarkerLib) return null;              // ← выход до хуков
+  const [tracking, setTracking] = React.useState(true);</code></pre>
+<p>Сейчас безопасно — <code>MarkerLib</code> вычисляется один раз при импорте и не меняется. Но это прямое нарушение правил хуков: если условие когда-нибудь станет динамическим, React упадёт с «Rendered fewer hooks than expected», и искать причину будут долго.</p>
+<p><strong>Что сделать.</strong> Перенести проверку после хуков или обернуть в отдельный компонент.</p>
+<h3 id="h41" class="finding s-low"><span class="fid">L4</span><span class="sev">НИЗКИЙ</span><span class="ftitle">Обязательные 2,6 секунды заставки</span></h3>
+<pre class="code"><code>// App.js:164
+setTimeout(() =&gt; setShowSplash(false), 2600);</code></pre>
+<p>Таймер не зависит от готовности данных: даже если всё загрузилось за 200 мс, пользователь ждёт. Для приложения экстренной помощи — где человек стоит на трассе со сломанной машиной — это худшее место для украшательства.</p>
+<p><strong>Что сделать.</strong> Показывать заставку до готовности, но не дольше: <code>Math.max(0, 600 - elapsed)</code>.</p>
+<h3 id="h42" class="finding s-low"><span class="fid">L5</span><span class="sev">НИЗКИЙ</span><span class="ftitle">Тёмная тема игнорирует системную настройку</span></h3>
+<p><code>ThemeContext</code> читает только собственный ключ из <code>AsyncStorage</code> (<code>src/ThemeContext.js:16</code>), <code>useColorScheme()</code> не используется. Одновременно <code>app.json</code> жёстко задаёт <code>&quot;userInterfaceStyle&quot;: &quot;light&quot;</code> — значит нативные элементы (клавиатура, системные диалоги, <code>ActionSheet</code>) останутся светлыми даже когда приложение в тёмной теме.</p>
+<p><strong>Что сделать.</strong> <code>userInterfaceStyle: &quot;automatic&quot;</code> в <code>app.json</code>, третий режим <code>system</code> в настройке темы через <code>useColorScheme()</code>.</p>
+<h3 id="h43" class="finding s-low"><span class="fid">L6</span><span class="sev">НИЗКИЙ</span><span class="ftitle">Пользователю показываются служебные коды ошибок</span></h3>
+<p><code>friendly()</code> в <code>LoginScreen.js:95</code> переводит пять кодов, остальные возвращает как есть. Пользователь при попытке входа увидит в диалоге <code>VALIDATION_ERROR</code>, <code>TOO_MANY_AUTH_ATTEMPTS</code> или <code>HTTP_500</code>. То же во всех остальных экранах: <code>Alert.alert(t(&#x27;error&#x27;), e.message)</code>.</p>
+<p><strong>Что сделать.</strong> Единый словарь кодов ошибок в одном модуле с фолбэком на «Что-то пошло не так, попробуйте позже» вместо сырого кода.</p>
+<h3 id="h44" class="finding s-low"><span class="fid">L7</span><span class="sev">НИЗКИЙ</span><span class="ftitle">Сборка iOS не воспроизводится из чистого клона</span></h3>
+<p><code>app.json</code> ссылается на <code>&quot;googleServicesFile&quot;: &quot;./GoogleService-Info.plist&quot;</code>, а <code>.gitignore</code> этот файл исключает. <code>google-services.json</code> при этом закоммичен — то есть решение по двум платформам разное, и iOS-сборка из свежего клона упадёт.</p>
+<p>Отдельно: в закоммиченном <code>google-services.json</code> массив <code>oauth_client</code> <strong>пуст</strong>. Для <code>@react-native-google-signin</code> на Android нужны записи с отпечатком сертификата — без них вход через Google работать не будет.</p>
+<p><strong>Что сделать.</strong> Определиться: либо оба файла в репозитории (они содержат только клиентские идентификаторы, не секреты), либо оба через EAS Secrets. Перевыпустить <code>google-services.json</code> из Firebase после добавления SHA-1 подписи.</p>
+<h3 id="h45" class="finding s-low"><span class="fid">L8</span><span class="sev">НИЗКИЙ</span><span class="ftitle">Ошибки проглатываются повсеместно, отчётности нет</span></h3>
+<p><code>catch (e) {}</code> и <code>catch {}</code> встречаются в обоих репозиториях десятками — в опросах, в отправке пушей, в загрузке маршрутов. <code>AppErrorBoundary.componentDidCatch()</code> пуст (<code>App.js:70</code>). Sentry или аналога нет. Когда у водителя что-то не работает, узнать об этом можно только от него самого.</p>
+<p><strong>Что сделать.</strong> Sentry (<code>sentry-expo</code>) в приложении и <code>@sentry/node</code> в бэкенде. Как минимум — логировать проглоченные ошибки локально, чтобы их можно было забрать из устройства.</p>
+<h3 id="h46" class="finding s-low"><span class="fid">L9</span><span class="sev">НИЗКИЙ</span><span class="ftitle">Документация разошлась с кодом</span></h3>
+<ul>
+<li>README обещает 37 тестов — их 70.</li>
+<li>README описывает поток <code>requested → accepted → en_route → picked_up → delivered → completed</code>, в коде <code>requested → accepted → arrived → en_route → delivered → completed</code>. Статус <code>picked_up</code> остался в <code>CHECK</code>-ограничении схемы (<code>schema.sql:64</code>), но в <code>TRANSITIONS</code> его нет — мёртвое значение.</li>
+<li>README и <code>SECURITY.md</code> описывают in-memory как основное хранилище и Google-вход как «демо-режим»; и то и другое давно не так.</li>
+<li><code>SECURITY.md</code> называет лимит «100 req/мин», в коде 600.</li>
+<li>В <code>.env.example</code> <code>CORS_ORIGINS=*</code> предложен как рабочее значение, <code>OSRM_TIMEOUT_MS=4000</code> расходится с кодом (7000).</li>
+</ul>
+<p><strong>Что сделать.</strong> Привести README и <code>SECURITY.md</code> в соответствие; удалить <code>picked_up</code> из схемы. Расхождение в цифрах безопасности хуже отсутствия документа — на него будут ссылаться.</p>
+<hr>
+<h2 id="h47">Порядок работ</h2>
+<p><strong>Сейчас (до следующего релиза):</strong></p>
+<ol>
+<li>C1 — экранирование в админке + CSP. Полдня.</li>
+<li>C2 — падать без <code>JWT_SECRET</code>. Полчаса.</li>
+<li>C3 — проверка прав в <code>watch:driver</code>. Час.</li>
+<li>H1 — <code>quote()</code> по <code>availability</code>. Полчаса. <strong>[проверено тестом]</strong></li>
+<li>H4 — проверка дубля оценки. Полчаса. <strong>[проверено тестом]</strong></li>
+<li>H2 — лимитер на восстановление пароля. Час.</li>
+</ol>
+<p>Шесть пунктов, примерно день работы, закрывают всё, чем можно воспользоваться извне.</p>
+<p><strong>До запуска / публикации:</strong></p>
+<ol>
+<li>H5 — удаление аккаунта в приложении (иначе Google Play не пропустит).</li>
+<li>H10 — тесты в CI, моки для сети, зелёный <code>main</code>.</li>
+<li>H6 — фоновая геолокация. Продукт без неё не работает по назначению.</li>
+<li>H3 — фоновые задачи в SQL.</li>
+<li>H7 — свой OSRM + метрика фолбэка.</li>
+</ol>
+<p><strong>Первые недели после запуска:</strong></p>
+<ol>
+<li>H8 — RTL для арабского.</li>
+<li>H9 — лимит по пользователю, снятие лишнего опроса.</li>
+<li>M1, M4, M5 — дубли аккаунтов, таймаут заказа, версионирование миграций.</li>
+<li>M6–M9 — производительность админки и экрана отслеживания.</li>
+</ol>
+<p>Остальное — по мере появления времени.</p>
+<hr>
+<h2 id="h48">Приложение: как проверялись находки</h2>
+<p>Три находки подтверждены запуском кода, а не чтением. Остальные — по исходникам.</p>
+<p><strong>H1, H4</strong> — интеграционный тест через <code>supertest</code> на реальном стеке приложения: занятый водитель принимает второй заказ (201 вместо 409); десять оценок одного заказа проходят и опускают рейтинг водителя с 5.0 до 1.0 при <code>ratingCount: 10</code>.</p>
+<p><strong>H10</strong> — <code>npx vitest run</code> на чистом клоне <code>main</code>: <code>1 failed | 69 passed</code>, длительность 24 с. Тот же набор с <code>GEOCODE_TIMEOUT_MS=50</code> — <code>7 passed</code> за 1,55 с, что доказывает: падение вызвано обращением тестов к живому Nominatim, а не логикой.</p>
+<p><strong>C1, C3</strong> — тест не писался, но по коду однозначно: в <code>watch:driver</code> нет ни одной проверки прав (сравнить с <code>join:order</code> в том же файле, где она есть); в <code>cardHtml</code> нет ни одного вызова экранирования при том, что все поля приходят из открытой формы регистрации водителя.</p>
+<p>Проверочный тест лежал во временной папке и в репозиторий не коммитился — он нужен был для подтверждения находок, а не как постоянная часть набора. При исправлении H1 и H4 стоит завести на них регрессионные тесты в <code>tests/</code>.</p>
+
+  </article>
+</div>
+
+<button class="themer" id="themer" aria-label="Переключить тему">◐</button>
+<script>
+(function () {
+  var r = document.documentElement, b = document.getElementById('themer');
+  var saved = null;
+  try { saved = localStorage.getItem('dep-review-theme'); } catch (e) {}
+  if (saved) r.setAttribute('data-theme', saved);
+  b.addEventListener('click', function () {
+    var isDark = r.getAttribute('data-theme') === 'dark' ||
+      (!r.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
+    var next = isDark ? 'light' : 'dark';
+    r.setAttribute('data-theme', next);
+    try { localStorage.setItem('dep-review-theme', next); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>
