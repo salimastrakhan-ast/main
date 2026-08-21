@@ -54,7 +54,7 @@ if [ -f "$gc_log" ]; then
   worst="$(grep -h 'Pause' "$gc_log" 2>/dev/null | tail -n 500 \
            | grep -oE '[0-9]+([.,][0-9]+)?ms' | tr ',' '.' \
            | sed 's/ms$//' | sort -g | tail -n1)"
-  pauses="$(grep -hc 'Pause' "$gc_log" 2>/dev/null || echo 0)"
+  pauses="$(grep -hc 'Pause' "$gc_log" 2>/dev/null || true)"
 
   if [ -n "$worst" ]; then
     ok "самая долгая пауза из последних: ${worst} мс (всего пауз в логе: $pauses)"
@@ -64,24 +64,32 @@ if [ -f "$gc_log" ]; then
     echo "    пауз ещё не было — сервер только запустился"
   fi
 
-  cycles="$(grep -hc 'Garbage Collection' "$gc_log" 2>/dev/null || echo 0)"
-  echo "    циклов сборки мусора: $cycles"
+  # Один цикл пишет в лог несколько строк (старт, фазы, итог), поэтому
+  # считаем уникальные идентификаторы GC(N), а не строки.
+  cycles="$(grep -hoE 'GC\([0-9]+\)' "$gc_log" 2>/dev/null | sort -u | wc -l)"
+  echo "    циклов сборки мусора: ${cycles:-0}"
 else
   echo "    лога GC пока нет (сервер не запускался?)"
 fi
 
 echo
-log "последние ошибки игрового сервера"
+log "ошибки игрового сервера"
 if [ -d "$ROOT/dist/game/log" ]; then
-  # Ищем уровни логирования как отдельные слова и исключения, иначе в выборку
-  # попадают безобидные строки вроде "Loaded 462 spawns, 0 errors".
-  found="$(grep -rhE '\b(ERROR|SEVERE|WARNING)\b|Exception' "$ROOT/dist/game/log" 2>/dev/null \
-           | grep -vE '\b0 errors\b' | tail -5)"
-  if [ -n "$found" ]; then
-    printf '%s\n' "$found" | cut -c1-160 | sed 's/^/    /'
+  errors="$(grep -rhE '\b(ERROR|SEVERE)\b|Exception' "$ROOT/dist/game/log" 2>/dev/null \
+            | grep -vE '\b0 errors\b' | tail -5)"
+  warns="$(grep -rhcE '\bWARNING\b' "$ROOT/dist/game/log" 2>/dev/null | paste -sd+ | bc 2>/dev/null || true)"
+
+  if [ -n "$errors" ]; then
+    printf '%s\n' "$errors" | cut -c1-160 | sed 's/^/    /'
   else
-    echo "    чисто"
+    ok "ошибок нет"
   fi
+
+  # Предупреждения показываем числом: у Mobius их штатно несколько штук
+  # (отсутствующие необязательные каталоги, ненайденный hexid при первом
+  # запуске), и выводить их как ошибки — вводить себя в заблуждение.
+  [ -n "${warns:-}" ] && [ "${warns:-0}" -gt 0 ] \
+    && echo "    предупреждений: $warns (смотреть: make logs)"
 else
   echo "    логов пока нет"
 fi
