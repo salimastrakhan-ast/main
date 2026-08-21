@@ -29,7 +29,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-COMPOSE=(docker compose --project-directory "$ROOT")
+COMPOSE=(docker compose -f "$ROOT/docker-compose.yml" --project-directory "$ROOT")
 
 # --- База должна быть поднята ------------------------------------------------
 if ! "${COMPOSE[@]}" ps --status running --services 2>/dev/null | grep -qx db; then

@@ -5,7 +5,12 @@
 # =============================================================================
 
 SHELL := /bin/bash
-COMPOSE := docker compose
+
+# -f указан явно намеренно: если в окружении задана переменная COMPOSE_FILE
+# (частая история на рабочих машинах, где крутится другой стек), она
+# перебивает выбор файла в любом каталоге. Явный путь исключает
+# ситуацию, когда 'make down' гасит чужие контейнеры.
+COMPOSE := docker compose -f docker-compose.yml
 
 .DEFAULT_GOAL := help
 .PHONY: help install env build configure db-init up down stop start restart \

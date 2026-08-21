@@ -10,7 +10,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/scripts/lib/common.sh"
 
 load_env "$ROOT/.env"
-COMPOSE=(docker compose --project-directory "$ROOT")
+COMPOSE=(docker compose -f "$ROOT/docker-compose.yml" --project-directory "$ROOT")
 
 echo
 log "контейнеры"

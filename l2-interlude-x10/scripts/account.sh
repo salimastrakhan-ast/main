@@ -23,7 +23,7 @@ source "$ROOT/scripts/lib/common.sh"
 load_env "$ROOT/.env"
 require_cmd docker
 
-COMPOSE=(docker compose --project-directory "$ROOT")
+COMPOSE=(docker compose -f "$ROOT/docker-compose.yml" --project-directory "$ROOT")
 
 sql_game()  { "${COMPOSE[@]}" exec -T db mariadb -uroot -p"$DB_ROOT_PASSWORD" \
                 --default-character-set=utf8mb4 -N -B "$DB_GAME_NAME"  -e "$1"; }

@@ -19,7 +19,7 @@ require_cmd docker
 
 BACKUP_DIR="$ROOT/backups"
 KEEP="${BACKUP_KEEP:-14}"
-COMPOSE=(docker compose --project-directory "$ROOT")
+COMPOSE=(docker compose -f "$ROOT/docker-compose.yml" --project-directory "$ROOT")
 
 if [ "${1:-}" = "--restore" ]; then
   file="${2:?укажи файл копии}"
