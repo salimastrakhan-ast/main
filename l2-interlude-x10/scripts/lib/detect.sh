@@ -115,9 +115,14 @@ detect_sql_dir() {
   return 1
 }
 
-# Версия javac. Печатает мажорную версию (например 25) или ничего.
+# Мажорная версия javac (например 25) или ничего.
+# Берём номер только из строки вида "javac 25.0.3": JVM может допечатать
+# в тот же поток посторонние строки (JAVA_TOOL_OPTIONS, предупреждения),
+# и они содержат цифры, которые легко принять за версию.
 javac_major() {
-  local v
-  v="$(javac -version 2>&1 | grep -oE '[0-9]+' | head -n1)" || return 1
-  [ -n "$v" ] && printf '%s\n' "$v"
+  command -v javac >/dev/null 2>&1 || return 1
+  local line
+  line="$(javac -version 2>&1 | grep -oE '^javac [0-9]+' | head -n1)"
+  [ -n "$line" ] || return 1
+  printf '%s\n' "${line#javac }"
 }

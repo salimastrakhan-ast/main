@@ -113,12 +113,51 @@ BUILD_SYSTEM="$(detect_build_system "$SRC")"
      Стенд рассчитан на сборку Mobius; для другого эмулятора правь этот скрипт."
 
 # --- 3. Чем собирать ---------------------------------------------------------
-# Mobius требует JDK 25. На хосте его обычно нет, поэтому по умолчанию
-# компилируем в контейнере с готовым JDK 25, а ant подкладываем с хоста —
-# он на чистой Java и прекрасно работает откуда угодно. Так не нужен ни
-# свой Dockerfile, ни buildx.
+# Mobius требует JDK 25, а ant — на чистой Java и одинаково работает откуда
+# угодно. Поэтому ant забираем с Maven Central (два jar-а, ~2 МБ, один раз),
+# а JDK берём либо с хоста, либо из готового образа. Так сборке не нужны ни
+# системный ant с его раскладкой, ни свой Dockerfile, ни buildx.
 JDK_IMAGE="${JDK_IMAGE:-eclipse-temurin:25-jdk-noble}"
-BUILDER=""
+ANT_VERSION="${ANT_VERSION:-1.10.15}"
+ANT_DIR="$SOURCES_DIR/ant"
+
+ensure_ant() {
+  if [ -f "$ANT_DIR/lib/ant.jar" ] && [ -f "$ANT_DIR/lib/ant-launcher.jar" ]; then
+    return 0
+  fi
+
+  log "скачиваю ant $ANT_VERSION (нужен один раз)"
+  mkdir -p "$ANT_DIR/lib"
+  local artifact
+  for artifact in ant ant-launcher; do
+    curl -fsSL --retry 3 \
+      -o "$ANT_DIR/lib/$artifact.jar" \
+      "https://repo1.maven.org/maven2/org/apache/ant/$artifact/$ANT_VERSION/$artifact-$ANT_VERSION.jar" \
+      || return 1
+  done
+
+  # Запасной путь: если Maven Central недоступен, берём ant с хоста.
+  return 0
+}
+
+use_host_ant() {
+  local candidate
+  for candidate in "${ANT_HOME:-}" /usr/share/ant /opt/ant; do
+    if [ -n "$candidate" ] && [ -f "$candidate/lib/ant.jar" ]; then
+      ANT_DIR="$candidate"
+      warn "использую ant с хоста: $candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+require_cmd curl
+if ! ensure_ant; then
+  warn "не удалось скачать ant с Maven Central"
+  use_host_ant || die "ant недоступен: ни скачать, ни найти на хосте.
+     Проверь сеть или установи:  sudo apt install ant"
+fi
 
 host_java_ok() {
   local v; v="$(javac_major 2>/dev/null || true)"
@@ -126,42 +165,40 @@ host_java_ok() {
 }
 
 if [ "$FORCE_LOCAL" = "1" ]; then
-  require_cmd ant "Установи:  sudo apt install ant"
   host_java_ok || die "нужен JDK 25, а на хосте javac $(javac_major 2>/dev/null || echo 'не найден').
-     Убери --local, и сборка пойдёт в контейнере с готовым JDK 25."
+     Поставь его:  sudo apt install openjdk-25-jdk
+     Или убери --local — тогда соберём в контейнере с готовым JDK 25."
   BUILDER=local
-elif command -v ant >/dev/null 2>&1 && host_java_ok; then
+elif host_java_ok; then
   BUILDER=local
 elif command -v docker >/dev/null 2>&1; then
   BUILDER=docker
 else
-  die "нечем собирать: нужен либо Docker, либо ant вместе с JDK 25 на хосте."
+  die "нечем собирать: нужен либо Docker, либо JDK 25 на хосте
+     (sudo apt install openjdk-25-jdk)."
 fi
 
-ANT_HOME_HOST=""
-if [ "$BUILDER" = "docker" ]; then
-  for candidate in "${ANT_HOME:-}" /usr/share/ant /opt/ant; do
-    [ -n "$candidate" ] && [ -f "$candidate/bin/ant" ] && { ANT_HOME_HOST="$candidate"; break; }
-  done
-  [ -n "$ANT_HOME_HOST" ] \
-    || die "для сборки в контейнере нужен ant на хосте (он подкладывается внутрь).
-     Установи:  sudo apt install ant"
-fi
+log "собираю через: $BUILDER (ant $ANT_VERSION, JDK 25). Первый раз это 5-15 минут."
 
-log "собираю через: $BUILDER (ant, JDK 25). Первый раз это 5-15 минут."
+# Ant запускается своим лаунчером напрямую: так не нужен ни скрипт-обёртка,
+# ни переменные окружения дистрибутива.
+ANT_LAUNCH=(-classpath /opt/ant/lib/ant-launcher.jar -Dant.home=/opt/ant
+            org.apache.tools.ant.launch.Launcher -lib /opt/ant/lib)
 
 if [ "$BUILDER" = "local" ]; then
-  ( cd "$SRC" && ant ) || die "сборка не удалась — смотри вывод выше"
+  ( cd "$SRC" && java -classpath "$ANT_DIR/lib/ant-launcher.jar" \
+      -Dant.home="$ANT_DIR" org.apache.tools.ant.launch.Launcher \
+      -lib "$ANT_DIR/lib" ) \
+    || die "сборка не удалась — смотри вывод выше"
 else
   docker run --rm \
     -v "$REPO_DIR:/work/src" \
-    -v "$ANT_HOME_HOST:/opt/ant:ro" \
-    -v /usr/share/java:/usr/share/java:ro \
+    -v "$ANT_DIR:/opt/ant:ro" \
     -w "/work/src/$CHRONICLE" \
-    -e ANT_HOME=/opt/ant \
     -u "$(id -u):$(id -g)" \
+    -e HOME=/tmp \
     "$JDK_IMAGE" \
-    /opt/ant/bin/ant \
+    java "${ANT_LAUNCH[@]}" \
     || die "сборка в контейнере не удалась — смотри вывод выше"
 fi
 ok "компиляция завершена"

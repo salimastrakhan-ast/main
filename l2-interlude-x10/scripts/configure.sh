@@ -69,25 +69,15 @@ apply "$ROOT/config/profiles/_network.conf" || die "сетевой профил�
 # Тонкость Docker: клиент с этой же машины приходит через мост и выглядит
 # как 172.x, поэтому эта подсеть тоже указывает на "внутренний" адрес.
 write_ipconfig() {
-  local target="$GAME_DIR/config/ipconfig.xml"
-  local ext="${L2_EXTERNAL_IP:-127.0.0.1}"
-  local int="${L2_INTERNAL_IP:-127.0.0.1}"
+  local ext="${L2_EXTERNAL_IP:-127.0.0.1}" int="${L2_INTERNAL_IP:-127.0.0.1}"
 
   if [ "$DRY_RUN" = "1" ]; then
     log "[dry-run] ipconfig.xml: внешний $ext, внутренний $int"
     return 0
   fi
 
-  cat > "$target" <<XML
-<?xml version="1.0" encoding="UTF-8"?>
-<!-- Создан scripts/configure.sh из значений .env. Правь .env, не этот файл. -->
-<gameserver address="${ext}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../data/xsd/ipconfig.xsd">
-	<define subnet="127.0.0.0/8" address="${int}" />
-	<define subnet="10.0.0.0/8" address="${int}" />
-	<define subnet="172.16.0.0/12" address="${int}" />
-	<define subnet="192.168.0.0/16" address="${int}" />
-</gameserver>
-XML
+  "$ROOT/scripts/write-ipconfig.sh" "$GAME_DIR" "$ext" "$int" \
+    || die "не удалось записать ipconfig.xml"
   ok "ipconfig.xml: внешний адрес ${ext}, внутренний ${int}"
 }
 

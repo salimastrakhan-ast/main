@@ -42,6 +42,7 @@ required=(
   "scripts/tests/fixtures/dist/login/config/Server.ini"
   "scripts/tests/fixtures/dist/login/LoginServerTask.sh"
   "scripts/tests/fixtures/dist/libs/GameServer.jar"
+  "scripts/tests/fixtures/dist/game/data/xsd/ipconfig.xsd"
 )
 
 missing=0

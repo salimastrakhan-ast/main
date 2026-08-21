@@ -205,11 +205,21 @@ make configure
 ./scripts/build-server.sh          # в контейнере, JDK 25 берётся из образа
 ```
 
-**`ant: command not found`** — при сборке в контейнере ant подкладывается
-с хоста (он на чистой Java и работает откуда угодно):
+**`Could not find or load main class org.apache.tools.ant.launch.Launcher`** —
+так выглядит попытка использовать системный ant Debian/Ubuntu вне его
+окружения: там jar-ы разложены по системным каталогам и собираются в classpath
+скриптом-обёрткой. Стенд этого не делает: ant скачивается с Maven Central
+в `.sources/ant` (два jar-а, ~2 МБ) и запускается своим лаунчером напрямую.
+Если Maven Central недоступен, скрипт возьмёт ant с хоста.
+
+**Про JDK 25 на хосте.** Он нужен только для `--local`. По умолчанию сборка
+идёт в контейнере, и ставить его не требуется. Учти побочный эффект:
+`sudo apt install openjdk-25-jdk` меняет java по умолчанию в системе, что на
+рабочей машине может повлиять на другие проекты. Если всё же ставишь,
+проверь потом:
 
 ```bash
-sudo apt install -y ant
+sudo update-alternatives --config java
 ```
 
 **`Repository not found`** — проверь `L2_SOURCE_REPO` в `.env`. Исходники
