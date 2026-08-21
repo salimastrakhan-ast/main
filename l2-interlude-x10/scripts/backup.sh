@@ -46,12 +46,12 @@ mkdir -p "$BACKUP_DIR"
 stamp="$(date +%Y%m%d-%H%M%S)"
 target="$BACKUP_DIR/l2-$stamp.sql.gz"
 
-log "снимаю копию баз $DB_GAME_NAME и $DB_LOGIN_NAME"
+log "снимаю копию базы ${DB_NAME:-l2jmobius}"
 "${COMPOSE[@]}" exec -T db mariadb-dump \
     -uroot -p"$DB_ROOT_PASSWORD" \
     --single-transaction --quick --routines --events \
     --default-character-set=utf8mb4 \
-    --databases "$DB_GAME_NAME" "$DB_LOGIN_NAME" \
+    --databases "${DB_NAME:-l2jmobius}" \
   | gzip -6 > "$target" \
   || { rm -f "$target"; die "не удалось снять копию"; }
 

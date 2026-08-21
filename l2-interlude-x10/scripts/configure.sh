@@ -1,29 +1,33 @@
 #!/bin/bash
 # =============================================================================
-#  Применяет к собранному серверу сетевые настройки и профиль рейтов.
+#  Применяет к собранному серверу профиль рейтов, сетевые настройки и
+#  адрес, который клиент получает для входа в мир.
 #
 #      ./scripts/configure.sh                     # профиль из .env
 #      ./scripts/configure.sh --dry-run           # показать, что изменится
-#      ./scripts/configure.sh --profile retail-x1 # другой профиль
+#      ./scripts/configure.sh --profile retail-x1
 #
-#  Скрипт можно гонять сколько угодно раз: он идемпотентен.
+#  Скрипт идемпотентен: гоняй сколько угодно раз.
 # =============================================================================
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=lib/common.sh
 source "$ROOT/scripts/lib/common.sh"
+# shellcheck source=lib/detect.sh
+source "$ROOT/scripts/lib/detect.sh"
 
 load_env "$ROOT/.env"
 
 PROFILE="${L2_PROFILE:-x10-classic}"
+DRY_RUN=0
 EXTRA_ARGS=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --profile) PROFILE="${2:?--profile требует имя}"; shift ;;
-    --dry-run) EXTRA_ARGS+=("--dry-run") ;;
-    -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
+    --dry-run) DRY_RUN=1; EXTRA_ARGS+=("--dry-run") ;;
+    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
     *) die "неизвестный аргумент: $1" ;;
   esac
   shift
@@ -31,32 +35,69 @@ done
 
 PROFILE_FILE="$ROOT/config/profiles/$PROFILE.conf"
 [ -f "$PROFILE_FILE" ] || die "нет профиля '$PROFILE'.
-     Доступные: $(ls "$ROOT/config/profiles" | grep -v '^_' | sed 's/\.conf$//' | tr '\n' ' ')"
+     Доступные: $(ls "$ROOT/config/profiles" | grep -v '^_' | grep '\.conf$' \
+                   | sed 's/\.conf$//' | tr '\n' ' ')"
 
-[ -d "$ROOT/dist/game" ] || die "сервер не собран — сначала ./scripts/build-server.sh"
+GAME_DIR="$(detect_game_dist "$ROOT/dist" || true)"
+LOGIN_DIR="$(detect_login_dist "$ROOT/dist" || true)"
+[ -n "$GAME_DIR" ] && [ -n "$LOGIN_DIR" ] \
+  || die "сервер не собран — сначала ./scripts/build-server.sh"
 
 require_cmd python3
 
 apply() {
   python3 "$ROOT/scripts/apply-config.py" \
     --profile "$1" \
-    --game-dir "$ROOT/dist/game" \
-    --login-dir "$ROOT/dist/login" \
+    --game-dir "$GAME_DIR" \
+    --login-dir "$LOGIN_DIR" \
     "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
 }
 
-# Порядок важен: сначала рейты, потом сеть. Сетевой профиль применяется
-# последним, чтобы его значения нельзя было случайно перебить профилем рейтов.
+# Сначала рейты, потом сеть: сетевой профиль применяется последним, чтобы
+# его значения нельзя было случайно перебить профилем рейтов.
 log "профиль рейтов: $PROFILE"
 apply "$PROFILE_FILE" || die "профиль рейтов не применился"
 
 log "сеть и база данных"
 apply "$ROOT/config/profiles/_network.conf" || die "сетевой профиль не применился"
 
+# --- Адрес для клиента -------------------------------------------------------
+# Mobius задаёт его не ключом в .ini, а файлом ipconfig.xml: логин-сервер
+# сопоставляет IP подключившегося клиента с подсетями и отдаёт тот адрес,
+# по которому клиент реально достучится до игрового сервера.
+#
+# Тонкость Docker: клиент с этой же машины приходит через мост и выглядит
+# как 172.x, поэтому эта подсеть тоже указывает на "внутренний" адрес.
+write_ipconfig() {
+  local target="$GAME_DIR/config/ipconfig.xml"
+  local ext="${L2_EXTERNAL_IP:-127.0.0.1}"
+  local int="${L2_INTERNAL_IP:-127.0.0.1}"
+
+  if [ "$DRY_RUN" = "1" ]; then
+    log "[dry-run] ipconfig.xml: внешний $ext, внутренний $int"
+    return 0
+  fi
+
+  cat > "$target" <<XML
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Создан scripts/configure.sh из значений .env. Правь .env, не этот файл. -->
+<gameserver address="${ext}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../data/xsd/ipconfig.xsd">
+	<define subnet="127.0.0.0/8" address="${int}" />
+	<define subnet="10.0.0.0/8" address="${int}" />
+	<define subnet="172.16.0.0/12" address="${int}" />
+	<define subnet="192.168.0.0/16" address="${int}" />
+</gameserver>
+XML
+  ok "ipconfig.xml: внешний адрес ${ext}, внутренний ${int}"
+}
+
+write_ipconfig
+
 echo
 ok "конфигурация применена"
 
 if [ "${L2_EXTERNAL_IP:-127.0.0.1}" = "127.0.0.1" ]; then
-  warn "L2_EXTERNAL_IP=127.0.0.1 — подключиться сможешь только с этой машины."
-  warn "Для игры с других компьютеров укажи в .env реальный IP и повтори configure.sh"
+  warn "L2_EXTERNAL_IP=127.0.0.1 — подключиться можно только с этой машины."
+  warn "Для игры с других компьютеров укажи в .env реальный адрес"
+  warn "и повтори:  make configure && make restart"
 fi

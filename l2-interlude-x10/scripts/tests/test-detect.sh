@@ -1,19 +1,17 @@
 #!/bin/bash
 # =============================================================================
 #  Тесты определения структуры исходников и сборки (scripts/lib/detect.sh).
-#  Проверяются на макетах деревьев каталогов — эмулятор скачивать не нужно.
+#  Проверяются на макетах и на фикстурах реальной раскладки Mobius.
 # =============================================================================
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
+FIXTURES="$HERE/fixtures/dist"
 # shellcheck source=/dev/null
 source "$ROOT/scripts/lib/detect.sh"
 
-PASS=0
-FAIL=0
-WORK=""
-
+PASS=0; FAIL=0; WORK=""
 setup()    { WORK="$(mktemp -d)"; }
 teardown() { [ -n "$WORK" ] && rm -rf "$WORK"; }
 
@@ -29,84 +27,87 @@ check() {
 
 echo "=== Тесты detect.sh ==="
 
-# --- Выбор каталога хроники --------------------------------------------------
+# --- Каталоги репозитория через git ------------------------------------------
+# Важно: при частичной выкладке файлов на диске нет, поэтому список каталогов
+# должен браться из дерева коммита, а не из ls.
 setup
-mkdir -p "$WORK/repo/L2J_Mobius_C6_Interlude" \
-         "$WORK/repo/L2J_Mobius_C4_ScionsOfDestiny" \
-         "$WORK/repo/L2J_Mobius_Essence_1.0"
-check "единственный Interlude найден" "L2J_Mobius_C6_Interlude" \
-  "$(detect_chronicle_dir "$WORK/repo" AUTO)"
+repo="$WORK/repo"
+mkdir -p "$repo"
+git -C "$repo" init -q 2>/dev/null
+git -C "$repo" config user.email t@t; git -C "$repo" config user.name t
+for d in L2J_Mobius_CT_0_Interlude L2J_Mobius_C4_ScionsOfDestiny L2J_Mobius_Classic_1.0; do
+  mkdir -p "$repo/$d"; : > "$repo/$d/build.xml"
+done
+git -C "$repo" add -A >/dev/null 2>&1
+git -C "$repo" commit -qm init >/dev/null 2>&1
 
-# Добавляем Classic Interlude — кандидатов становится два.
-mkdir -p "$WORK/repo/L2J_Mobius_Classic_Interlude"
-check "при Classic рядом выбирается обычный Interlude" "L2J_Mobius_C6_Interlude" \
-  "$(detect_chronicle_dir "$WORK/repo" AUTO)"
+check "каталоги видны из дерева коммита" "3" "$(list_repo_dirs "$repo" | grep -c L2J)"
 
-# Явно заданная хроника перевешивает автоопределение.
-check "явно заданная хроника уважается" "L2J_Mobius_Classic_Interlude" \
-  "$(detect_chronicle_dir "$WORK/repo" L2J_Mobius_Classic_Interlude)"
+# Эмулируем частичную выкладку: файлов нет, дерево на месте.
+rm -rf "$repo/L2J_Mobius_C4_ScionsOfDestiny" "$repo/L2J_Mobius_Classic_1.0"
+check "список цел и без выложенных файлов" "3" "$(list_repo_dirs "$repo" | grep -c L2J)"
 
-# Несуществующая — ошибка.
-detect_chronicle_dir "$WORK/repo" L2J_Mobius_Nonexistent >/dev/null 2>&1
+check "Interlude найден автоматически" "L2J_Mobius_CT_0_Interlude" \
+  "$(detect_chronicle_dir "$repo" AUTO)"
+check "явно заданная хроника уважается" "L2J_Mobius_Classic_1.0" \
+  "$(detect_chronicle_dir "$repo" L2J_Mobius_Classic_1.0)"
+detect_chronicle_dir "$repo" L2J_Mobius_Nope >/dev/null 2>&1
 check "несуществующая хроника -> код 1" "1" "$?"
+teardown
 
-# Два неотличимых кандидата -> код 2 и список.
-mkdir -p "$WORK/repo2/Foo_Interlude" "$WORK/repo2/Bar_Interlude"
-detect_chronicle_dir "$WORK/repo2" AUTO >/dev/null 2>&1
+# Два кандидата Interlude -> нужен выбор пользователя.
+setup
+mkdir -p "$WORK/r2/Foo_Interlude" "$WORK/r2/Bar_Interlude"
+detect_chronicle_dir "$WORK/r2" AUTO >/dev/null 2>&1
 check "неоднозначность -> код 2" "2" "$?"
-check "в списке оба кандидата" "2" \
-  "$(detect_chronicle_dir "$WORK/repo2" AUTO 2>/dev/null | grep -c Interlude)"
-
-# Совсем нет Interlude -> код 1.
-mkdir -p "$WORK/repo3/L2J_Mobius_Classic_3.0"
-detect_chronicle_dir "$WORK/repo3" AUTO >/dev/null 2>&1
-check "нет кандидатов -> код 1" "1" "$?"
+# Classic рядом с обычным Interlude не мешает.
+mkdir -p "$WORK/r3/L2J_Mobius_CT_0_Interlude" "$WORK/r3/L2J_Mobius_Classic_Interlude"
+check "Classic не перебивает обычный Interlude" "L2J_Mobius_CT_0_Interlude" \
+  "$(detect_chronicle_dir "$WORK/r3" AUTO)"
 teardown
 
 # --- Система сборки ----------------------------------------------------------
 setup
-mkdir -p "$WORK/ant" "$WORK/mvn" "$WORK/gradle" "$WORK/nothing"
-touch "$WORK/ant/build.xml" "$WORK/mvn/pom.xml" "$WORK/gradle/gradlew"
-check "ant по build.xml"        "ant"     "$(detect_build_system "$WORK/ant")"
-check "maven по pom.xml"        "maven"   "$(detect_build_system "$WORK/mvn")"
-check "gradle по gradlew"       "gradle"  "$(detect_build_system "$WORK/gradle")"
-check "неизвестная сборка"      "unknown" "$(detect_build_system "$WORK/nothing")"
-
-# build.xml имеет приоритет: у Mobius лежат оба файла, рабочий — ant.
-touch "$WORK/ant/pom.xml"
-check "build.xml важнее pom.xml" "ant" "$(detect_build_system "$WORK/ant")"
+mkdir -p "$WORK/ant" "$WORK/mvn" "$WORK/none"
+touch "$WORK/ant/build.xml" "$WORK/mvn/pom.xml"
+check "ant по build.xml"   "ant"     "$(detect_build_system "$WORK/ant")"
+check "maven по pom.xml"   "maven"   "$(detect_build_system "$WORK/mvn")"
+check "неизвестная сборка" "unknown" "$(detect_build_system "$WORK/none")"
 teardown
 
-# --- Каталоги собранной сборки -----------------------------------------------
+# --- Архив сборки: ant кладёт его на уровень выше хроники --------------------
 setup
-mkdir -p "$WORK/build/dist/game/config" "$WORK/build/dist/login/config"
-touch "$WORK/build/dist/login/config/LoginServer.ini" \
-      "$WORK/build/dist/login/config/Server.ini" \
-      "$WORK/build/dist/game/config/Server.ini"
-check "login найден по LoginServer.ini" "$WORK/build/dist/login" \
-  "$(detect_login_dist "$WORK/build")"
-check "game не путается с login" "$WORK/build/dist/game" \
-  "$(detect_game_dist "$WORK/build")"
+mkdir -p "$WORK/repo/build"
+: > "$WORK/repo/build/L2J_Mobius_CT_0_Interlude.zip"
+check "архив сборки найден" "$WORK/repo/build/L2J_Mobius_CT_0_Interlude.zip" \
+  "$(detect_build_zip "$WORK/repo")"
 
-# Раскладка старого L2J: gameserver вместо game.
-setup
-mkdir -p "$WORK/build/dist/gameserver/config" "$WORK/build/dist/login/config"
-touch "$WORK/build/dist/login/config/LoginServer.ini" \
-      "$WORK/build/dist/gameserver/config/Server.ini"
-check "старая раскладка gameserver/" "$WORK/build/dist/gameserver" \
-  "$(detect_game_dist "$WORK/build")"
+# Старый архив (сутки+) не должен подхватываться как результат текущей сборки.
+touch -d '3 days ago' "$WORK/repo/build/L2J_Mobius_CT_0_Interlude.zip"
+check "устаревший архив игнорируется" "" "$(detect_build_zip "$WORK/repo")"
 teardown
 
-# --- Каталог SQL -------------------------------------------------------------
+# --- Каталоги сборки на настоящей раскладке Mobius ---------------------------
 setup
-mkdir -p "$WORK/dist/sql/game" "$WORK/dist/sql/login"
-touch "$WORK/dist/sql/game/characters.sql" "$WORK/dist/sql/login/accounts.sql"
-check "sql/game найден" "$WORK/dist/sql/game" "$(detect_sql_dir "$WORK/dist" game)"
-check "sql/login найден" "$WORK/dist/sql/login" "$(detect_sql_dir "$WORK/dist" login)"
+cp -r "$FIXTURES" "$WORK/dist"
+check "игровой сервер найден" "$WORK/dist/game"  "$(detect_game_dist "$WORK/dist")"
+check "логин-сервер найден"   "$WORK/dist/login" "$(detect_login_dist "$WORK/dist")"
 
-# Пустой каталог без .sql не должен приниматься за нужный.
-setup
-mkdir -p "$WORK/dist/sql/game"
+# У логин-сервера Mobius нет LoginServer.ini, а Server.ini есть у обоих —
+# поэтому определяем по стартовым скриптам, иначе роли перепутаются.
+check "login не выдаёт себя за game" "$WORK/dist/game" "$(detect_game_dist "$WORK/dist")"
+
+# Запасной признак: только у игрового сервера есть config/Rates.ini.
+rm -f "$WORK/dist/game/GameServerTask.sh"
+check "запасной признак по Rates.ini" "$WORK/dist/game" "$(detect_game_dist "$WORK/dist")"
+
+# --- SQL ---------------------------------------------------------------------
+check "sql логин-сервера"   "$WORK/dist/db_installer/sql/login" \
+  "$(detect_sql_dir "$WORK/dist" login)"
+check "sql игрового сервера" "$WORK/dist/db_installer/sql/game" \
+  "$(detect_sql_dir "$WORK/dist" game)"
+
+rm -f "$WORK/dist/db_installer/sql/game"/*.sql
 detect_sql_dir "$WORK/dist" game >/dev/null 2>&1
 check "каталог без .sql -> код 1" "1" "$?"
 teardown

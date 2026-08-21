@@ -31,7 +31,7 @@ done
 echo
 log "онлайн"
 online="$("${COMPOSE[@]}" exec -T db mariadb -uroot -p"$DB_ROOT_PASSWORD" -N -B \
-  "$DB_GAME_NAME" -e "SELECT COUNT(*) FROM characters WHERE online > 0;" 2>/dev/null | tr -d '\r')"
+  "${DB_NAME:-l2jmobius}" -e "SELECT COUNT(*) FROM characters WHERE online > 0;" 2>/dev/null | tr -d '\r')"
 if [ -n "$online" ]; then
   ok "персонажей в игре: $online"
 else
@@ -46,7 +46,7 @@ docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}'
 
 echo
 log "паузы GC (последние 20 записей игрового сервера)"
-gc_log="$ROOT/logs/game/gc.log"
+gc_log="$ROOT/dist/game/log/gc.log"
 if [ -f "$gc_log" ]; then
   # Вытаскиваем длительности пауз и показываем максимум: всё, что выше
   # ~200 мс, игроки чувствуют как рывок.
@@ -64,8 +64,8 @@ fi
 
 echo
 log "последние ошибки игрового сервера"
-if [ -d "$ROOT/logs/game" ]; then
-  grep -rhiE 'error|exception' "$ROOT/logs/game" 2>/dev/null | tail -5 \
+if [ -d "$ROOT/dist/game/log" ]; then
+  grep -rhiE 'error|exception' "$ROOT/dist/game/log" 2>/dev/null | tail -5 \
     | sed 's/^/    /' || echo "    чисто"
 else
   echo "    логов пока нет"

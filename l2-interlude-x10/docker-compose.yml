@@ -1,27 +1,25 @@
 # =============================================================================
 #  Стек: MariaDB + LoginServer + GameServer.
-#  Собранная сборка лежит на хосте в ./dist и монтируется внутрь — чтобы
-#  править конфиги и перезапускать сервер без пересборки образов.
+#
+#  Образ рантайма берётся готовый, без сборки: сервер — это обычный jar,
+#  ему нужна только JRE. Так стенду не требуется ни buildx, ни свой Dockerfile,
+#  а значит на одну поломку меньше.
+#
+#  Собранный сервер лежит на хосте в ./dist и монтируется внутрь.
 # =============================================================================
 
 name: l2-interlude-x10
 
 x-l2-common: &l2-common
-  build:
-    context: ./docker
-    dockerfile: runtime.Dockerfile
-  image: l2-interlude-runtime:21
+  # Mobius Interlude компилируется с target 25, поэтому и рантайм нужен 25:
+  # на JRE 21 классы просто не загрузятся.
+  image: eclipse-temurin:25-jre-noble
   restart: unless-stopped
-  environment:
-    TZ: ${TZ:-Europe/Moscow}
-    DB_HOST: db
-    DB_PORT: 3306
-    DB_USER: ${DB_USER:-l2j}
-    DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD не задан — скопируй .env.example в .env}
-    JVM_PROFILE: ${JVM_PROFILE:-zgc}
-  volumes:
-    - ./jvm:/opt/l2/jvm:ro
-  stop_grace_period: 60s
+  # Штатный init вместо tini: корректно доставляет SIGTERM в JVM, иначе при
+  # остановке сервер убивается по таймауту и персонажи сохраняются не полностью.
+  init: true
+  entrypoint: ["/opt/l2/bin/entrypoint.sh"]
+  stop_grace_period: 90s
   logging:
     driver: json-file
     options:
@@ -40,18 +38,14 @@ services:
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD не задан}
       MARIADB_USER: ${DB_USER:-l2j}
       MARIADB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD не задан}
-      MARIADB_DATABASE: ${DB_GAME_NAME:-l2jgs}
-      L2_DB_GAME: ${DB_GAME_NAME:-l2jgs}
-      L2_DB_LOGIN: ${DB_LOGIN_NAME:-l2jls}
-      L2_DB_USER: ${DB_USER:-l2j}
+      MARIADB_DATABASE: ${DB_NAME:-l2jmobius}
       TZ: ${TZ:-Europe/Moscow}
     volumes:
       - db-data:/var/lib/mysql
       - db-logs:/var/log/mysql
       - ./mysql/my.cnf:/etc/mysql/conf.d/l2j.cnf:ro
-      - ./mysql/init:/docker-entrypoint-initdb.d:ro
     ports:
-      # Наружу открыт только localhost хоста — база не должна торчать в интернет.
+      # Только localhost: база не должна торчать в интернет.
       - "127.0.0.1:${DB_PORT:-3306}:3306"
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
@@ -66,17 +60,15 @@ services:
     command: ["login"]
     environment:
       TZ: ${TZ:-Europe/Moscow}
+      L2_ROLE: login
       DB_HOST: db
       DB_PORT: 3306
-      DB_USER: ${DB_USER:-l2j}
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD не задан}
-      DB_NAME: ${DB_LOGIN_NAME:-l2jls}
       JVM_PROFILE: ${JVM_PROFILE:-zgc}
       JVM_HEAP: ${LOGIN_HEAP:-512M}
     volumes:
+      - ./docker/entrypoint.sh:/opt/l2/bin/entrypoint.sh:ro
       - ./jvm:/opt/l2/jvm:ro
-      - ./dist/login:/opt/l2/server
-      - ./logs/login:/opt/l2/server/log
+      - ./dist:/opt/l2/server
     ports:
       - "${LOGIN_PORT:-2106}:2106"
     depends_on:
@@ -89,17 +81,15 @@ services:
     command: ["game"]
     environment:
       TZ: ${TZ:-Europe/Moscow}
+      L2_ROLE: game
       DB_HOST: db
       DB_PORT: 3306
-      DB_USER: ${DB_USER:-l2j}
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD не задан}
-      DB_NAME: ${DB_GAME_NAME:-l2jgs}
       JVM_PROFILE: ${JVM_PROFILE:-zgc}
-      JVM_HEAP: ${GAME_HEAP:-6G}
+      JVM_HEAP: ${GAME_HEAP:-4G}
     volumes:
+      - ./docker/entrypoint.sh:/opt/l2/bin/entrypoint.sh:ro
       - ./jvm:/opt/l2/jvm:ro
-      - ./dist/game:/opt/l2/server
-      - ./logs/game:/opt/l2/server/log
+      - ./dist:/opt/l2/server
     ports:
       - "${GAME_PORT:-7777}:7777"
     depends_on:
@@ -108,7 +98,6 @@ services:
       login:
         condition: service_started
 
-  # Веб-морда к базе: docker compose --profile tools up -d adminer
   adminer:
     image: adminer:5
     container_name: l2-adminer

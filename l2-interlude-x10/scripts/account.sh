@@ -25,10 +25,11 @@ require_cmd docker
 
 COMPOSE=(docker compose -f "$ROOT/docker-compose.yml" --project-directory "$ROOT")
 
+# У Mobius Interlude аккаунты и персонажи лежат в одной базе.
+DB="${DB_NAME:-l2jmobius}"
 sql_game()  { "${COMPOSE[@]}" exec -T db mariadb -uroot -p"$DB_ROOT_PASSWORD" \
-                --default-character-set=utf8mb4 -N -B "$DB_GAME_NAME"  -e "$1"; }
-sql_login() { "${COMPOSE[@]}" exec -T db mariadb -uroot -p"$DB_ROOT_PASSWORD" \
-                --default-character-set=utf8mb4 -N -B "$DB_LOGIN_NAME" -e "$1"; }
+                --default-character-set=utf8mb4 -N -B "$DB" -e "$1"; }
+sql_login() { sql_game "$1"; }
 
 # Имя колонки различается между ревизиями (accesslevel / accessLevel /
 # access_level). Спрашиваем у самой базы вместо того, чтобы гадать.
@@ -51,7 +52,7 @@ case "$cmd" in
   gm)
     char="${2:?укажи имя персонажа}"
     level="${3:-8}"
-    col="$(column_of "$DB_GAME_NAME" characters accesslevel)" \
+    col="$(column_of "$DB" characters accesslevel)" \
       || die "в таблице characters нет колонки уровня доступа — сборка нестандартная"
 
     affected="$(sql_game "UPDATE characters SET \`$col\` = $level
@@ -71,7 +72,7 @@ case "$cmd" in
 
   ban|unban)
     login="${2:?укажи логин аккаунта}"
-    col="$(column_of "$DB_LOGIN_NAME" accounts accesslevel)" \
+    col="$(column_of "$DB" accounts accesslevel)" \
       || die "в таблице accounts нет колонки уровня доступа"
     if [ "$cmd" = "ban" ]; then value="-100"; else value="0"; fi
 

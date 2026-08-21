@@ -67,7 +67,7 @@ make gm CHAR=ИмяПерсонажа        # выдать права ГМ (у�
 
 Базовые ГМ-команды в игре: `//admin` (панель), `//gmlist`, `//announce`,
 `//teleport`, `//spawn`, `//reload`. Полный список того, что разрешено
-какому уровню, — в `dist/game/config/AdminCommandAccessRights.xml`.
+какому уровню, — в `dist/game/config/AdminCommands.xml`.
 
 Отдельной команды «создать аккаунт» нет намеренно: при
 `AutoCreateAccounts = True` аккаунт создаётся при первом входе, и пароль
@@ -177,10 +177,10 @@ VisualVM через SSH-туннель. Порт JMX наружу не откр�
 
 | Что | Где |
 |---|---|
-| Игровой сервер | `make logs`, `logs/game/` |
+| Игровой сервер | `make logs`, `dist/game/log/` |
 | Логин-сервер | `make logs-login` |
 | База | `make logs-db` |
-| Паузы GC | `logs/game/gc.log` |
+| Паузы GC | `dist/game/log/gc.log` |
 | Медленные запросы | `docker compose exec db tail -50 /var/log/mysql/slow.log` |
 
 Логи Docker ограничены 50 МБ на файл и 5 файлами — место не забьётся.

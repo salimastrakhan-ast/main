@@ -6,15 +6,15 @@
 
 ## Логин проходит, сервер виден, но вход в мир висит на «Connecting...»
 
-Причина в 95% случаев: `ExternalHostname` игрового сервера остался
-`127.0.0.1`, и клиент на другом компьютере пытается подключиться к самому себе.
+Причина в 95% случаев: игровой сервер отдаёт клиенту адрес `127.0.0.1`,
+и клиент на другом компьютере пытается подключиться к самому себе.
 
 ```bash
-grep ExternalHostname dist/game/config/Server.ini
+cat dist/game/config/ipconfig.xml
 ```
 
-Должен стоять адрес, по которому машину видят игроки. Правится в `.env`
-(`L2_EXTERNAL_IP`), затем:
+В атрибуте `address` должен стоять адрес, по которому машину видят игроки.
+Правится в `.env` (`L2_EXTERNAL_IP`), затем:
 
 ```bash
 make configure && make restart
@@ -34,7 +34,7 @@ make logs | grep -iE 'login|register'
 Что смотреть:
 
 - игровой сервер вообще запустился? `make status`;
-- в `dist/login/config/LoginServer.ini` должно быть
+- в `dist/login/config/Server.ini` должно быть
   `AcceptNewGameServer = True` — иначе регистрацию нужно подтверждать вручную;
 - `RequestServerID` в `Server.ini` не должен конфликтовать с уже занятым
   номером в таблице `gameservers`.
@@ -42,10 +42,13 @@ make logs | grep -iE 'login|register'
 Сбросить регистрацию и дать серверу зарегистрироваться заново:
 
 ```bash
-docker compose exec db mariadb -uroot -p"$DB_ROOT_PASSWORD" l2jls \
+docker compose exec db mariadb -uroot -p"$DB_ROOT_PASSWORD" "$DB_NAME" \
   -e "DELETE FROM gameservers;"
 make restart
 ```
+
+Заодно удали `dist/game/config/hexid.txt`, если он появился: в нём лежит
+идентификатор прошлой регистрации.
 
 ---
 
@@ -60,7 +63,7 @@ make logs-login | tail -30
 ```
 
 Частые причины: логин-сервер не достучался до своей базы (проверь
-`URL`/`Login`/`Password` в `dist/login/config/LoginServer.ini`), либо
+`URL`/`Login`/`Password` в `dist/login/config/Database.ini`), либо
 аккаунт с таким логином уже есть, а пароль другой.
 
 Пароли намеренно не выставляются скриптом: разные ревизии хэшируют их
@@ -101,7 +104,7 @@ make logs | head -40
 Проверь по порядку:
 
 1. база поднялась: `docker compose ps db` → healthy;
-2. пароль в `.env` и в `dist/game/config/Server.ini` совпадают
+2. пароль в `.env` и в `dist/game/config/Database.ini` совпадают
    (после смены пароля в `.env` нужен `make configure`);
 3. базы созданы и наполнены: `make db-init`;
 4. `URL` указывает на хост `db`, а не `localhost` — внутри контейнера
@@ -191,6 +194,42 @@ make configure
 это надо чинить.
 
 ---
+
+## Сборка падает
+
+**`invalid source release: 25`** — компилируется не тем JDK. Mobius Interlude
+требует JDK 25. Стенд для того и собирает в контейнере с готовым JDK 25,
+поэтому проверь, что не передан `--local`:
+
+```bash
+./scripts/build-server.sh          # в контейнере, JDK 25 берётся из образа
+```
+
+**`ant: command not found`** — при сборке в контейнере ant подкладывается
+с хоста (он на чистой Java и работает откуда угодно):
+
+```bash
+sudo apt install -y ant
+```
+
+**`Repository not found`** — проверь `L2_SOURCE_REPO` в `.env`. Исходники
+Mobius живут на GitLab: `https://gitlab.com/MobiusDevelopment/L2J_Mobius.git`.
+
+**`архив сборки не найден`** — ant отработал, но ZIP не появился. Цель ant
+по умолчанию называется `cleanup`: она пакует результат в архив и удаляет
+`build/dist`, поэтому стенд ищет именно ZIP на уровень выше каталога хроники:
+
+```bash
+ls -la .sources/emulator/build
+```
+
+**Кончилось место.** Репозиторий большой, поэтому выкладывается только нужная
+хроника (`L2_SPARSE_CHECKOUT=1`). Освободить место после успешной сборки можно
+так — на работу сервера это не влияет, только на возможность быстро пересобрать:
+
+```bash
+rm -rf .sources
+```
 
 ## Команды стенда затрагивают чужие контейнеры
 
