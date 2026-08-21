@@ -45,19 +45,27 @@ docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}'
   || warn "статистика недоступна"
 
 echo
-log "паузы GC (последние 20 записей игрового сервера)"
+log "паузы GC (игровой сервер)"
 gc_log="$ROOT/dist/game/log/gc.log"
 if [ -f "$gc_log" ]; then
-  # Вытаскиваем длительности пауз и показываем максимум: всё, что выше
-  # ~200 мс, игроки чувствуют как рывок.
-  worst="$(grep -oE '[0-9]+[.,][0-9]+ms' "$gc_log" | tail -n 200 \
-           | tr ',' '.' | sort -g | tail -n1)"
+  # Считаем ТОЛЬКО строки с Pause: у ZGC в лог попадает ещё и длительность
+  # конкурентных циклов, во время которых сервер продолжает работать.
+  # Если брать любое число с "ms", получаются пугающие секунды на ровном месте.
+  worst="$(grep -h 'Pause' "$gc_log" 2>/dev/null | tail -n 500 \
+           | grep -oE '[0-9]+([.,][0-9]+)?ms' | tr ',' '.' \
+           | sed 's/ms$//' | sort -g | tail -n1)"
+  pauses="$(grep -hc 'Pause' "$gc_log" 2>/dev/null || echo 0)"
+
   if [ -n "$worst" ]; then
-    ok "самая долгая пауза за последние записи: $worst"
-    echo "    (нормально: < 50 мс. Больше 200 мс — игроки это чувствуют.)"
+    ok "самая долгая пауза из последних: ${worst} мс (всего пауз в логе: $pauses)"
+    echo "    (нормально: ZGC — доли миллисекунды, G1 — до 50 мс."
+    echo "     Больше 200 мс игроки чувствуют как рывок.)"
   else
-    echo "    пока нечего показать"
+    echo "    пауз ещё не было — сервер только запустился"
   fi
+
+  cycles="$(grep -hc 'Garbage Collection' "$gc_log" 2>/dev/null || echo 0)"
+  echo "    циклов сборки мусора: $cycles"
 else
   echo "    лога GC пока нет (сервер не запускался?)"
 fi
@@ -65,8 +73,15 @@ fi
 echo
 log "последние ошибки игрового сервера"
 if [ -d "$ROOT/dist/game/log" ]; then
-  grep -rhiE 'error|exception' "$ROOT/dist/game/log" 2>/dev/null | tail -5 \
-    | sed 's/^/    /' || echo "    чисто"
+  # Ищем уровни логирования как отдельные слова и исключения, иначе в выборку
+  # попадают безобидные строки вроде "Loaded 462 spawns, 0 errors".
+  found="$(grep -rhE '\b(ERROR|SEVERE|WARNING)\b|Exception' "$ROOT/dist/game/log" 2>/dev/null \
+           | grep -vE '\b0 errors\b' | tail -5)"
+  if [ -n "$found" ]; then
+    printf '%s\n' "$found" | cut -c1-160 | sed 's/^/    /'
+  else
+    echo "    чисто"
+  fi
 else
   echo "    логов пока нет"
 fi
