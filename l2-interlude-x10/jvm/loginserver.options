@@ -1,0 +1,14 @@
+# =============================================================================
+#  Флаги JVM для LoginServer. Нагрузка на него минимальная — только
+#  авторизация и выдача списка серверов, поэтому и настройки скромные.
+# =============================================================================
+
+-XX:+ExitOnOutOfMemoryError
+-XX:+HeapDumpOnOutOfMemoryError
+-XX:HeapDumpPath=./log
+
+-Xlog:gc:file=./log/gc.log:time,uptime:filecount=3,filesize=10M
+
+-Dfile.encoding=UTF-8
+-Dsun.jnu.encoding=UTF-8
+-Djava.net.preferIPv4Stack=true

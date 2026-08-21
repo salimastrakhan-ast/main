@@ -1,0 +1,44 @@
+# =============================================================================
+#  Флаги JVM для GameServer (кроме -Xms/-Xmx и выбора GC — они задаются
+#  переменными GAME_HEAP и JVM_PROFILE в .env).
+#  Одна опция — одна строка. Комментарии со # игнорируются.
+# =============================================================================
+
+# Разом коммитим всю кучу при старте. Без этого JVM берёт страницы у ОС
+# лениво, и первые минуты после рестарта сервер "подтормаживает" ровно
+# тогда, когда на него заходит вся толпа.
+-XX:+AlwaysPreTouch
+
+# JVM пишет счётчики производительности в файл в /tmp. Если файловая
+# система там подтормаживает, поток попадает в safepoint и встаёт весь
+# сервер. Классический источник необъяснимых фризов на VPS.
+-XX:+PerfDisableSharedMem
+
+# У L2J огромное количество одинаковых строк (имена предметов, скиллов,
+# NPC). Дедупликация снимает сотни мегабайт.
+-XX:+UseStringDeduplication
+
+# Кончилась память — падаем и даём Docker перезапустить нас.
+# Сервер, живущий в бесконечном GC, хуже перезапущенного.
+-XX:+ExitOnOutOfMemoryError
+-XX:+HeapDumpOnOutOfMemoryError
+-XX:HeapDumpPath=./log
+
+# Лог GC — первое, куда смотреть при жалобах на лаги.
+-Xlog:gc*,safepoint:file=./log/gc.log:time,uptime,level:filecount=5,filesize=20M
+
+# Кодировка: без этого русские ники и чат превращаются в вопросы.
+-Dfile.encoding=UTF-8
+-Dsun.jnu.encoding=UTF-8
+
+# L2J-сеть работает по IPv4; двойной стек иногда даёт биндинг не туда.
+-Djava.net.preferIPv4Stack=true
+
+# --- Опционально: мониторинг через JMX (VisualVM / JConsole) ------------------
+# Открывать только на localhost, наружу — никогда.
+#-Dcom.sun.management.jmxremote
+#-Dcom.sun.management.jmxremote.port=9010
+#-Dcom.sun.management.jmxremote.rmi.port=9010
+#-Dcom.sun.management.jmxremote.local.only=true
+#-Dcom.sun.management.jmxremote.authenticate=false
+#-Dcom.sun.management.jmxremote.ssl=false

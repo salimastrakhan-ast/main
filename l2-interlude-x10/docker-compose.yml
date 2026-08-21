@@ -1,0 +1,127 @@
+# =============================================================================
+#  Стек: MariaDB + LoginServer + GameServer.
+#  Собранная сборка лежит на хосте в ./dist и монтируется внутрь — чтобы
+#  править конфиги и перезапускать сервер без пересборки образов.
+# =============================================================================
+
+name: l2-interlude-x10
+
+x-l2-common: &l2-common
+  build:
+    context: ./docker
+    dockerfile: runtime.Dockerfile
+  image: l2-interlude-runtime:21
+  restart: unless-stopped
+  environment:
+    TZ: ${TZ:-Europe/Moscow}
+    DB_HOST: db
+    DB_PORT: 3306
+    DB_USER: ${DB_USER:-l2j}
+    DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD не задан — скопируй .env.example в .env}
+    JVM_PROFILE: ${JVM_PROFILE:-zgc}
+  volumes:
+    - ./jvm:/opt/l2/jvm:ro
+  stop_grace_period: 60s
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "5"
+
+services:
+  db:
+    image: mariadb:11.4
+    container_name: l2-db
+    restart: unless-stopped
+    command: >
+      --innodb-buffer-pool-size=${DB_BUFFER_POOL:-2G}
+      --max-connections=300
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD не задан}
+      MARIADB_USER: ${DB_USER:-l2j}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD не задан}
+      MARIADB_DATABASE: ${DB_GAME_NAME:-l2jgs}
+      L2_DB_GAME: ${DB_GAME_NAME:-l2jgs}
+      L2_DB_LOGIN: ${DB_LOGIN_NAME:-l2jls}
+      L2_DB_USER: ${DB_USER:-l2j}
+      TZ: ${TZ:-Europe/Moscow}
+    volumes:
+      - db-data:/var/lib/mysql
+      - db-logs:/var/log/mysql
+      - ./mysql/my.cnf:/etc/mysql/conf.d/l2j.cnf:ro
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      # Наружу открыт только localhost хоста — база не должна торчать в интернет.
+      - "127.0.0.1:${DB_PORT:-3306}:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+  login:
+    <<: *l2-common
+    container_name: l2-login
+    command: ["login"]
+    environment:
+      TZ: ${TZ:-Europe/Moscow}
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-l2j}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD не задан}
+      DB_NAME: ${DB_LOGIN_NAME:-l2jls}
+      JVM_PROFILE: ${JVM_PROFILE:-zgc}
+      JVM_HEAP: ${LOGIN_HEAP:-512M}
+    volumes:
+      - ./jvm:/opt/l2/jvm:ro
+      - ./dist/login:/opt/l2/server
+      - ./logs/login:/opt/l2/server/log
+    ports:
+      - "${LOGIN_PORT:-2106}:2106"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  game:
+    <<: *l2-common
+    container_name: l2-game
+    command: ["game"]
+    environment:
+      TZ: ${TZ:-Europe/Moscow}
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-l2j}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD не задан}
+      DB_NAME: ${DB_GAME_NAME:-l2jgs}
+      JVM_PROFILE: ${JVM_PROFILE:-zgc}
+      JVM_HEAP: ${GAME_HEAP:-6G}
+    volumes:
+      - ./jvm:/opt/l2/jvm:ro
+      - ./dist/game:/opt/l2/server
+      - ./logs/game:/opt/l2/server/log
+    ports:
+      - "${GAME_PORT:-7777}:7777"
+    depends_on:
+      db:
+        condition: service_healthy
+      login:
+        condition: service_started
+
+  # Веб-морда к базе: docker compose --profile tools up -d adminer
+  adminer:
+    image: adminer:5
+    container_name: l2-adminer
+    restart: unless-stopped
+    profiles: ["tools"]
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:
+  db-logs:
