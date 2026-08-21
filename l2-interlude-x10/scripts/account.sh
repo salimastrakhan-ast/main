@@ -58,7 +58,23 @@ case "$cmd" in
     affected="$(sql_game "UPDATE characters SET \`$col\` = $level
                           WHERE char_name = '$(escape "$char")';
                           SELECT ROW_COUNT();" | tail -n1)"
-    [ "$affected" = "0" ] && die "персонаж '$char' не найден (регистр важен)"
+
+    if [ "$affected" = "0" ]; then
+      # Подсказываем, что вообще есть в базе: чаще всего персонажа просто
+      # ещё не создали в игре, реже — ошиблись регистром.
+      existing="$(sql_game "SELECT char_name FROM characters ORDER BY char_name;" \
+                   | tr -d '\r' | sed '/^$/d')"
+      if [ -z "$existing" ]; then
+        die "персонажей в базе пока нет.
+     Права выдаются существующему персонажу, поэтому порядок такой:
+       1. зайти в игру клиентом (аккаунт создастся при первом входе);
+       2. создать персонажа;
+       3. вернуться сюда и выполнить  make gm CHAR=Имя"
+      fi
+      printf '     существующие персонажи:\n' >&2
+      printf '%s\n' "$existing" | sed 's/^/       /' >&2
+      die "персонаж '$char' не найден (регистр важен)"
+    fi
 
     if [ "$level" = "0" ]; then
       ok "права сняты: $char"
