@@ -43,6 +43,8 @@ required=(
   "scripts/tests/fixtures/dist/login/LoginServerTask.sh"
   "scripts/tests/fixtures/dist/libs/GameServer.jar"
   "scripts/tests/fixtures/dist/game/data/xsd/ipconfig.xsd"
+  "scripts/client.sh"
+  "scripts/set-client-addr.py"
 )
 
 missing=0

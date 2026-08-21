@@ -128,7 +128,7 @@ sudo ss -tlnp | grep -E '2106|7777|3306'
 
 ## Мобы ходят сквозь стены, персонажа откатывает назад
 
-Нет геодаты. См. [CLIENT-SETUP.md](CLIENT-SETUP.md), раздел 3.
+Нет геодаты. См. [CLIENT-SETUP.md](CLIENT-SETUP.md), раздел 4.
 
 ---
 

@@ -14,7 +14,7 @@ COMPOSE := docker compose -f docker-compose.yml
 
 .DEFAULT_GOAL := help
 .PHONY: help install env build configure db-init up down stop start restart \
-        logs logs-login logs-db status gm online backup restore test clean clean-all
+        logs logs-login logs-db status client play gm online backup restore test clean clean-all
 
 help:
 	@echo ""
@@ -33,6 +33,10 @@ help:
 	@echo "    make logs        логи игрового сервера (Ctrl+C для выхода)"
 	@echo "    make logs-login  логи логин-сервера"
 	@echo "    make logs-db     логи базы"
+	@echo ""
+	@echo "  Клиент игры"
+	@echo "    make client DIR=~/l2-client   прописать адрес сервера в клиент"
+	@echo "    make play                     запустить клиент через Wine"
 	@echo ""
 	@echo "  Администрирование"
 	@echo "    make gm CHAR=Имя     выдать права ГМ персонажу"
@@ -101,6 +105,13 @@ logs-db:
 
 status:
 	@./scripts/status.sh
+
+client:
+	@if [ -z "$(DIR)" ]; then ./scripts/client.sh setup; \
+	else ./scripts/client.sh setup "$(DIR)"; fi
+
+play:
+	@./scripts/client.sh run
 
 gm:
 	@if [ -z "$(CHAR)" ]; then \
