@@ -13,7 +13,10 @@ name: l2-interlude-x10
 x-l2-common: &l2-common
   # Mobius Interlude компилируется с target 25, поэтому и рантайм нужен 25:
   # на JRE 21 классы просто не загрузятся.
-  image: eclipse-temurin:25-jre-noble
+  #
+  # Образ вынесен в переменную: если JRE не скачивается (реестр недоступен),
+  # можно указать в .env уже скачанный JDK-образ — он тоже умеет запускать jar.
+  image: ${L2_RUNTIME_IMAGE:-eclipse-temurin:25-jre-noble}
   restart: unless-stopped
   # Штатный init вместо tini: корректно доставляет SIGTERM в JVM, иначе при
   # остановке сервер убивается по таймауту и персонажи сохраняются не полностью.
