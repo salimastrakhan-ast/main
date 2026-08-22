@@ -194,6 +194,29 @@ if command -v docker >/dev/null 2>&1 && docker image inspect "$PS_IMAGE" >/dev/n
   check "UTF-16 без BOM: файл остался UTF-16" "yes" \
     "$(iconv -f UTF-16LE -t UTF-8 "$WORK/utf16/system/l2.ini" >/dev/null 2>&1 && echo yes || echo no)"
 
+  # Файл живого пользователя: UTF-16LE без BOM, начинается с "Lineage2", а
+  # внутри есть символ с нулевым байтом на чётной позиции. Прежнее
+  # определение кодировки считало нули и на таком файле сдавалось.
+  mkdir -p "$WORK/quirk/system"
+  printf 'Lineage2 Ѐ Client\r\n[Server]\r\nServerAddr=127.0.0.1\r\nServerPort=2106\r\n' \
+    | iconv -f UTF-8 -t UTF-16LE > "$WORK/quirk/system/l2.ini"
+  out="$(run_ps_out quirk)"
+  check "UTF-16 с нулём не на месте: не отказ" "0" \
+    "$(printf '%s' "$out" | grep -c 'не понял кодировку')"
+  check "UTF-16 с нулём не на месте: адрес прописан" "1" \
+    "$(iconv -f UTF-16LE -t UTF-8 "$WORK/quirk/system/l2.ini" | grep -c 'ServerAddr=192\.168\.0\.133')"
+  check "UTF-16 с нулём не на месте: текст уцелел" "1" \
+    "$(iconv -f UTF-16LE -t UTF-8 "$WORK/quirk/system/l2.ini" | grep -c 'Lineage2')"
+
+  # Обратная проверка: однобайтовый файл не должен быть принят за UTF-16.
+  mkdir -p "$WORK/plainansi/system"
+  printf '[Server]\r\nServerAddr=127.0.0.1\r\nServerPort=2106\r\n' > "$WORK/plainansi/system/l2.ini"
+  run_ps plainansi
+  check "ANSI не принят за UTF-16" "1" \
+    "$(grep -ac '^ServerAddr=192\.168\.0\.133' "$WORK/plainansi/system/l2.ini")"
+  check "ANSI остался однобайтовым" "0" \
+    "$(tr -dc '\000' < "$WORK/plainansi/system/l2.ini" | wc -c)"
+
   # --- Ремонт клиента, испорченного прежней версией патча --------------------
   # Та версия дописывала [Server] однобайтовыми буквами внутрь UTF-16.
   damaged_ini() {

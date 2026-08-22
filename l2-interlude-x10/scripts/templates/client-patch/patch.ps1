@@ -65,6 +65,23 @@ Ok "нашёл $ini"
 # Определяем, а не назначаем: файл бывает однобайтовым, UTF-8 и UTF-16, причём
 # UTF-16 часто без BOM. Прочитать UTF-16 как ANSI и записать обратно значит
 # перемолоть конфиг в мусор — клиент после такого не стартует вообще.
+# Доля осмысленных символов в расшифрованном тексте. Осмысленное — то, что
+# бывает в конфиге: печатная латиница, кириллица, переводы строк. Иероглифы,
+# управляющие байты и нули — признак того, что кодировку выбрали неверно.
+function Score-Text([string]$text) {
+    if (-not $text -or $text.Length -eq 0) { return 0.0 }
+
+    $good = 0
+    $take = [Math]::Min($text.Length, 512)
+    for ($i = 0; $i -lt $take; $i++) {
+        $c = [int]$text[$i]
+        if ($c -eq 9 -or $c -eq 10 -or $c -eq 13) { $good++ }
+        elseif ($c -ge 32 -and $c -le 126) { $good++ }
+        elseif ($c -ge 0x400 -and $c -le 0x4FF) { $good++ }
+    }
+    return $good / $take
+}
+
 function Read-Ini([string]$path) {
     $bytes = [System.IO.File]::ReadAllBytes($path)
 
@@ -81,24 +98,30 @@ function Read-Ini([string]$path) {
                   Enc  = New-Object System.Text.UTF8Encoding($true) }
     }
 
-    # BOM нет. UTF-16 выдают нулевые байты на чётных или нечётных позициях:
-    # в ASCII-тексте ("ServerAddr=...") половина каждой пары — ноль.
-    $probe = [Math]::Min($bytes.Length, 512)
-    $zeroOdd = 0; $zeroEven = 0
-    for ($i = 0; $i -lt $probe; $i++) {
-        if ($bytes[$i] -eq 0) { if ($i % 2) { $zeroOdd++ } else { $zeroEven++ } }
-    }
-    if ($zeroOdd -gt $probe / 8 -and $zeroEven -eq 0) {
-        return @{ Text = [System.Text.Encoding]::Unicode.GetString($bytes)
-                  Enc  = New-Object System.Text.UnicodeEncoding($false, $false) }
-    }
-    if ($zeroEven -gt $probe / 8 -and $zeroOdd -eq 0) {
-        return @{ Text = [System.Text.Encoding]::BigEndianUnicode.GetString($bytes)
-                  Enc  = New-Object System.Text.UnicodeEncoding($true, $false) }
+    # BOM нет — расшифровываем всеми тремя способами и берём тот, где вышел
+    # самый осмысленный текст. Считать нулевые байты оказалось ненадёжно:
+    # одного нуля не на своём месте хватало, чтобы UTF-16 перестал
+    # опознаваться. Сравнение вариантов не зависит от таких случайностей.
+    $variants = @(
+        @{ Text = [System.Text.Encoding]::Default.GetString($bytes)
+           Enc  = [System.Text.Encoding]::Default }
+    )
+    if ($bytes.Length -ge 2) {
+        $variants += @{ Text = [System.Text.Encoding]::Unicode.GetString($bytes)
+                        Enc  = New-Object System.Text.UnicodeEncoding($false, $false) }
+        $variants += @{ Text = [System.Text.Encoding]::BigEndianUnicode.GetString($bytes)
+                        Enc  = New-Object System.Text.UnicodeEncoding($true, $false) }
     }
 
-    return @{ Text = [System.Text.Encoding]::Default.GetString($bytes)
-              Enc  = [System.Text.Encoding]::Default }
+    $best = $null; $bestScore = -1.0
+    foreach ($v in $variants) {
+        $score = Score-Text $v.Text
+        # Нули в тексте — верный признак промаха, даже если остальное похоже
+        # на слова: настоящий конфиг их не содержит.
+        if ($v.Text.Contains([char]0)) { $score -= 1.0 }
+        if ($score -gt $bestScore) { $bestScore = $score; $best = $v }
+    }
+    return $best
 }
 
 # Ранние версии патча читали UTF-16 как однобайтовый текст и дописывали в
