@@ -87,7 +87,12 @@ for file in README.txt patch.ps1; do
 done
 
 mkdir -p "$OUT_DIR"
-NAME="l2-patch-$ADDR"
+# Версия — в имени файла. Иначе новая сборка ложится поверх старой под тем
+# же именем: на Windows распаковка в существующую папку молча оставляет
+# прежние файлы, и человек раз за разом ставит одну и ту же версию,
+# уверенный, что взял свежую. Разные имена такого не позволяют.
+NAME="l2-patch-$ADDR-${BUILT##* }"
+NAME="${NAME//[()]/}"
 OUT="$OUT_DIR/$NAME.zip"
 rm -f "$OUT"
 (cd "$STAGE" && zip -X -q "$OUT" setup-client.bat patch.ps1 README.txt)
@@ -100,6 +105,12 @@ UNPACKED="$OUT_DIR/$NAME"
 rm -rf "$UNPACKED"
 mkdir -p "$UNPACKED"
 cp "$STAGE/setup-client.bat" "$STAGE/patch.ps1" "$STAGE/README.txt" "$UNPACKED/"
+
+# Сборки от прежних версий только путают: их легко скопировать по ошибке.
+find "$OUT_DIR" -maxdepth 1 -name "l2-patch-$ADDR-*" ! -name "$NAME" ! -name "$NAME.zip" \
+     -exec rm -rf {} + 2>/dev/null || true
+rm -f "$OUT_DIR/l2-patch-$ADDR.zip"
+rm -rf "$OUT_DIR/l2-patch-$ADDR"
 
 log "патч для клиента"
 ok "адрес сервера: $ADDR (логин $LOGIN, игра $GAME)"

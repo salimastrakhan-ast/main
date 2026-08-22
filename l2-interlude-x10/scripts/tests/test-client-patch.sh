@@ -38,6 +38,10 @@ fake_root() {
 
 build() { "$1/scripts/client-patch.sh" --out "$WORK/out" "${@:2}"; }
 
+# Имя сборки несёт версию, поэтому ищем по маске, а не по точному имени.
+zip_of()      { echo "$WORK/out/l2-patch-$1-"*.zip; }
+unpacked_of() { for d in "$WORK/out/l2-patch-$1-"*/; do echo "${d%/}"; return; done; }
+
 # Содержимое файла из архива.
 inside() { unzip -p "$1" "$2"; }
 
@@ -52,7 +56,7 @@ fi
 setup
 proj="$(fake_root 'L2_EXTERNAL_IP=127.0.0.1' 'LOGIN_PORT=2106' 'GAME_PORT=7777')"
 build "$proj" 203.0.113.10 >/dev/null 2>&1
-zipfile="$WORK/out/l2-patch-203.0.113.10.zip"
+zipfile="$(zip_of 203.0.113.10)"
 
 check "архив создан" "yes" "$([ -f "$zipfile" ] && echo yes || echo no)"
 check "в архиве три файла" "3" "$(unzip -Z1 "$zipfile" | wc -l)"
@@ -75,12 +79,12 @@ teardown
 setup
 proj="$(fake_root 'L2_EXTERNAL_IP=192.168.0.133')"
 build "$proj" >/dev/null 2>&1
-unpacked="$WORK/out/l2-patch-192.168.0.133"
+unpacked="$(unpacked_of 192.168.0.133)"
 
 check "распакованная копия создана" "yes" "$([ -d "$unpacked" ] && echo yes || echo no)"
 for file in setup-client.bat patch.ps1 README.txt; do
   check "$file: папка совпадает с архивом" "yes" \
-    "$(unzip -p "$WORK/out/l2-patch-192.168.0.133.zip" "$file" \
+    "$(unzip -p "$(zip_of 192.168.0.133)" "$file" \
        | cmp -s - "$unpacked/$file" && echo yes || echo no)"
 done
 
@@ -89,7 +93,7 @@ printf 'старьё\n' > "$unpacked/patch.ps1"
 printf 'мусор от прошлой сборки\n' > "$unpacked/лишний-файл.txt"
 build "$proj" >/dev/null 2>&1
 check "старая копия перезаписана" "yes" \
-  "$(unzip -p "$WORK/out/l2-patch-192.168.0.133.zip" patch.ps1 \
+  "$(unzip -p "$(zip_of 192.168.0.133)" patch.ps1 \
      | cmp -s - "$unpacked/patch.ps1" && echo yes || echo no)"
 check "чужой файл из папки убран" "no" \
   "$([ -f "$unpacked/лишний-файл.txt" ] && echo yes || echo no)"
@@ -99,7 +103,7 @@ teardown
 setup
 proj="$(fake_root 'L2_EXTERNAL_IP=192.168.0.133' 'LOGIN_PORT=2107' 'GAME_PORT=7778')"
 build "$proj" >/dev/null 2>&1
-zipfile="$WORK/out/l2-patch-192.168.0.133.zip"
+zipfile="$(zip_of 192.168.0.133)"
 
 check "адрес взят из .env" "yes" "$([ -f "$zipfile" ] && echo yes || echo no)"
 check "нестандартный порт логина подставлен" "1" \
@@ -119,7 +123,7 @@ setup
 proj="$(fake_root 'L2_EXTERNAL_IP=192.168.0.133')"
 build "$proj" >/dev/null 2>&1
 mkdir -p "$WORK/unpacked"
-unzip -q -d "$WORK/unpacked" "$WORK/out/l2-patch-192.168.0.133.zip"
+unzip -q -d "$WORK/unpacked" "$(zip_of 192.168.0.133)"
 
 bom_of() { head -c3 "$1" | od -An -tx1 | tr -d ' \n'; }
 for file in patch.ps1 README.txt; do
@@ -153,7 +157,7 @@ if command -v docker >/dev/null 2>&1 && docker image inspect "$PS_IMAGE" >/dev/n
   setup
   proj="$(fake_root 'L2_EXTERNAL_IP=192.168.0.133')"
   build "$proj" >/dev/null 2>&1
-  unzip -q -d "$WORK" "$WORK/out/l2-patch-192.168.0.133.zip"
+  unzip -q -d "$WORK" "$(zip_of 192.168.0.133)"
 
   ini_body=$'[Server]\r\nServerAddr=127.0.0.1\r\nServerPort=2106\r\n'
   make_ini() { mkdir -p "$WORK/$1/system"; printf '%s' "$ini_body" | iconv -f UTF-8 -t "$2" > "$WORK/$1/system/l2.ini"; }
@@ -258,7 +262,7 @@ if command -v docker >/dev/null 2>&1 && docker image inspect "$PS_IMAGE" >/dev/n
   setup
   proj="$(fake_root 'L2_EXTERNAL_IP=192.168.0.133')"
   build "$proj" >/dev/null 2>&1
-  unzip -q -d "$WORK" "$WORK/out/l2-patch-192.168.0.133.zip"
+  unzip -q -d "$WORK" "$(zip_of 192.168.0.133)"
   mkdir -p "$WORK/stamp/system"
   printf '[Server]\r\nServerAddr=127.0.0.1\r\n' > "$WORK/stamp/system/l2.ini"
 
@@ -282,7 +286,7 @@ if command -v docker >/dev/null 2>&1 && docker image inspect "$PS_IMAGE" >/dev/n
   setup
   proj="$(fake_root 'L2_EXTERNAL_IP=192.168.0.133')"
   build "$proj" >/dev/null 2>&1
-  unzip -q -d "$WORK" "$WORK/out/l2-patch-192.168.0.133.zip"
+  unzip -q -d "$WORK" "$(zip_of 192.168.0.133)"
 
   mkdir -p "$WORK/repack/system"
   printf '[Server]\r\nServerAddr=127.0.0.1\r\n' > "$WORK/repack/system/l2.ini"
@@ -320,7 +324,7 @@ if command -v docker >/dev/null 2>&1 && docker image inspect "$PS_IMAGE" >/dev/n
   port_login=25106; port_game=27777
   proj="$(fake_root 'L2_EXTERNAL_IP=127.0.0.1' "LOGIN_PORT=$port_login" "GAME_PORT=$port_game")"
   build "$proj" >/dev/null 2>&1
-  unzip -q -d "$WORK" "$WORK/out/l2-patch-127.0.0.1.zip"
+  unzip -q -d "$WORK" "$(zip_of 127.0.0.1)"
   mkdir -p "$WORK/probe/system"
   printf '[Server]\r\nServerAddr=1.2.3.4\r\n' > "$WORK/probe/system/l2.ini"
 
