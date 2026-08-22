@@ -140,6 +140,10 @@ if command -v docker >/dev/null 2>&1 && docker image inspect "$PS_IMAGE" >/dev/n
     docker run --rm -v "$WORK:/w" -w /w "$PS_IMAGE" \
       pwsh -NoProfile -File /w/patch.ps1 -ClientDir "/w/$1" >/dev/null 2>&1
   }
+  run_ps_out() {
+    docker run --rm -v "$WORK:/w" -w /w "$PS_IMAGE" \
+      pwsh -NoProfile -File /w/patch.ps1 -ClientDir "/w/$1" 2>&1
+  }
   addr_in() { grep -a -c 'ServerAddr=192\.168\.0\.133' "$1"; }
   first_bytes() { head -c2 "$1" | od -An -tx1 | tr -d ' \n'; }
 
@@ -196,6 +200,29 @@ if command -v docker >/dev/null 2>&1 && docker image inspect "$PS_IMAGE" >/dev/n
     "$(iconv -f UTF-16LE -t UTF-8 "$WORK/repair2/system/l2.ini" | grep -c 'ServerAddr=192\.168\.0\.133')"
   check "ремонт без .orig: ServerPort уцелел" "1" \
     "$(iconv -f UTF-16LE -t UTF-8 "$WORK/repair2/system/l2.ini" | grep -c 'ServerPort=2106')"
+  teardown
+
+  # --- Версия патча видна в выводе ------------------------------------------
+  # По пересланному скриншоту иначе не понять, какая версия у человека на
+  # руках: чинишь то, что уже починено.
+  setup
+  proj="$(fake_root 'L2_EXTERNAL_IP=192.168.0.133')"
+  build "$proj" >/dev/null 2>&1
+  unzip -q -d "$WORK" "$WORK/out/l2-patch-192.168.0.133.zip"
+  mkdir -p "$WORK/stamp/system"
+  printf '[Server]\r\nServerAddr=127.0.0.1\r\n' > "$WORK/stamp/system/l2.ini"
+
+  out="$(run_ps_out stamp)"
+  check "штамп версии напечатан" "1" "$(printf '%s' "$out" | grep -c "патч от $(date +%Y-%m-%d)")"
+
+  # Кодировка не опознана — вывод должен нести байты для диагностики.
+  mkdir -p "$WORK/utf32/system"
+  printf '[Server]\nServerAddr=127.0.0.1\n' | iconv -f UTF-8 -t UTF-32LE > "$WORK/utf32/system/l2.ini"
+  cp "$WORK/utf32/system/l2.ini" "$WORK/utf32-before.ini"
+  out="$(run_ps_out utf32)"
+  check "при отказе показаны байты" "1" "$(printf '%s' "$out" | grep -c 'байты: 5b 00 00 00')"
+  check "при отказе файл не тронут" "yes" \
+    "$(cmp -s "$WORK/utf32-before.ini" "$WORK/utf32/system/l2.ini" && echo yes || echo no)"
   teardown
 
   # --- Репак: адрес живёт мимо l2.ini ---------------------------------------

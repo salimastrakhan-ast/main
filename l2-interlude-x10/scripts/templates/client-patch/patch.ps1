@@ -12,6 +12,9 @@ $ErrorActionPreference = "Stop"
 $Addr  = "@ADDR@"
 $Login = [int]"@LOGIN_PORT@"
 $Game  = [int]"@GAME_PORT@"
+# Штамп сборки: без него по пересланному скриншоту не понять, какая версия
+# патча у человека на руках, и разговор превращается в гадание.
+$Built = "@BUILT@"
 
 function Head($t) { Write-Host ""; Write-Host "==> $t" -ForegroundColor Cyan }
 function Ok($t)   { Write-Host "  ok  $t" -ForegroundColor Green }
@@ -34,6 +37,7 @@ function Find-Ini([string]$base) {
 }
 
 Head "клиент Lineage 2"
+Write-Host "  патч от $Built, сервер $Addr" -ForegroundColor DarkGray
 
 $ini = Find-Ini $ClientDir
 if (-not $ini) { $ini = Find-Ini $PSScriptRoot }
@@ -155,6 +159,13 @@ if ($text.Contains([char]0)) {
     Write-Host "     Открой system\l2.ini в Блокноте и впиши сам:"
     Write-Host "     [Server]"
     Write-Host "     ServerAddr=$Addr"
+    # Первые байты однозначно называют кодировку. Пусть человек их пришлёт:
+    # по ним видно, что за файл, вместо переписки вслепую.
+    $head = [System.IO.File]::ReadAllBytes($ini) | Select-Object -First 16
+    Write-Host ""
+    Write-Host "     Пришли эту строку тому, кто собирал патч:"
+    Write-Host ("     байты: " + (($head | ForEach-Object { $_.ToString("x2") }) -join " "))
+    Write-Host "     версия патча: $Built"
     exit 1
 }
 

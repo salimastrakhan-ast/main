@@ -42,6 +42,14 @@ ADDR="${ADDR:-${L2_EXTERNAL_IP:-}}"
 LOGIN="${LOGIN_PORT:-2106}"
 GAME="${GAME_PORT:-7777}"
 
+# Штамп сборки уезжает внутрь патча: по пересланному скриншоту иначе не
+# понять, какая версия у человека на руках. Дата плюс короткий хеш, если
+# репозиторий под рукой — тогда версия сходится с историей правок.
+BUILT="$(date +%Y-%m-%d)"
+if rev="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null)"; then
+  BUILT="$BUILT ($rev)"
+fi
+
 require_cmd zip "Установи:  sudo apt install zip"
 
 # 127.0.0.1 в патче — самая частая причина вечного "Connecting...":
@@ -66,6 +74,7 @@ for file in setup-client.bat patch.ps1 README.txt; do
   sed -e "s|@ADDR@|$(sed_safe "$ADDR")|g" \
       -e "s|@LOGIN_PORT@|$(sed_safe "$LOGIN")|g" \
       -e "s|@GAME_PORT@|$(sed_safe "$GAME")|g" \
+      -e "s|@BUILT@|$(sed_safe "$BUILT")|g" \
       "$TEMPLATES/$file" | sed -e 's/\r$//' -e 's/$/\r/' > "$STAGE/$file"
 done
 
