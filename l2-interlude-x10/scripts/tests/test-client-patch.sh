@@ -198,6 +198,43 @@ if command -v docker >/dev/null 2>&1 && docker image inspect "$PS_IMAGE" >/dev/n
     "$(iconv -f UTF-16LE -t UTF-8 "$WORK/repair2/system/l2.ini" | grep -c 'ServerPort=2106')"
   teardown
 
+  # --- Репак: адрес живёт мимо l2.ini ---------------------------------------
+  # Сборки с чужих серверов держат адрес во втором конфиге или переписывают
+  # l2.ini лаунчером. Патч отрабатывает честно, а игрок попадает не туда —
+  # ровно это и случилось у первого живого пользователя.
+  setup
+  proj="$(fake_root 'L2_EXTERNAL_IP=192.168.0.133')"
+  build "$proj" >/dev/null 2>&1
+  unzip -q -d "$WORK" "$WORK/out/l2-patch-192.168.0.133.zip"
+
+  mkdir -p "$WORK/repack/system"
+  printf '[Server]\r\nServerAddr=127.0.0.1\r\n' > "$WORK/repack/system/l2.ini"
+  printf '[Server]\r\nServerAddr=45.132.17.9\r\n' > "$WORK/repack/system/l2server.ini"
+  printf '[Server]\r\nServerAddr=play.someserver.ru\r\n' \
+    | iconv -f UTF-8 -t UTF-16LE > "$WORK/repack/system/options.ini"
+  : > "$WORK/repack/L2Launcher.exe"
+  : > "$WORK/repack/system/l2.exe"
+
+  out="$(printf 'д\n' | docker run --rm -i -v "$WORK:/w" -w /w "$PS_IMAGE" \
+        pwsh -NoProfile -File /w/patch.ps1 -ClientDir /w/repack 2>&1)"
+
+  check "чужой адрес в другом .ini найден" "1" \
+    "$(printf '%s' "$out" | grep -c '45\.132\.17\.9')"
+  check "чужой адрес в UTF-16 .ini найден" "1" \
+    "$(printf '%s' "$out" | grep -c 'play\.someserver\.ru')"
+  check "лаунчер сборки замечен" "1" \
+    "$(printf '%s' "$out" | grep -c 'L2Launcher\.exe')"
+  check "второй .ini поправлен" "1" \
+    "$(grep -c '^ServerAddr=192\.168\.0\.133' "$WORK/repack/system/l2server.ini")"
+  # Номер группы в подстановке однажды съел адрес и записал "$1192.168.0.133".
+  check "мусора от подстановки нет" "0" \
+    "$(grep -c '\$1' "$WORK/repack/system/l2server.ini")"
+  check "UTF-16 .ini поправлен и остался UTF-16" "1" \
+    "$(iconv -f UTF-16LE -t UTF-8 "$WORK/repack/system/options.ini" | grep -c '^ServerAddr=192\.168\.0\.133')"
+  check "копия второго .ini создана" "yes" \
+    "$([ -f "$WORK/repack/system/l2server.ini.orig" ] && echo yes || echo no)"
+  teardown
+
   # --- Отличаем живой L2 от просто открытого порта --------------------------
   # "Порт отвечает" вводит в заблуждение: слушать там может что угодно, а
   # игрок видит молчание клиента после ввода пароля. Логин-сервер L2

@@ -255,6 +255,64 @@ if (-not ($loginOk -and $gameOk)) {
     Write-Host "     Подробнее — в README.txt рядом с этим файлом."
 }
 
+# --- Куда ещё может смотреть клиент -------------------------------------------
+# Репаки с чужих серверов держат адрес мимо l2.ini: во втором .ini, в файле
+# сборки или в лаунчере, который переписывает l2.ini при каждом запуске.
+# Патч тогда отрабатывает честно, а игрок попадает на чужой сервер.
+$clientRoot = Split-Path -Parent $systemDir
+
+Head "не уведёт ли клиент на чужой сервер"
+
+# Другие конфиги с адресом. Ищем и ключ ServerAddr, и голый IP: в сборках
+# встречается и то, и другое, под разными именами файлов.
+$suspects = @()
+Get-ChildItem -LiteralPath $clientRoot -Recurse -File -Include *.ini, *.cfg, *.txt, *.xml `
+              -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -ne $ini -and $_.Length -lt 1MB } |
+    ForEach-Object {
+        # Читаем тем же определителем кодировки, что и l2.ini: конфиги сборок
+        # тоже бывают в UTF-16, а как ANSI они выглядят текстом без совпадений.
+        $body = (Read-Ini $_.FullName).Text
+        if (-not $body) { return }
+        foreach ($m in [regex]::Matches($body, '(?im)^[ \t]*ServerAddr[ \t]*=[ \t]*(\S+)')) {
+            $found = $m.Groups[1].Value
+            if ($found -ne $Addr) { $suspects += [pscustomobject]@{ File = $_.FullName; Addr = $found } }
+        }
+    }
+
+if ($suspects) {
+    Warn "адрес сервера прописан ещё и здесь:"
+    foreach ($s in $suspects) { Write-Host "     $($s.File)  ->  $($s.Addr)" }
+    Write-Host ""
+    $fix = Read-Host "  Прописать в них наш адрес тоже? [д/N]"
+    if ($fix -match '^[дdyY]') {
+        foreach ($s in $suspects | Select-Object -ExpandProperty File -Unique) {
+            $p = Read-Ini $s
+            if ($p.Text.Contains([char]0)) { Warn "$s — не понял кодировку, пропускаю"; continue }
+            if (-not (Test-Path -LiteralPath "$s.orig")) { Copy-Item -LiteralPath $s -Destination "$s.orig" }
+            # ${1}, а не $1: иначе "$1" склеится с адресом и превратится
+            # в номер несуществующей группы — в файл уедет мусор.
+            $new = $p.Text -replace '(?im)^([ \t]*ServerAddr[ \t]*=)[^\r\n]*', "`${1}$Addr"
+            [System.IO.File]::WriteAllText($s, $new, $p.Enc)
+            Ok "поправлен $s"
+        }
+    }
+} else {
+    Ok "других файлов с адресом сервера нет"
+}
+
+# Лаунчер сборки — вторая причина попасть не туда: он переписывает l2.ini
+# своим адресом при каждом запуске, поэтому запускать надо мимо него.
+$launchers = Get-ChildItem -LiteralPath $clientRoot -File -Filter *.exe -ErrorAction SilentlyContinue |
+             Where-Object { $_.Name -notmatch '^(l2|L2)\.exe$' }
+if ($launchers) {
+    Write-Host ""
+    Warn "в папке клиента есть свои запускалки:"
+    foreach ($l in $launchers) { Write-Host "     $($l.Name)" }
+    Write-Host "     Через них не запускай: лаунчер сборки может подменить адрес"
+    Write-Host "     обратно на свой сервер. Запускай напрямую system\l2.exe."
+}
+
 # --- Не висит ли уже клиент ---------------------------------------------------
 # L2 не поднимает второй экземпляр: если предыдущий запуск завис в памяти,
 # ярлык молча не делает ничего. Симптом пугающий, причина безобидная.
@@ -271,7 +329,8 @@ if ($running) {
 # нужными правами и параметрами, а запуск в обход него оставляет
 # зависший процесс, после которого ярлык перестаёт работать.
 Head "что дальше"
-Write-Host "  1. Запусти игру как обычно — своим ярлыком или system\l2.exe."
+Write-Host "  1. Запусти игру напрямую: $systemDir\l2.exe"
+Write-Host "     Не ярлыком сборки — он может увести на чужой сервер."
 Write-Host "  2. Логин и пароль — любые: аккаунт создастся сам при первом входе."
 Write-Host "     Запомни их — со второго раза это уже обычный пароль."
 Write-Host "  3. Права ГМ выдаются на сервере:  make gm CHAR=ИмяПерсонажа"
