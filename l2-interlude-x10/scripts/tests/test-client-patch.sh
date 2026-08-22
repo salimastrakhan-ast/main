@@ -68,6 +68,33 @@ check "плейсхолдеров не осталось" "0" \
   "$(unzip -p "$zipfile" | grep -c '@ADDR@\|@LOGIN_PORT@\|@GAME_PORT@')"
 teardown
 
+# --- Распакованная копия рядом с архивом -------------------------------------
+# Ловушка из жизни: человек однажды распаковал архив и потом копирует папку,
+# а обновляется только .zip. Он ставит одну и ту же старую версию и уверен,
+# что взял новую. Поэтому папку пересобираем вместе с архивом.
+setup
+proj="$(fake_root 'L2_EXTERNAL_IP=192.168.0.133')"
+build "$proj" >/dev/null 2>&1
+unpacked="$WORK/out/l2-patch-192.168.0.133"
+
+check "распакованная копия создана" "yes" "$([ -d "$unpacked" ] && echo yes || echo no)"
+for file in setup-client.bat patch.ps1 README.txt; do
+  check "$file: папка совпадает с архивом" "yes" \
+    "$(unzip -p "$WORK/out/l2-patch-192.168.0.133.zip" "$file" \
+       | cmp -s - "$unpacked/$file" && echo yes || echo no)"
+done
+
+# Устаревшая папка от прошлой сборки должна быть заменена, а не оставлена.
+printf 'старьё\n' > "$unpacked/patch.ps1"
+printf 'мусор от прошлой сборки\n' > "$unpacked/лишний-файл.txt"
+build "$proj" >/dev/null 2>&1
+check "старая копия перезаписана" "yes" \
+  "$(unzip -p "$WORK/out/l2-patch-192.168.0.133.zip" patch.ps1 \
+     | cmp -s - "$unpacked/patch.ps1" && echo yes || echo no)"
+check "чужой файл из папки убран" "no" \
+  "$([ -f "$unpacked/лишний-файл.txt" ] && echo yes || echo no)"
+teardown
+
 # --- Адрес и порты из .env ---------------------------------------------------
 setup
 proj="$(fake_root 'L2_EXTERNAL_IP=192.168.0.133' 'LOGIN_PORT=2107' 'GAME_PORT=7778')"

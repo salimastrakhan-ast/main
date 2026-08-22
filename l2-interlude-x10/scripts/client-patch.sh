@@ -87,12 +87,26 @@ for file in README.txt patch.ps1; do
 done
 
 mkdir -p "$OUT_DIR"
-OUT="$OUT_DIR/l2-patch-$ADDR.zip"
+NAME="l2-patch-$ADDR"
+OUT="$OUT_DIR/$NAME.zip"
 rm -f "$OUT"
 (cd "$STAGE" && zip -X -q "$OUT" setup-client.bat patch.ps1 README.txt)
 
+# Рядом с архивом кладём те же файлы распакованными и держим их свежими.
+# Иначе выходит ловушка: человек однажды распаковал архив, копирует папку,
+# а обновляется только .zip — и он раз за разом ставит одну и ту же
+# старую версию, уверенный, что взял новую.
+UNPACKED="$OUT_DIR/$NAME"
+rm -rf "$UNPACKED"
+mkdir -p "$UNPACKED"
+cp "$STAGE/setup-client.bat" "$STAGE/patch.ps1" "$STAGE/README.txt" "$UNPACKED/"
+
 log "патч для клиента"
 ok "адрес сервера: $ADDR (логин $LOGIN, игра $GAME)"
+ok "версия: $BUILT"
 ok "архив: $OUT ($(du -h "$OUT" | cut -f1))"
-printf '     Скинь архив на машину с клиентом, распакуй в папку клиента\n'
-printf '     (там, где лежит system) и запусти setup-client.bat.\n'
+ok "распакованный: $UNPACKED/"
+printf '     Копируй на машину с клиентом любое из двух — они одинаковые.\n'
+printf '     Распакуй в папку клиента (там, где лежит system) и запусти\n'
+printf '     setup-client.bat. Первой строкой он назовёт свою версию:\n'
+printf '     сверь её с той, что выше.\n'
