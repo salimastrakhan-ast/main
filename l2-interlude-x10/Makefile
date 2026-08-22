@@ -14,7 +14,7 @@ COMPOSE := docker compose -f docker-compose.yml
 
 .DEFAULT_GOAL := help
 .PHONY: help install env build configure db-init up down stop start restart \
-        logs logs-login logs-db status client play gm online backup restore test clean clean-all
+        logs logs-login logs-db status client play patch gm online backup restore test clean clean-all
 
 help:
 	@echo ""
@@ -37,6 +37,7 @@ help:
 	@echo "  Клиент игры"
 	@echo "    make client DIR=~/l2-client   прописать адрес сервера в клиент"
 	@echo "    make play                     запустить клиент через Wine"
+	@echo "    make patch                    собрать патч для клиента на другой машине"
 	@echo ""
 	@echo "  Администрирование"
 	@echo "    make gm CHAR=Имя     выдать права ГМ персонажу"
@@ -112,6 +113,10 @@ client:
 
 play:
 	@./scripts/client.sh run
+
+patch:
+	@if [ -z "$(ADDR)" ]; then ./scripts/client-patch.sh; \
+	else ./scripts/client-patch.sh "$(ADDR)"; fi
 
 gm:
 	@if [ -z "$(CHAR)" ]; then \

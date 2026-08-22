@@ -144,6 +144,15 @@ make status
 
 **4. Клиент**
 
+```bash
+make client DIR=~/l2-client   # клиент на этой же машине
+make patch                    # патч для клиента на другой машине
+```
+
+`make patch` собирает `dist/patch/l2-patch-<адрес>.zip`: игрок распаковывает
+его в папку своего клиента, запускает `setup-client.bat` — и клиент начинает
+ходить на наш сервер. Файлов клиента в архиве нет.
+
 См. [docs/CLIENT-SETUP.md](docs/CLIENT-SETUP.md) — там про `l2.ini`, версию
 протокола и геодату.
 
@@ -246,6 +255,9 @@ scripts/
   configure.sh            применить профили
   apply-config.py         патчер .ini по ключам
   db-setup.sh             создать и наполнить базы
+  client.sh               настроить и запустить клиент на этой машине
+  client-patch.sh         собрать патч для клиента на другой машине
+  templates/client-patch/ то, что уезжает игроку внутри патча
   account.sh              ГМ, баны, онлайн
   backup.sh               копии и восстановление
   status.sh               состояние сервера
