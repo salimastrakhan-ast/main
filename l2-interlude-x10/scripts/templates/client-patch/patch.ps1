@@ -200,6 +200,27 @@ function Test-Port([string]$host_, [int]$port) {
     } catch { return $false } finally { $client.Close() }
 }
 
+# Открытый порт ещё не значит живой L2: в него может смотреть что угодно.
+# Логин-сервер здоровается первым — шлёт пакет Init сразу после соединения.
+# Молчание в ответ отличает "сервер не тот" от "сервер не отвечает".
+function Test-L2Login([string]$host_, [int]$port) {
+    $client = New-Object System.Net.Sockets.TcpClient
+    try {
+        $async = $client.BeginConnect($host_, $port, $null, $null)
+        if (-not $async.AsyncWaitHandle.WaitOne(3000)) { return $false }
+        $client.EndConnect($async)
+
+        $stream = $client.GetStream()
+        $stream.ReadTimeout = 5000
+        $head = New-Object byte[] 2
+        if ($stream.Read($head, 0, 2) -lt 2) { return $false }
+        # Первые два байта — длина пакета вместе с ними. У Init она заметно
+        # больше пустого ответа, но в разумных пределах.
+        $size = [BitConverter]::ToUInt16($head, 0)
+        return ($size -gt 20 -and $size -lt 4096)
+    } catch { return $false } finally { $client.Close() }
+}
+
 Head "связь с сервером $Addr"
 
 $loginOk = Test-Port $Addr $Login
@@ -210,6 +231,17 @@ else          { Bad "логин-сервер (порт $Login) не отвеча
 
 if ($gameOk) { Ok "игровой сервер (порт $Game) отвечает" }
 else         { Bad "игровой сервер (порт $Game) не отвечает" }
+
+if ($loginOk) {
+    if (Test-L2Login $Addr $Login) {
+        Ok "это настоящий логин-сервер L2 (прислал пакет Init)"
+    } else {
+        Write-Host ""
+        Warn "порт $Login открыт, но по-русски L2 оттуда не отвечают."
+        Write-Host "     Похоже, на этом адресе слушает не логин-сервер L2."
+        Write-Host "     На сервере проверь:  make status"
+    }
+}
 
 if (-not ($loginOk -and $gameOk)) {
     Write-Host ""

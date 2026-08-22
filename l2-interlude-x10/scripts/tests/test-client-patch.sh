@@ -197,6 +197,54 @@ if command -v docker >/dev/null 2>&1 && docker image inspect "$PS_IMAGE" >/dev/n
   check "ремонт без .orig: ServerPort уцелел" "1" \
     "$(iconv -f UTF-16LE -t UTF-8 "$WORK/repair2/system/l2.ini" | grep -c 'ServerPort=2106')"
   teardown
+
+  # --- Отличаем живой L2 от просто открытого порта --------------------------
+  # "Порт отвечает" вводит в заблуждение: слушать там может что угодно, а
+  # игрок видит молчание клиента после ввода пароля. Логин-сервер L2
+  # здоровается первым, на этом и ловим.
+  setup
+  port_login=25106; port_game=27777
+  proj="$(fake_root 'L2_EXTERNAL_IP=127.0.0.1' "LOGIN_PORT=$port_login" "GAME_PORT=$port_game")"
+  build "$proj" >/dev/null 2>&1
+  unzip -q -d "$WORK" "$WORK/out/l2-patch-127.0.0.1.zip"
+  mkdir -p "$WORK/probe/system"
+  printf '[Server]\r\nServerAddr=1.2.3.4\r\n' > "$WORK/probe/system/l2.ini"
+
+  # Заглушка: шлёт правдоподобный заголовок пакета либо молчит.
+  fake_server() {
+    python3 -c "
+import socket, sys, threading
+mode, port = sys.argv[1], int(sys.argv[2])
+s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(('127.0.0.1', port)); s.listen(8)
+def serve():
+    while True:
+        try: c, _ = s.accept()
+        except OSError: return
+        if mode == 'l2': c.sendall(bytes([194, 0]) + b'\x00' * 192)
+        threading.Timer(2.0, c.close).start()
+threading.Thread(target=serve, daemon=True).start()
+import time; time.sleep(25)
+" "$1" "$2" &
+    sleep 1
+  }
+
+  fake_server l2 "$port_login";   l2_pid=$!
+  fake_server mute "$port_game";  mute_pid=$!
+
+  out="$(docker run --rm --network host -v "$WORK:/w" -w /w "$PS_IMAGE" \
+        pwsh -NoProfile -File /w/patch.ps1 -ClientDir /w/probe 2>&1)"
+  check "живой L2 опознан" "1" "$(printf '%s' "$out" | grep -c 'настоящий логин-сервер L2')"
+
+  # Теперь наоборот: на порту логина молчаливая заглушка.
+  kill "$l2_pid" "$mute_pid" 2>/dev/null; wait "$l2_pid" "$mute_pid" 2>/dev/null
+  fake_server mute "$port_login"; mute2_pid=$!
+  out="$(docker run --rm --network host -v "$WORK:/w" -w /w "$PS_IMAGE" \
+        pwsh -NoProfile -File /w/patch.ps1 -ClientDir /w/probe 2>&1)"
+  check "молчащий порт не принят за L2" "1" \
+    "$(printf '%s' "$out" | grep -c 'по-русски L2 оттуда не отвечают')"
+  kill "$mute2_pid" 2>/dev/null; wait "$mute2_pid" 2>/dev/null
+  teardown
 else
   printf '  \033[33mПРОПУЩЕНО\033[0m прогон patch.ps1: нет образа %s\n' "$PS_IMAGE"
 fi
