@@ -58,10 +58,24 @@ $systemDir = Split-Path -Parent $ini
 Ok "нашёл $ini"
 
 # --- Правим ServerAddr --------------------------------------------------------
-# Читаем и пишем в кодировке системы: l2.ini у всех сборок в однобайтовой,
-# и переписывать её целиком в UTF-8 нельзя — клиент такой файл не поймёт.
-$enc  = [System.Text.Encoding]::Default
-$text = [System.IO.File]::ReadAllText($ini, $enc)
+# Кодировку определяем, а не назначаем: l2.ini бывает и однобайтовым, и
+# UTF-16 (официальные сборки). Прочитать UTF-16 как ANSI и записать обратно
+# значит перемолоть файл в мусор — клиент после такого не стартует вообще.
+$reader = New-Object System.IO.StreamReader($ini, [System.Text.Encoding]::Default, $true)
+try {
+    $text = $reader.ReadToEnd()
+    $enc  = $reader.CurrentEncoding
+} finally { $reader.Close() }
+
+# Нулевые байты в тексте = кодировку мы не угадали (UTF-16 без BOM или файл
+# вообще не текстовый). Лучше честно отказаться, чем испортить рабочий клиент.
+if ($text.Contains([char]0)) {
+    Bad "не понял кодировку l2.ini — не трогаю файл."
+    Write-Host "     Открой system\l2.ini в Блокноте и впиши сам:"
+    Write-Host "     [Server]"
+    Write-Host "     ServerAddr=$Addr"
+    exit 1
+}
 
 $backup = "$ini.orig"
 if (-not (Test-Path -LiteralPath $backup)) {
@@ -129,25 +143,23 @@ if (-not ($loginOk -and $gameOk)) {
     Write-Host "     Подробнее — в README.txt рядом с этим файлом."
 }
 
+# --- Не висит ли уже клиент ---------------------------------------------------
+# L2 не поднимает второй экземпляр: если предыдущий запуск завис в памяти,
+# ярлык молча не делает ничего. Симптом пугающий, причина безобидная.
+$running = Get-Process -Name l2, L2, engine -ErrorAction SilentlyContinue
+if ($running) {
+    Write-Host ""
+    Warn "клиент уже висит в памяти (процесс l2.exe)."
+    Write-Host "     Пока он там, игра по ярлыку не запустится."
+    Write-Host "     Сними его в диспетчере задач (Ctrl+Shift+Esc) или перезагрузи Windows."
+}
+
 # --- Что дальше ---------------------------------------------------------------
+# Игру намеренно не запускаем отсюда: у клиента бывает свой ярлык с
+# нужными правами и параметрами, а запуск в обход него оставляет
+# зависший процесс, после которого ярлык перестаёт работать.
 Head "что дальше"
-Write-Host "  1. Запусти игру: $systemDir\l2.exe"
+Write-Host "  1. Запусти игру как обычно — своим ярлыком или system\l2.exe."
 Write-Host "  2. Логин и пароль — любые: аккаунт создастся сам при первом входе."
 Write-Host "     Запомни их — со второго раза это уже обычный пароль."
 Write-Host "  3. Права ГМ выдаются на сервере:  make gm CHAR=ИмяПерсонажа"
-
-$exe = @("l2.exe", "L2.exe") |
-    ForEach-Object { Join-Path $systemDir $_ } |
-    Where-Object { Test-Path -LiteralPath $_ } |
-    Select-Object -First 1
-
-if ($exe -and $loginOk) {
-    Write-Host ""
-    $run = Read-Host "  Запустить игру сейчас? [д/N]"
-    if ($run -match '^[дdyY]') {
-        # Клиент 32-битный и ищет ресурсы относительно текущего каталога,
-        # поэтому запускать его надо именно из system.
-        Start-Process -FilePath $exe -WorkingDirectory $systemDir
-        Ok "запускаю $exe"
-    }
-}

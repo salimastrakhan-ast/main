@@ -117,6 +117,55 @@ build "$proj" >/dev/null 2>&1
 check "без .env и без аргумента — отказ" "1" "$?"
 teardown
 
+# --- Сам patch.ps1 под настоящим PowerShell ----------------------------------
+# Гоняется, только если образ уже скачан: тянуть его ради тестов не станем.
+# Проверяем кодировки l2.ini — на них скрипт однажды уже испортил клиент,
+# прочитав UTF-16 как однобайтовый текст и записав обратно мусор.
+PS_IMAGE=mcr.microsoft.com/powershell:latest
+if command -v docker >/dev/null 2>&1 && docker image inspect "$PS_IMAGE" >/dev/null 2>&1; then
+  setup
+  proj="$(fake_root 'L2_EXTERNAL_IP=192.168.0.133')"
+  build "$proj" >/dev/null 2>&1
+  unzip -q -d "$WORK" "$WORK/out/l2-patch-192.168.0.133.zip"
+
+  ini_body=$'[Server]\r\nServerAddr=127.0.0.1\r\nServerPort=2106\r\n'
+  make_ini() { mkdir -p "$WORK/$1/system"; printf '%s' "$ini_body" | iconv -f UTF-8 -t "$2" > "$WORK/$1/system/l2.ini"; }
+
+  make_ini ansi CP1251
+  make_ini utf16 UTF-16LE
+  mkdir -p "$WORK/utf16bom/system"
+  { printf '\xff\xfe'; cat "$WORK/utf16/system/l2.ini"; } > "$WORK/utf16bom/system/l2.ini"
+
+  run_ps() {
+    docker run --rm -v "$WORK:/w" -w /w "$PS_IMAGE" \
+      pwsh -NoProfile -File /w/patch.ps1 -ClientDir "/w/$1" >/dev/null 2>&1
+  }
+  addr_in() { grep -a -c 'ServerAddr=192\.168\.0\.133' "$1"; }
+  first_bytes() { head -c2 "$1" | od -An -tx1 | tr -d ' \n'; }
+
+  run_ps ansi
+  check "ANSI: адрес прописан" "1" "$(addr_in "$WORK/ansi/system/l2.ini")"
+  check "ANSI: нулевых байтов не появилось" "0" \
+    "$(tr -dc '\000' < "$WORK/ansi/system/l2.ini" | wc -c)"
+
+  run_ps utf16bom
+  check "UTF-16 с BOM: адрес прописан" "1" \
+    "$(iconv -f UTF-16LE -t UTF-8 "$WORK/utf16bom/system/l2.ini" | grep -c 'ServerAddr=192\.168\.0\.133')"
+  check "UTF-16 с BOM: кодировка сохранена" "fffe" \
+    "$(first_bytes "$WORK/utf16bom/system/l2.ini")"
+
+  # Кодировку не опознали — файл должен остаться нетронутым, а не испорченным.
+  cp "$WORK/utf16/system/l2.ini" "$WORK/utf16-before.ini"
+  run_ps utf16
+  check "UTF-16 без BOM: отказ, файл не тронут" "yes" \
+    "$(cmp -s "$WORK/utf16-before.ini" "$WORK/utf16/system/l2.ini" && echo yes || echo no)"
+  check "UTF-16 без BOM: копия .orig не создана" "no" \
+    "$([ -f "$WORK/utf16/system/l2.ini.orig" ] && echo yes || echo no)"
+  teardown
+else
+  printf '  \033[33mПРОПУЩЕНО\033[0m прогон patch.ps1: нет образа %s\n' "$PS_IMAGE"
+fi
+
 echo
 printf 'Итог патча клиента: \033[32m%d passed\033[0m, ' "$PASS"
 if [ "$FAIL" -gt 0 ]; then printf '\033[31m%d failed\033[0m\n' "$FAIL"; exit 1; fi
