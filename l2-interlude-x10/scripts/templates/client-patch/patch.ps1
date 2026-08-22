@@ -57,18 +57,99 @@ if (-not $ini) {
 $systemDir = Split-Path -Parent $ini
 Ok "нашёл $ini"
 
-# --- Правим ServerAddr --------------------------------------------------------
-# Кодировку определяем, а не назначаем: l2.ini бывает и однобайтовым, и
-# UTF-16 (официальные сборки). Прочитать UTF-16 как ANSI и записать обратно
-# значит перемолоть файл в мусор — клиент после такого не стартует вообще.
-$reader = New-Object System.IO.StreamReader($ini, [System.Text.Encoding]::Default, $true)
-try {
-    $text = $reader.ReadToEnd()
-    $enc  = $reader.CurrentEncoding
-} finally { $reader.Close() }
+# --- Кодировка l2.ini ---------------------------------------------------------
+# Определяем, а не назначаем: файл бывает однобайтовым, UTF-8 и UTF-16, причём
+# UTF-16 часто без BOM. Прочитать UTF-16 как ANSI и записать обратно значит
+# перемолоть конфиг в мусор — клиент после такого не стартует вообще.
+function Read-Ini([string]$path) {
+    $bytes = [System.IO.File]::ReadAllBytes($path)
 
-# Нулевые байты в тексте = кодировку мы не угадали (UTF-16 без BOM или файл
-# вообще не текстовый). Лучше честно отказаться, чем испортить рабочий клиент.
+    if ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE) {
+        return @{ Text = [System.Text.Encoding]::Unicode.GetString($bytes, 2, $bytes.Length - 2)
+                  Enc  = New-Object System.Text.UnicodeEncoding($false, $true) }
+    }
+    if ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFE -and $bytes[1] -eq 0xFF) {
+        return @{ Text = [System.Text.Encoding]::BigEndianUnicode.GetString($bytes, 2, $bytes.Length - 2)
+                  Enc  = New-Object System.Text.UnicodeEncoding($true, $true) }
+    }
+    if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        return @{ Text = [System.Text.Encoding]::UTF8.GetString($bytes, 3, $bytes.Length - 3)
+                  Enc  = New-Object System.Text.UTF8Encoding($true) }
+    }
+
+    # BOM нет. UTF-16 выдают нулевые байты на чётных или нечётных позициях:
+    # в ASCII-тексте ("ServerAddr=...") половина каждой пары — ноль.
+    $probe = [Math]::Min($bytes.Length, 512)
+    $zeroOdd = 0; $zeroEven = 0
+    for ($i = 0; $i -lt $probe; $i++) {
+        if ($bytes[$i] -eq 0) { if ($i % 2) { $zeroOdd++ } else { $zeroEven++ } }
+    }
+    if ($zeroOdd -gt $probe / 8 -and $zeroEven -eq 0) {
+        return @{ Text = [System.Text.Encoding]::Unicode.GetString($bytes)
+                  Enc  = New-Object System.Text.UnicodeEncoding($false, $false) }
+    }
+    if ($zeroEven -gt $probe / 8 -and $zeroOdd -eq 0) {
+        return @{ Text = [System.Text.Encoding]::BigEndianUnicode.GetString($bytes)
+                  Enc  = New-Object System.Text.UnicodeEncoding($true, $false) }
+    }
+
+    return @{ Text = [System.Text.Encoding]::Default.GetString($bytes)
+              Enc  = [System.Text.Encoding]::Default }
+}
+
+# Ранние версии патча читали UTF-16 как однобайтовый текст и дописывали в
+# конец секцию [Server] однобайтовыми буквами. Внутри UTF-16 такой хвост —
+# однозначная подпись поломки: в честном UTF-16 у ASCII каждый второй байт
+# нулевой, а тут подряд идут обычные буквы. Ищем её по сырым байтам, потому
+# что после разбора хвост выглядит безобидными иероглифами.
+function Find-ForeignTail([byte[]]$bytes, $enc) {
+    if (-not ($enc -is [System.Text.UnicodeEncoding])) { return -1 }
+    $needle = [System.Text.Encoding]::ASCII.GetBytes("[Server]")
+    for ($i = 0; $i -le $bytes.Length - $needle.Length; $i++) {
+        $hit = $true
+        for ($j = 0; $j -lt $needle.Length; $j++) {
+            if ($bytes[$i + $j] -ne $needle[$j]) { $hit = $false; break }
+        }
+        if ($hit) {
+            # Отступаем назад через перевод строки, чтобы не оставить огрызок.
+            while ($i -gt 0 -and ($bytes[$i - 1] -eq 13 -or $bytes[$i - 1] -eq 10)) { $i-- }
+            return $i
+        }
+    }
+    return -1
+}
+
+$backup = "$ini.orig"
+
+$parsed = Read-Ini $ini
+$text = $parsed.Text
+$enc  = $parsed.Enc
+
+$foreign = Find-ForeignTail ([System.IO.File]::ReadAllBytes($ini)) $enc
+$damaged = ($foreign -ge 0 -or $text.Contains([char]0) -or $text.Contains([char]0xFFFD) -or
+            ([regex]::Matches($text, '(?im)^[ \t]*\[Server\][ \t]*$').Count -gt 1))
+
+if ($damaged) {
+    if (Test-Path -LiteralPath $backup) {
+        # Копия снята до всех правок — вернуть её точнее, чем чинить по кускам.
+        Copy-Item -LiteralPath $backup -Destination $ini -Force
+        $parsed = Read-Ini $ini
+        $text = $parsed.Text
+        $enc  = $parsed.Enc
+        Ok "l2.ini был испорчен прошлым патчем — восстановлен из l2.ini.orig"
+    } elseif ($foreign -ge 0) {
+        # Копии нет: отрезаем чужой хвост, остальное в файле не пострадало.
+        $bytes = [System.IO.File]::ReadAllBytes($ini)
+        [System.IO.File]::WriteAllBytes($ini, $bytes[0..($foreign - 1)])
+        $parsed = Read-Ini $ini
+        $text = $parsed.Text
+        $enc  = $parsed.Enc
+        Ok "убран мусор, дописанный прошлым патчем"
+    }
+}
+
+# Нули в тексте после разбора = это не текст, который мы понимаем.
+# Лучше честно отказаться, чем испортить рабочий клиент.
 if ($text.Contains([char]0)) {
     Bad "не понял кодировку l2.ini — не трогаю файл."
     Write-Host "     Открой system\l2.ini в Блокноте и впиши сам:"
@@ -77,7 +158,6 @@ if ($text.Contains([char]0)) {
     exit 1
 }
 
-$backup = "$ini.orig"
 if (-not (Test-Path -LiteralPath $backup)) {
     Copy-Item -LiteralPath $ini -Destination $backup
     Ok "старый l2.ini сохранён как l2.ini.orig"

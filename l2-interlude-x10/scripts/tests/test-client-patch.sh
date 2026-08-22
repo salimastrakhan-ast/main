@@ -154,13 +154,48 @@ if command -v docker >/dev/null 2>&1 && docker image inspect "$PS_IMAGE" >/dev/n
   check "UTF-16 с BOM: кодировка сохранена" "fffe" \
     "$(first_bytes "$WORK/utf16bom/system/l2.ini")"
 
-  # Кодировку не опознали — файл должен остаться нетронутым, а не испорченным.
-  cp "$WORK/utf16/system/l2.ini" "$WORK/utf16-before.ini"
+  # Ровно тот случай, на котором патч однажды угробил клиент: UTF-16 без BOM.
   run_ps utf16
-  check "UTF-16 без BOM: отказ, файл не тронут" "yes" \
-    "$(cmp -s "$WORK/utf16-before.ini" "$WORK/utf16/system/l2.ini" && echo yes || echo no)"
-  check "UTF-16 без BOM: копия .orig не создана" "no" \
-    "$([ -f "$WORK/utf16/system/l2.ini.orig" ] && echo yes || echo no)"
+  check "UTF-16 без BOM: адрес прописан" "1" \
+    "$(iconv -f UTF-16LE -t UTF-8 "$WORK/utf16/system/l2.ini" | grep -c 'ServerAddr=192\.168\.0\.133')"
+  check "UTF-16 без BOM: BOM не приписан" "no" \
+    "$([ "$(first_bytes "$WORK/utf16/system/l2.ini")" = "fffe" ] && echo yes || echo no)"
+  check "UTF-16 без BOM: файл остался UTF-16" "yes" \
+    "$(iconv -f UTF-16LE -t UTF-8 "$WORK/utf16/system/l2.ini" >/dev/null 2>&1 && echo yes || echo no)"
+
+  # --- Ремонт клиента, испорченного прежней версией патча --------------------
+  # Та версия дописывала [Server] однобайтовыми буквами внутрь UTF-16.
+  damaged_ini() {
+    mkdir -p "$WORK/$1/system"
+    printf '[Server]\r\nServerAddr=127.0.0.1\r\nServerPort=2106\r\n' \
+      | iconv -f UTF-8 -t UTF-16LE > "$WORK/$1/system/l2.ini"
+    printf '\r\n[Server]\r\nServerAddr=192.168.0.133\r\n' >> "$WORK/$1/system/l2.ini"
+  }
+  # Однобайтовый "[Server]" внутри файла = мусор от прежней версии.
+  has_foreign_tail() {
+    python3 -c "import sys; sys.exit(0 if open(sys.argv[1],'rb').read().find(b'[Server]') >= 0 else 1)" "$1" \
+      && echo yes || echo no
+  }
+
+  # С резервной копией: возвращаем её целиком.
+  damaged_ini repair
+  printf '[Server]\r\nServerAddr=127.0.0.1\r\nServerPort=2106\r\n' \
+    | iconv -f UTF-8 -t UTF-16LE > "$WORK/repair/system/l2.ini.orig"
+  run_ps repair
+  check "ремонт из .orig: мусор убран" "no" "$(has_foreign_tail "$WORK/repair/system/l2.ini")"
+  check "ремонт из .orig: адрес прописан" "1" \
+    "$(iconv -f UTF-16LE -t UTF-8 "$WORK/repair/system/l2.ini" | grep -c 'ServerAddr=192\.168\.0\.133')"
+  check "ремонт из .orig: ServerPort уцелел" "1" \
+    "$(iconv -f UTF-16LE -t UTF-8 "$WORK/repair/system/l2.ini" | grep -c 'ServerPort=2106')"
+
+  # Без резервной копии: отрезаем чужой хвост.
+  damaged_ini repair2
+  run_ps repair2
+  check "ремонт без .orig: мусор убран" "no" "$(has_foreign_tail "$WORK/repair2/system/l2.ini")"
+  check "ремонт без .orig: адрес прописан" "1" \
+    "$(iconv -f UTF-16LE -t UTF-8 "$WORK/repair2/system/l2.ini" | grep -c 'ServerAddr=192\.168\.0\.133')"
+  check "ремонт без .orig: ServerPort уцелел" "1" \
+    "$(iconv -f UTF-16LE -t UTF-8 "$WORK/repair2/system/l2.ini" | grep -c 'ServerPort=2106')"
   teardown
 else
   printf '  \033[33mПРОПУЩЕНО\033[0m прогон patch.ps1: нет образа %s\n' "$PS_IMAGE"
