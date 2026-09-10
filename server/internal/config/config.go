@@ -17,6 +17,7 @@ type Config struct {
 	HTTPAddr    string
 	PublicURL   string
 	TrustProxy  bool
+	CORSOrigins string
 	DatabaseURL string
 	RedisURL    string
 
@@ -45,7 +46,11 @@ func Load() (Config, error) {
 		PublicURL: env("MAYAK_PUBLIC_URL", "http://localhost:8080"),
 		// X-Forwarded-For можно верить только если перед сервером стоит наш
 		// прокси: иначе любой клиент подделает свой IP и обойдёт лимиты.
-		TrustProxy:  envBool("MAYAK_TRUST_PROXY", false),
+		TrustProxy: envBool("MAYAK_TRUST_PROXY", false),
+		// Пусто — CORS выключен, и это правильное значение для мобильных
+		// клиентов. Веб-клиенту адрес перечисляют явно; звёздочка в проде
+		// означала бы, что любой сайт ходит в API от имени вошедшего.
+		CORSOrigins: env("MAYAK_CORS_ORIGINS", ""),
 		DatabaseURL: env("MAYAK_DATABASE_URL", "postgres://mayak:mayak@localhost:5433/mayak?sslmode=disable"),
 		RedisURL:    env("MAYAK_REDIS_URL", "redis://localhost:6380/0"),
 

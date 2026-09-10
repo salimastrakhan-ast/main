@@ -12,3 +12,8 @@ app/android/.gradle/
 # Локальное окружение
 .env
 *.log
+
+# Сквозные проверки
+e2e/node_modules/
+e2e/*.png
+e2e/*.log

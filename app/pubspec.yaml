@@ -1,0 +1,59 @@
+name: mayak
+description: Мессенджер Маяк — клиент для iOS, Android и веба.
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Состояние. Riverpod, а не Bloc: меньше обвязки на единицу логики, а
+  # логика здесь и так в репозиториях, а не в контроллерах.
+  flutter_riverpod: ^2.6.1
+
+  # Локальная база — источник правды для интерфейса. UI подписан на её
+  # стримы, а не на сокет: отсюда мгновенный запуск и работа офлайн.
+  drift: ^2.20.3
+  sqlite3_flutter_libs: ^0.5.24
+  path_provider: ^2.1.4
+  path: ^1.9.0
+
+  # Сеть
+  web_socket_channel: ^3.0.1
+  http: ^1.2.2
+
+  # Токены — в защищённом хранилище устройства, не в SharedPreferences.
+  flutter_secure_storage: ^9.2.2
+
+  uuid: ^4.5.1
+  intl: ^0.19.0
+  image_picker: ^1.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  drift_dev: ^2.20.3
+  build_runner: ^2.4.13
+
+flutter:
+  uses-material-design: true
+
+  # Шрифт лежит в сборке, а не тянется с fonts.gstatic.com.
+  #
+  # По умолчанию Flutter в вебе качает Roboto с чужого CDN и до его ответа
+  # держит первый кадр. Если CDN недоступен — а для приложения, рассчитанного
+  # на Россию, это рабочее предположение, — человек пятнадцать секунд смотрит
+  # на белый экран. Проверено: именно так и происходит.
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Roboto-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Roboto-Bold.ttf
+          weight: 700

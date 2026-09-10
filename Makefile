@@ -46,3 +46,26 @@ psql:
 
 redis:
 	redis-cli -p 6380
+
+# --- Клиент ---
+
+.PHONY: app-get app-gen app-test app-analyze app-web e2e
+
+app-get:
+	cd app && flutter pub get
+
+app-gen:
+	cd app && dart run build_runner build --delete-conflicting-outputs
+
+app-analyze:
+	cd app && flutter analyze
+
+app-test:
+	cd app && flutter test
+
+app-web:
+	cd app && flutter build web --release --dart-define=MAYAK_API=$(or $(API),http://localhost:8080)
+
+# Сквозная проверка: живой клиент против живого сервера. Подробности в e2e/README.md
+e2e:
+	cd e2e && npm install --silent && node chat.mjs

@@ -56,7 +56,7 @@ func (s *Server) Handler() http.Handler {
 	// браузерный WebSocket не умеет слать Authorization при подключении.
 	mux.HandleFunc("GET /v1/ws", s.hub.Serve)
 
-	return withRecover(withLogging(mux))
+	return withCORS(parseOrigins(s.cfg.CORSOrigins), withRecover(withLogging(mux)))
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
