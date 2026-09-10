@@ -240,8 +240,12 @@ func (c *Conn) handleRead(ctx context.Context, env ws.Envelope) {
 	c.broadcast(ctx, payload.ChatID, ws.EventReadUpdate, update)
 }
 
-// handleTyping — единственная команда, которая ничего не пишет в базу.
-// Событие живёт секунды, и хранить его негде и незачем.
+// handleTyping — единственная команда, которая ничего не пишет в базу и не
+// отвечает подтверждением.
+//
+// Событие живёт секунды, хранить его негде и незачем, а подтверждать каждое
+// нажатие клавиши — удвоить трафик ради ничего. Ошибку клиент всё же
+// получит: писать в чужой чат нельзя даже «печатает».
 func (c *Conn) handleTyping(ctx context.Context, env ws.Envelope) {
 	var payload ws.TypingData
 	if err := decodeData(env, &payload); err != nil {
