@@ -5,6 +5,7 @@ import (
 
 	"github.com/salimastrakhan-ast/main/server/internal/auth"
 	"github.com/salimastrakhan-ast/main/server/internal/config"
+	"github.com/salimastrakhan-ast/main/server/internal/realtime"
 	"github.com/salimastrakhan-ast/main/server/internal/store"
 )
 
@@ -13,10 +14,11 @@ type Server struct {
 	cfg   config.Config
 	store *store.Store
 	auth  *auth.Service
+	hub   *realtime.Hub
 }
 
-func NewServer(cfg config.Config, st *store.Store, authSvc *auth.Service) *Server {
-	return &Server{cfg: cfg, store: st, auth: authSvc}
+func NewServer(cfg config.Config, st *store.Store, authSvc *auth.Service, hub *realtime.Hub) *Server {
+	return &Server{cfg: cfg, store: st, auth: authSvc, hub: hub}
 }
 
 // Handler собирает маршрутизатор.
@@ -41,6 +43,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/contacts/sync", s.requireAuth(s.handleSyncContacts))
 
 	mux.HandleFunc("POST /v1/devices/push-token", s.requireAuth(s.handlePushToken))
+
+	mux.HandleFunc("GET /v1/chats", s.requireAuth(s.handleChats))
+	mux.HandleFunc("GET /v1/chats/{id}/messages", s.requireAuth(s.handleHistory))
+	mux.HandleFunc("GET /v1/chats/{id}/members", s.requireAuth(s.handleChatMembers))
+
+	// Токен проверяется первым кадром внутри соединения, а не заголовком:
+	// браузерный WebSocket не умеет слать Authorization при подключении.
+	mux.HandleFunc("GET /v1/ws", s.hub.Serve)
 
 	return withRecover(withLogging(mux))
 }

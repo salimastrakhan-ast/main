@@ -1,8 +1,12 @@
 -- Маяк: начальная схема.
 --
 -- Ключевые инварианты, на которых держится доставка:
---   1. chats.last_seq  — монотонный счётчик сообщений в чате. Клиент хранит свой
---      курсор и после обрыва связи добирает ровно пропущенное.
+--   1. chats.last_seq — монотонный счётчик изменений в чате. Номер выдаётся не
+--      только новому сообщению, но и правке с удалением: иначе клиент,
+--      который был офлайн, никогда бы не узнал об отредактированном тексте.
+--      Сообщение хранит два номера: seq — позиция в ленте, updated_seq —
+--      номер последнего изменения. Порядок в UI строится по seq,
+--      синхронизация — по updated_seq.
 --   2. UNIQUE (chat_id, sender_id, client_msg_id) — повторная отправка после
 --      обрыва не создаёт дубль.
 
@@ -72,6 +76,7 @@ CREATE TABLE messages (
     id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     chat_id       uuid        NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
     seq           bigint      NOT NULL,
+    updated_seq   bigint      NOT NULL,
     sender_id     uuid        REFERENCES users(id) ON DELETE SET NULL,
     text          text        NOT NULL DEFAULT '',
     reply_to_id   uuid        REFERENCES messages(id) ON DELETE SET NULL,
@@ -83,8 +88,10 @@ CREATE TABLE messages (
     UNIQUE (chat_id, sender_id, client_msg_id)
 );
 
--- Основной путь чтения: страница истории и добор дельты после реконнекта.
+-- Страница истории листается по seq...
 CREATE INDEX messages_chat_seq_idx ON messages (chat_id, seq DESC);
+-- ...а дельта после реконнекта добирается по updated_seq.
+CREATE INDEX messages_chat_updated_idx ON messages (chat_id, updated_seq);
 
 CREATE TABLE attachments (
     id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),

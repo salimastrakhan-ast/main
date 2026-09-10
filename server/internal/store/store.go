@@ -24,6 +24,18 @@ type Store struct {
 
 func New(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
+// isFatalConnError отличает «база ещё не поднялась» от «так не заработает».
+func isFatalConnError(err error) bool {
+	switch pgCode(err) {
+	case "3D000", // база не существует
+		"28P01", // неверный пароль
+		"28000", // недопустимая авторизация
+		"3F000": // схема не существует
+		return true
+	}
+	return false
+}
+
 func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
 // Connect поднимает пул и ждёт готовности базы: в docker-compose Postgres
@@ -45,6 +57,13 @@ func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	for {
 		if err = pool.Ping(ctx); err == nil {
 			return pool, nil
+		}
+		// Повторять имеет смысл, только пока база поднимается. Неверный
+		// пароль или отсутствующая база от ожидания не исправятся, а держать
+		// на них полминуты — это полминуты непонятного молчания при старте.
+		if isFatalConnError(err) {
+			pool.Close()
+			return nil, fmt.Errorf("Postgres отказал: %w", err)
 		}
 		if time.Now().After(deadline) || ctx.Err() != nil {
 			pool.Close()

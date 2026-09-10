@@ -14,7 +14,9 @@ import (
 	"github.com/salimastrakhan-ast/main/server/internal/api"
 	"github.com/salimastrakhan-ast/main/server/internal/auth"
 	"github.com/salimastrakhan-ast/main/server/internal/config"
+	"github.com/salimastrakhan-ast/main/server/internal/push"
 	"github.com/salimastrakhan-ast/main/server/internal/ratelimit"
+	"github.com/salimastrakhan-ast/main/server/internal/realtime"
 	"github.com/salimastrakhan-ast/main/server/internal/store"
 )
 
@@ -55,18 +57,22 @@ func run() error {
 	defer func() { _ = rdb.Close() }()
 
 	st := store.New(pool)
-	authSvc := auth.NewService(
-		st,
-		ratelimit.New(rdb),
-		newSMSSender(cfg, logger),
-		auth.NewTokenIssuer(cfg.JWTSecret, cfg.AccessTTL),
-		authConfig(cfg),
-	)
+	tokens := auth.NewTokenIssuer(cfg.JWTSecret, cfg.AccessTTL)
+	authSvc := auth.NewService(st, ratelimit.New(rdb), newSMSSender(cfg, logger), tokens, authConfig(cfg))
+
+	hub := realtime.NewHub(st, rdb, push.NoopPusher{Logger: logger}, tokens, logger)
+	hubDone := make(chan struct{})
+	go func() {
+		defer close(hubDone)
+		hub.Run(ctx)
+	}()
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           api.NewServer(cfg, st, authSvc).Handler(),
+		Handler:           api.NewServer(cfg, st, authSvc, hub).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
+		// Таймаут записи не ставим: у долгоживущих WebSocket-соединений он
+		// рвёт связь по расписанию. Свои таймауты они держат сами.
 	}
 
 	errc := make(chan error, 1)
@@ -86,7 +92,9 @@ func run() error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	return srv.Shutdown(shutdownCtx)
+	err = srv.Shutdown(shutdownCtx)
+	<-hubDone
+	return err
 }
 
 func authConfig(cfg config.Config) auth.Config {
