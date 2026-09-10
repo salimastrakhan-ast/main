@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -48,6 +49,27 @@ type env struct {
 	hub    *realtime.Hub
 	server *httptest.Server
 	rdb    *redis.Client
+	pushes *recordingPusher
+}
+
+// recordingPusher запоминает уведомления вместо отправки: проверять надо,
+// кому и когда сервер решил отправить пуш, а не как устроен провайдер.
+type recordingPusher struct {
+	mu   sync.Mutex
+	sent []push.Notification
+}
+
+func (p *recordingPusher) Push(_ context.Context, n push.Notification) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.sent = append(p.sent, n)
+	return nil
+}
+
+func (p *recordingPusher) all() []push.Notification {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]push.Notification(nil), p.sent...)
 }
 
 func newEnv(t *testing.T) *env {
@@ -67,7 +89,8 @@ func newEnv(t *testing.T) *env {
 
 	// Логи хаба в тестах не нужны, кроме случаев отладки.
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	hub := realtime.NewHub(st, rdb, push.NoopPusher{Logger: logger}, tokens, media.NoopResolver{}, logger)
+	pushes := &recordingPusher{}
+	hub := realtime.NewHub(st, rdb, pushes, tokens, media.NoopResolver{}, logger)
 
 	hubCtx, stopHub := context.WithCancel(ctx)
 	hubDone := make(chan struct{})
@@ -90,7 +113,7 @@ func newEnv(t *testing.T) *env {
 		pool.Close()
 	})
 
-	return &env{t: t, store: st, tokens: tokens, hub: hub, server: server, rdb: rdb}
+	return &env{t: t, store: st, tokens: tokens, hub: hub, server: server, rdb: rdb, pushes: pushes}
 }
 
 func openTestDB(t *testing.T, ctx context.Context) *pgxpool.Pool {
