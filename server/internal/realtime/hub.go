@@ -19,6 +19,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/salimastrakhan-ast/main/server/internal/auth"
+	"github.com/salimastrakhan-ast/main/server/internal/media"
 	"github.com/salimastrakhan-ast/main/server/internal/push"
 	"github.com/salimastrakhan-ast/main/server/internal/store"
 	"github.com/salimastrakhan-ast/main/server/internal/ws"
@@ -52,6 +53,7 @@ type Hub struct {
 	rdb    *redis.Client
 	pusher push.Pusher
 	tokens *auth.TokenIssuer
+	media  media.Resolver
 	log    *slog.Logger
 
 	mu    sync.RWMutex
@@ -60,15 +62,19 @@ type Hub struct {
 	pubsub *redis.PubSub
 }
 
-func NewHub(st *store.Store, rdb *redis.Client, pusher push.Pusher, tokens *auth.TokenIssuer, log *slog.Logger) *Hub {
+func NewHub(st *store.Store, rdb *redis.Client, pusher push.Pusher, tokens *auth.TokenIssuer, resolver media.Resolver, log *slog.Logger) *Hub {
 	if log == nil {
 		log = slog.Default()
+	}
+	if resolver == nil {
+		resolver = media.NoopResolver{}
 	}
 	return &Hub{
 		store:  st,
 		rdb:    rdb,
 		pusher: pusher,
 		tokens: tokens,
+		media:  resolver,
 		log:    log,
 		conns:  make(map[uuid.UUID]map[*Conn]struct{}),
 	}

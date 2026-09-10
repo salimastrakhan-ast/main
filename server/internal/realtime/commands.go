@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/salimastrakhan-ast/main/server/internal/domain"
+	"github.com/salimastrakhan-ast/main/server/internal/media"
 	"github.com/salimastrakhan-ast/main/server/internal/push"
 	"github.com/salimastrakhan-ast/main/server/internal/store"
 	"github.com/salimastrakhan-ast/main/server/internal/ws"
@@ -28,6 +30,17 @@ func decodeData(env ws.Envelope, dst any) error {
 }
 
 func (c *Conn) handle(ctx context.Context, env ws.Envelope) {
+	// Паника в одном обработчике не должна ронять соединение молча: без
+	// этого ошибка выглядит как «клиент почему-то отвалился», и искать её
+	// приходится по косвенным признакам.
+	defer func() {
+		if rec := recover(); rec != nil {
+			c.log.Error("паника в обработчике команды", "err", rec, "cmd", env.T,
+				"stack", string(debug.Stack()))
+			c.replyError(env.ID, ws.ErrCodeInternal, "Внутренняя ошибка")
+		}
+	}()
+
 	switch env.T {
 	case ws.CmdPing:
 		c.reply(env.ID, ws.TypePong, struct{}{})
@@ -90,6 +103,7 @@ func (c *Conn) handleSync(ctx context.Context, env ws.Envelope) {
 		c.fail(env.ID, err)
 		return
 	}
+	media.ResolveSummaries(ctx, c.hub.media, summaries)
 
 	deltas := make([]ws.Delta, 0, len(summaries))
 	for _, s := range summaries {
@@ -105,6 +119,7 @@ func (c *Conn) handleSync(ctx context.Context, env ws.Envelope) {
 		if len(msgs) == 0 {
 			continue
 		}
+		media.ResolveMessages(ctx, c.hub.media, msgs)
 		deltas = append(deltas, ws.Delta{
 			ChatID:    s.Chat.ID,
 			Messages:  msgs,
@@ -168,6 +183,10 @@ func (c *Conn) handleSend(ctx context.Context, env ws.Envelope) {
 		return
 	}
 
+	// Ссылки на вложения временные, поэтому проставляются в момент отдачи,
+	// а не хранятся в базе.
+	media.ResolveMessage(ctx, c.hub.media, &msg)
+
 	// Ответ уходит всегда, в том числе на повтор: клиент ждёт подтверждения,
 	// чтобы снять сообщение с очереди отправки.
 	c.reply(env.ID, ws.TypeAck, ws.MessageEventData{Message: msg})
@@ -201,6 +220,7 @@ func (c *Conn) handleEdit(ctx context.Context, env ws.Envelope) {
 		c.fail(env.ID, err)
 		return
 	}
+	media.ResolveMessage(ctx, c.hub.media, &msg)
 	c.reply(env.ID, ws.TypeAck, ws.MessageEventData{Message: msg})
 	c.broadcast(ctx, payload.ChatID, ws.EventMessageEdited, ws.MessageEventData{Message: msg})
 }
@@ -355,6 +375,7 @@ func (c *Conn) announceChat(ctx context.Context, chatID uuid.UUID) {
 			c.log.Error("не собран чат для рассылки", "err", err, "chat", chatID, "user", userID)
 			continue
 		}
+		media.ResolveMessage(ctx, c.hub.media, summary.LastMessage)
 		c.hub.Publish(ctx, []uuid.UUID{userID}, uuid.Nil, ws.EventChatUpdate,
 			ws.ChatUpdateData{Chat: summary})
 	}

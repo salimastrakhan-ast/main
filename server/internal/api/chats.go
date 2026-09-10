@@ -5,6 +5,8 @@ import (
 	"strconv"
 
 	"github.com/google/uuid"
+
+	"github.com/salimastrakhan-ast/main/server/internal/media"
 )
 
 const historyPageLimit = 100
@@ -16,6 +18,7 @@ func (s *Server) handleChats(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
+	media.ResolveSummaries(r.Context(), s.media, chats)
 	writeJSON(w, http.StatusOK, map[string]any{"chats": chats})
 }
 
@@ -47,6 +50,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
+	media.ResolveMessages(r.Context(), s.media, messages)
 	writeJSON(w, http.StatusOK, map[string]any{"messages": messages})
 }
 

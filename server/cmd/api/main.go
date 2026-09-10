@@ -14,6 +14,7 @@ import (
 	"github.com/salimastrakhan-ast/main/server/internal/api"
 	"github.com/salimastrakhan-ast/main/server/internal/auth"
 	"github.com/salimastrakhan-ast/main/server/internal/config"
+	"github.com/salimastrakhan-ast/main/server/internal/media"
 	"github.com/salimastrakhan-ast/main/server/internal/push"
 	"github.com/salimastrakhan-ast/main/server/internal/ratelimit"
 	"github.com/salimastrakhan-ast/main/server/internal/realtime"
@@ -60,7 +61,19 @@ func run() error {
 	tokens := auth.NewTokenIssuer(cfg.JWTSecret, cfg.AccessTTL)
 	authSvc := auth.NewService(st, ratelimit.New(rdb), newSMSSender(cfg, logger), tokens, authConfig(cfg))
 
-	hub := realtime.NewHub(st, rdb, push.NoopPusher{Logger: logger}, tokens, logger)
+	storage, err := media.NewStorage(ctx, media.Config{
+		Endpoint:  cfg.S3Endpoint,
+		AccessKey: cfg.S3AccessKey,
+		SecretKey: cfg.S3SecretKey,
+		Bucket:    cfg.S3Bucket,
+		UseSSL:    cfg.S3UseSSL,
+	})
+	if err != nil {
+		return err
+	}
+	logger.Info("хранилище готово", "bucket", cfg.S3Bucket)
+
+	hub := realtime.NewHub(st, rdb, push.NoopPusher{Logger: logger}, tokens, storage, logger)
 	hubDone := make(chan struct{})
 	go func() {
 		defer close(hubDone)
@@ -69,7 +82,7 @@ func run() error {
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           api.NewServer(cfg, st, authSvc, hub).Handler(),
+		Handler:           api.NewServer(cfg, st, authSvc, hub, storage).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		// Таймаут записи не ставим: у долгоживущих WebSocket-соединений он
 		// рвёт связь по расписанию. Свои таймауты они держат сами.

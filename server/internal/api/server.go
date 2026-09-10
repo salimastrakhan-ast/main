@@ -5,6 +5,7 @@ import (
 
 	"github.com/salimastrakhan-ast/main/server/internal/auth"
 	"github.com/salimastrakhan-ast/main/server/internal/config"
+	"github.com/salimastrakhan-ast/main/server/internal/media"
 	"github.com/salimastrakhan-ast/main/server/internal/realtime"
 	"github.com/salimastrakhan-ast/main/server/internal/store"
 )
@@ -15,10 +16,11 @@ type Server struct {
 	store *store.Store
 	auth  *auth.Service
 	hub   *realtime.Hub
+	media *media.Storage
 }
 
-func NewServer(cfg config.Config, st *store.Store, authSvc *auth.Service, hub *realtime.Hub) *Server {
-	return &Server{cfg: cfg, store: st, auth: authSvc, hub: hub}
+func NewServer(cfg config.Config, st *store.Store, authSvc *auth.Service, hub *realtime.Hub, storage *media.Storage) *Server {
+	return &Server{cfg: cfg, store: st, auth: authSvc, hub: hub, media: storage}
 }
 
 // Handler собирает маршрутизатор.
@@ -47,6 +49,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/chats", s.requireAuth(s.handleChats))
 	mux.HandleFunc("GET /v1/chats/{id}/messages", s.requireAuth(s.handleHistory))
 	mux.HandleFunc("GET /v1/chats/{id}/members", s.requireAuth(s.handleChatMembers))
+
+	mux.HandleFunc("POST /v1/media/upload", s.requireAuth(s.handleUpload))
 
 	// Токен проверяется первым кадром внутри соединения, а не заголовком:
 	// браузерный WebSocket не умеет слать Authorization при подключении.

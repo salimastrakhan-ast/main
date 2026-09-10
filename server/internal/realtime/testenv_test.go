@@ -21,6 +21,7 @@ import (
 
 	"github.com/salimastrakhan-ast/main/server/internal/auth"
 	"github.com/salimastrakhan-ast/main/server/internal/domain"
+	"github.com/salimastrakhan-ast/main/server/internal/media"
 	"github.com/salimastrakhan-ast/main/server/internal/push"
 	"github.com/salimastrakhan-ast/main/server/internal/ratelimit"
 	"github.com/salimastrakhan-ast/main/server/internal/realtime"
@@ -66,7 +67,7 @@ func newEnv(t *testing.T) *env {
 
 	// Логи хаба в тестах не нужны, кроме случаев отладки.
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	hub := realtime.NewHub(st, rdb, push.NoopPusher{Logger: logger}, tokens, logger)
+	hub := realtime.NewHub(st, rdb, push.NoopPusher{Logger: logger}, tokens, media.NoopResolver{}, logger)
 
 	hubCtx, stopHub := context.WithCancel(ctx)
 	hubDone := make(chan struct{})
