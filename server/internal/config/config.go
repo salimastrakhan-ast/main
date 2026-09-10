@@ -16,6 +16,7 @@ type Config struct {
 	Env         string
 	HTTPAddr    string
 	PublicURL   string
+	TrustProxy  bool
 	DatabaseURL string
 	RedisURL    string
 
@@ -25,6 +26,8 @@ type Config struct {
 	AuthCodeTTL  time.Duration
 	AuthCodeTry  int
 	DevExposeSMS bool
+	SMSRuAPIKey  string
+	SMSRuFrom    string
 
 	S3Endpoint  string
 	S3AccessKey string
@@ -37,9 +40,12 @@ type Config struct {
 
 func Load() (Config, error) {
 	c := Config{
-		Env:         env("MAYAK_ENV", "dev"),
-		HTTPAddr:    env("MAYAK_HTTP_ADDR", ":8080"),
-		PublicURL:   env("MAYAK_PUBLIC_URL", "http://localhost:8080"),
+		Env:       env("MAYAK_ENV", "dev"),
+		HTTPAddr:  env("MAYAK_HTTP_ADDR", ":8080"),
+		PublicURL: env("MAYAK_PUBLIC_URL", "http://localhost:8080"),
+		// X-Forwarded-For можно верить только если перед сервером стоит наш
+		// прокси: иначе любой клиент подделает свой IP и обойдёт лимиты.
+		TrustProxy:  envBool("MAYAK_TRUST_PROXY", false),
 		DatabaseURL: env("MAYAK_DATABASE_URL", "postgres://mayak:mayak@localhost:5433/mayak?sslmode=disable"),
 		RedisURL:    env("MAYAK_REDIS_URL", "redis://localhost:6380/0"),
 
@@ -47,6 +53,9 @@ func Load() (Config, error) {
 		RefreshTTL:  envDuration("MAYAK_REFRESH_TTL", 30*24*time.Hour),
 		AuthCodeTTL: envDuration("MAYAK_AUTH_CODE_TTL", 5*time.Minute),
 		AuthCodeTry: envInt("MAYAK_AUTH_CODE_ATTEMPTS", 5),
+
+		SMSRuAPIKey: env("MAYAK_SMSRU_API_KEY", ""),
+		SMSRuFrom:   env("MAYAK_SMSRU_FROM", ""),
 
 		S3Endpoint:  env("MAYAK_S3_ENDPOINT", "localhost:9000"),
 		S3AccessKey: env("MAYAK_S3_ACCESS_KEY", "mayak"),

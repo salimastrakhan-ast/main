@@ -11,7 +11,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/salimastrakhan-ast/main/server/internal/api"
+	"github.com/salimastrakhan-ast/main/server/internal/auth"
 	"github.com/salimastrakhan-ast/main/server/internal/config"
+	"github.com/salimastrakhan-ast/main/server/internal/ratelimit"
 	"github.com/salimastrakhan-ast/main/server/internal/store"
 )
 
@@ -45,19 +48,24 @@ func run() error {
 	}
 	logger.Info("миграции применены")
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		if err := pool.Ping(r.Context()); err != nil {
-			http.Error(w, "база недоступна", http.StatusServiceUnavailable)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
-	})
+	rdb, err := ratelimit.Connect(ctx, cfg.RedisURL)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rdb.Close() }()
+
+	st := store.New(pool)
+	authSvc := auth.NewService(
+		st,
+		ratelimit.New(rdb),
+		newSMSSender(cfg, logger),
+		auth.NewTokenIssuer(cfg.JWTSecret, cfg.AccessTTL),
+		authConfig(cfg),
+	)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           mux,
+		Handler:           api.NewServer(cfg, st, authSvc).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -79,6 +87,29 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)
+}
+
+func authConfig(cfg config.Config) auth.Config {
+	ac := auth.DefaultConfig()
+	ac.CodeTTL = cfg.AuthCodeTTL
+	ac.RefreshTTL = cfg.RefreshTTL
+	ac.MaxAttempts = cfg.AuthCodeTry
+	ac.ExposeCode = cfg.DevExposeSMS
+	// Секрет для HMAC кодов выводим из основного, чтобы не заводить вторую
+	// переменную окружения, но не переиспользуем его один в один.
+	ac.CodeSecret = append([]byte("code:"), cfg.JWTSecret...)
+	return ac
+}
+
+func newSMSSender(cfg config.Config, logger *slog.Logger) auth.SMSSender {
+	if cfg.SMSRuAPIKey == "" {
+		if cfg.Env != "dev" {
+			logger.Warn("SMS-провайдер не настроен, коды уходят только в лог")
+		}
+		return auth.LogSender{Logger: logger}
+	}
+	logger.Info("SMS через sms.ru")
+	return auth.SMSRuSender{APIKey: cfg.SMSRuAPIKey, From: cfg.SMSRuFrom}
 }
 
 func newLogger(env string) *slog.Logger {
