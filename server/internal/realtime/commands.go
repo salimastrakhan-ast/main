@@ -67,6 +67,14 @@ func (c *Conn) handle(ctx context.Context, env ws.Envelope) {
 		c.handlePin(ctx, env)
 	case ws.CmdChatMute:
 		c.handleMute(ctx, env)
+	case ws.CmdCallStart:
+		c.handleCallStart(ctx, env)
+	case ws.CmdCallAnswer:
+		c.handleCallAnswer(ctx, env)
+	case ws.CmdCallICE:
+		c.handleCallICE(ctx, env)
+	case ws.CmdCallHangup:
+		c.handleCallHangup(ctx, env)
 	case ws.CmdAuth:
 		c.replyError(env.ID, ws.ErrCodeConflict, "Соединение уже авторизовано")
 	default:

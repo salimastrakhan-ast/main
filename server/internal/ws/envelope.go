@@ -44,6 +44,14 @@ const (
 	CmdChatPin       = "chat.pin"
 	CmdChatMute      = "chat.mute"
 	CmdPing          = "ping"
+
+	// Звонки. Сервер в них — только посредник: он сводит две стороны и
+	// пересылает им описания соединения, а сам разговор идёт мимо него,
+	// напрямую между устройствами.
+	CmdCallStart  = "call.start"
+	CmdCallAnswer = "call.answer"
+	CmdCallICE    = "call.ice"
+	CmdCallHangup = "call.hangup"
 )
 
 // Ответы на команды.
@@ -64,6 +72,21 @@ const (
 	EventTyping         = "typing"
 	EventPresence       = "presence"
 	EventChatUpdate     = "chat.update"
+
+	EventCallIncoming = "call.incoming"
+	EventCallAccepted = "call.accepted"
+	EventCallICE      = "call.ice"
+	EventCallEnded    = "call.ended"
+)
+
+// Причины завершения звонка. Их видит человек: «отклонён» и «не ответил» —
+// разные вещи, и в списке звонков они должны различаться.
+const (
+	CallEndHangup   = "hangup"   // Положили трубку.
+	CallEndDeclined = "declined" // Отклонили.
+	CallEndMissed   = "missed"   // Не ответили за отведённое время.
+	CallEndBusy     = "busy"     // Уже говорят по другому звонку.
+	CallEndFailed   = "failed"   // Соединение не встало.
 )
 
 // Коды ошибок протокола. Клиент реагирует на код, текст показывает человеку.

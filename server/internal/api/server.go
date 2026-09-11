@@ -57,6 +57,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/chats/{id}/messages", s.requireAuth(s.handleHistory))
 	mux.HandleFunc("GET /v1/chats/{id}/members", s.requireAuth(s.handleChatMembers))
 
+	mux.HandleFunc("GET /v1/calls/ice", s.requireAuth(s.handleICEServers))
+
 	mux.HandleFunc("POST /v1/media/upload", s.requireAuth(s.handleUpload))
 
 	mux.HandleFunc("POST /v1/ai/translate", s.requireAuth(s.handleTranslate))

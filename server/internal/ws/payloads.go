@@ -137,3 +137,70 @@ type ChatUpdateData struct {
 	Chat domain.ChatSummary `json:"chat"`
 	Gone bool               `json:"gone,omitempty"`
 }
+
+// --- Звонки ---
+//
+// Сервер пересылает SDP и ICE-кандидатов между двумя людьми и не разбирает
+// их содержимое: это описания соединения для WebRTC, и понимать их должны
+// клиенты, а не он. Звук через сервер не идёт вовсе — он идёт напрямую
+// между устройствами или, если сеть не даёт, через TURN.
+
+// CallStartData — предложение соединения от звонящего.
+//
+// Чат задаётся, а не собеседник: звонок ложится в ту же переписку, что и
+// сообщения, и по её участникам проверяется право звонить.
+type CallStartData struct {
+	ChatID uuid.UUID `json:"chat_id"`
+	SDP    string    `json:"sdp"`
+	Video  bool      `json:"video,omitempty"`
+}
+
+type CallAnswerData struct {
+	CallID uuid.UUID `json:"call_id"`
+	SDP    string    `json:"sdp"`
+}
+
+// CallICEData — очередной способ дозвониться, найденный клиентом.
+//
+// Кандидаты идут отдельно от SDP и по мере нахождения: ждать, пока клиент
+// переберёт все сети, значит добавить к соединению несколько секунд тишины.
+type CallICEData struct {
+	CallID    uuid.UUID `json:"call_id"`
+	Candidate string    `json:"candidate"`
+	SDPMid    string    `json:"sdp_mid,omitempty"`
+	SDPMLine  *int      `json:"sdp_m_line_index,omitempty"`
+}
+
+type CallHangupData struct {
+	CallID uuid.UUID `json:"call_id"`
+	Reason string    `json:"reason,omitempty"`
+}
+
+// CallStartedData — ответ звонящему на его call.start.
+//
+// Status говорит, звонит ли у собеседника телефон: если его нет в сети,
+// незачем держать человека сорок секунд у гудков.
+type CallStartedData struct {
+	CallID uuid.UUID `json:"call_id"`
+	Status string    `json:"status"` // "ringing" или "offline"
+}
+
+// CallIncomingData — входящий звонок.
+type CallIncomingData struct {
+	CallID uuid.UUID   `json:"call_id"`
+	ChatID uuid.UUID   `json:"chat_id"`
+	From   domain.User `json:"from"`
+	SDP    string      `json:"sdp"`
+	Video  bool        `json:"video,omitempty"`
+}
+
+type CallAcceptedData struct {
+	CallID uuid.UUID `json:"call_id"`
+	SDP    string    `json:"sdp"`
+}
+
+// CallEndedData — звонок закончился. Reason из констант CallEnd*.
+type CallEndedData struct {
+	CallID uuid.UUID `json:"call_id"`
+	Reason string    `json:"reason"`
+}

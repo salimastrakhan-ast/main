@@ -93,7 +93,7 @@ shots:
 #
 # Настройки берутся из deploy/.env — см. deploy/env.example и docs/deploy.md.
 
-.PHONY: deploy-up deploy-down deploy-logs deploy-build
+.PHONY: deploy-up deploy-up-calls deploy-down deploy-logs deploy-build
 
 DEPLOY := docker compose --env-file deploy/.env -f deploy/docker-compose.prod.yml
 
@@ -102,6 +102,11 @@ deploy-build:
 
 deploy-up:
 	$(DEPLOY) up -d --build
+
+# То же, но со своим TURN: звонки у тех, кому прямое соединение не даёт
+# сеть оператора. Трафик через TURN платный — см. docs/deploy.md.
+deploy-up-calls:
+	$(DEPLOY) --profile calls up -d --build
 
 deploy-down:
 	$(DEPLOY) down

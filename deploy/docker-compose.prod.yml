@@ -87,6 +87,12 @@ services:
       TITO_S3_SECRET_KEY: ${TITO_S3_SECRET_KEY}
       TITO_S3_BUCKET: ${TITO_S3_BUCKET:-tito-media}
       TITO_MAX_UPLOAD_MB: ${TITO_MAX_UPLOAD_MB:-50}
+      # Звонки. Адреса те же, что слушает coturn ниже; секрет общий с ним —
+      # по нему сервер выписывает временный пароль на несколько часов.
+      TITO_STUN_URL: stun:${TITO_DOMAIN}:3478
+      TITO_TURN_URL: turn:${TITO_DOMAIN}:3478?transport=udp,turn:${TITO_DOMAIN}:3478?transport=tcp
+      TITO_TURN_SECRET: ${TITO_TURN_SECRET:-}
+      TITO_TURN_TTL: ${TITO_TURN_TTL:-12h}
     depends_on:
       postgres:
         condition: service_healthy
@@ -96,6 +102,32 @@ services:
         condition: service_healthy
       caddy:
         condition: service_started
+
+  # Пересылка звука для тех, у кого прямое соединение не встаёт: мобильные
+  # операторы, корпоративные сети, строгие фаерволы. Без него звонки
+  # работают «через раз», и объяснить человеку почему невозможно.
+  #
+  # network_mode: host не прихоть: coturn раздаёт клиентам адреса своих
+  # релейных портов, и внутри докерной сети он раздавал бы недостижимые
+  # снаружи. Пробросить диапазон в несколько тысяч портов по одному тоже не
+  # выйдет — docker поднимает на каждый отдельный процесс проксирования.
+  #
+  # Трафик через TURN идёт целиком через ваш сервер и оплачивается как
+  # обычный исходящий: разговор двоих — порядка 30 КБ/с в каждую сторону.
+  coturn:
+    image: coturn/coturn:4.6-alpine
+    restart: unless-stopped
+    network_mode: host
+    # Профиль: без секрета coturn поднимать незачем, звонки обойдутся одним
+    # STUN там, где сеть не мешает. `--profile calls` включает его.
+    profiles: ["calls"]
+    volumes:
+      - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
+    command:
+      - --config=/etc/coturn/turnserver.conf
+      - --static-auth-secret=${TITO_TURN_SECRET:?нужен TITO_TURN_SECRET}
+      - --realm=${TITO_DOMAIN}
+      - --external-ip=${TITO_PUBLIC_IP:?нужен TITO_PUBLIC_IP}
 
   caddy:
     build:

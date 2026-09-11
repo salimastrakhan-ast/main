@@ -37,6 +37,17 @@ type Config struct {
 	S3UseSSL    bool
 
 	MaxUploadBytes int64
+
+	// Звонки. STUN сообщает клиенту, как он выглядит снаружи; TURN
+	// пересылает через себя звук, когда прямое соединение не встало.
+	//
+	// Секрет общий с coturn: по нему сервер выписывает временный пароль на
+	// несколько часов. Постоянный пароль в клиенте означал бы открытый
+	// релей для всех, кто вытащит его из приложения.
+	STUNURL    string
+	TURNURL    string
+	TURNSecret string
+	TURNTTL    time.Duration
 }
 
 func Load() (Config, error) {
@@ -69,6 +80,11 @@ func Load() (Config, error) {
 		S3UseSSL:    envBool("TITO_S3_USE_SSL", false),
 
 		MaxUploadBytes: int64(envInt("TITO_MAX_UPLOAD_MB", 50)) << 20,
+
+		STUNURL:    env("TITO_STUN_URL", ""),
+		TURNURL:    env("TITO_TURN_URL", ""),
+		TURNSecret: env("TITO_TURN_SECRET", ""),
+		TURNTTL:    envDuration("TITO_TURN_TTL", 12*time.Hour),
 	}
 
 	c.JWTSecret = []byte(env("TITO_JWT_SECRET", ""))
