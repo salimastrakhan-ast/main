@@ -126,8 +126,13 @@ void _screen() {
     updatedAt: DateTime(2026, 1, 1, 12),
   );
 
-  User user(String id, String name) =>
-      User(id: id, displayName: name, online: false);
+  User user(String id, String name) => User(
+    id: id,
+    displayName: name,
+    online: false,
+    isContact: true,
+    isFavorite: false,
+  );
 
   Widget app({
     required List<Chat> chats,

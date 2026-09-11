@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/api/api_client.dart';
@@ -18,6 +19,39 @@ final databaseProvider = Provider((ref) {
   final db = AppDatabase();
   ref.onDispose(db.close);
   return db;
+});
+
+/// Ключи локальных настроек в одном месте: опечатка в строке иначе тихо
+/// создаёт вторую настройку вместо чтения первой.
+abstract final class PrefKeys {
+  static const theme = 'theme';
+  static const welcomeSeen = 'welcome.seen';
+}
+
+/// Выбранное оформление. Пока человек не выбрал сам — как в системе.
+final themeModeProvider = StreamProvider<ThemeMode>((ref) {
+  return ref.watch(databaseProvider).watchPref(PrefKeys.theme).map(
+    (value) => switch (value) {
+      'light' => ThemeMode.light,
+      'dark' => ThemeMode.dark,
+      _ => ThemeMode.system,
+    },
+  );
+});
+
+/// Меняет оформление. Запись в базу разбудит подписчиков, экран перерисуется
+/// сам — отдельного состояния в памяти не нужно.
+Future<void> setThemeMode(WidgetRef ref, ThemeMode mode) {
+  return ref.read(databaseProvider).setPref(PrefKeys.theme, mode.name);
+}
+
+/// Видел ли человек экран приветствия. Показывается один раз: на второй
+/// запуск он только мешает дойти до переписки.
+final welcomeSeenProvider = StreamProvider<bool>((ref) {
+  return ref
+      .watch(databaseProvider)
+      .watchPref(PrefKeys.welcomeSeen)
+      .map((value) => value == 'true');
 });
 
 /// Текущая сессия. Пока грузится — показываем заставку, дальше либо вход,
@@ -71,6 +105,44 @@ final usersProvider = StreamProvider<Map<String, User>>((ref) {
   final repo = ref.watch(repositoryProvider);
   final stream = repo?.watchUsers() ?? const Stream<List<User>>.empty();
   return stream.map((list) => {for (final u in list) u.id: u});
+});
+
+/// Адресная книга из локальной базы.
+final contactsProvider = StreamProvider<List<User>>((ref) {
+  final repo = ref.watch(repositoryProvider);
+  if (repo == null) return const Stream<List<User>>.empty();
+  return ref.watch(databaseProvider).watchContacts();
+});
+
+/// Личный чат с человеком — есть он уже или ещё нет.
+final privateChatWithProvider = StreamProvider.family<String?, String>((
+  ref,
+  peerId,
+) {
+  final repo = ref.watch(repositoryProvider);
+  if (repo == null) return const Stream<String?>.empty();
+  return ref.watch(databaseProvider).watchPrivateChatWith(peerId);
+});
+
+/// Участники чата с профилями.
+final chatMembersProvider =
+    StreamProvider.family<List<({ChatMember member, User user})>, String>((
+      ref,
+      chatId,
+    ) {
+      final repo = ref.watch(repositoryProvider);
+      if (repo == null) return const Stream.empty();
+      return ref.watch(databaseProvider).watchMembers(chatId);
+    });
+
+/// Сообщения чата с вложениями — для экрана медиа.
+final chatAttachmentsProvider = StreamProvider.family<List<Message>, String>((
+  ref,
+  chatId,
+) {
+  final repo = ref.watch(repositoryProvider);
+  if (repo == null) return const Stream.empty();
+  return ref.watch(databaseProvider).watchAttachments(chatId);
 });
 
 /// Один чат по идентификатору: экрану переписки нужен его тип.

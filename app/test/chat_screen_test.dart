@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:mayak/core/providers.dart';
 import 'package:mayak/data/api/session_store.dart';
 import 'package:mayak/data/db/database.dart';
@@ -14,6 +15,10 @@ import 'package:mayak/features/chat/chat_screen.dart';
 void main() {
   const me = 'me';
   const chatId = 'chat-1';
+
+  // Разделители дат в ленте пишутся по-русски, а названия месяцев для этого
+  // нужно загрузить: в тестах main() приложения не выполняется.
+  setUpAll(() => initializeDateFormatting('ru'));
 
   Message message(String id, String senderId, String body) => Message(
     id: id,
@@ -60,7 +65,13 @@ void main() {
       ),
       usersProvider.overrideWith(
         (ref) => Stream.value({
-          'peer': const User(id: 'peer', displayName: 'Анна', online: false),
+          'peer': const User(
+            id: 'peer',
+            displayName: 'Анна',
+            online: false,
+            isContact: true,
+            isFavorite: false,
+          ),
         }),
       ),
     ],

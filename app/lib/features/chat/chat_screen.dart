@@ -3,20 +3,50 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/providers.dart';
 import '../../data/db/database.dart';
 import '../../ui/icons.dart';
 import '../../ui/glass.dart';
+import '../../ui/parts.dart';
 import '../../ui/state_view.dart';
 import '../../ui/theme.dart';
+import '../../ui/tokens.dart';
+import '../chat_info/chat_info_screen.dart';
+
+/// Открывает переписку с человеком.
+///
+/// Чата может ещё не быть: на сервере личный чат заводится первым
+/// сообщением, а не открытием экрана. Поэтому сюда передаётся собеседник, а
+/// экран сам подхватит чат, как только тот появится.
+void openChatWith(BuildContext context, WidgetRef ref, User person) {
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => ChatScreen(peerId: person.id, title: person.displayName),
+    ),
+  );
+}
 
 /// Переписка.
 class ChatScreen extends ConsumerStatefulWidget {
-  const ChatScreen({required this.chatId, required this.title, super.key});
+  const ChatScreen({
+    required this.title,
+    this.chatId,
+    this.peerId,
+    super.key,
+  }) : assert(
+         chatId != null || peerId != null,
+         'нужен либо чат, либо собеседник',
+       );
 
-  final String chatId;
+  /// Чат, если он уже заведён.
+  final String? chatId;
+
+  /// Собеседник — когда чата ещё нет.
+  final String? peerId;
+
   final String title;
 
   @override
@@ -34,6 +64,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// сдвигается, иначе последнее сообщение окажется под полем. Значение
   /// измеряется, а не задаётся: поле растёт до пяти строк.
   double _composerHeight = 76;
+
+  /// Чат этого экрана. Пока переписки не было, он null — и это нормальное
+  /// состояние, а не ошибка.
+  String? get _chatId =>
+      widget.chatId ??
+      ref.watch(privateChatWithProvider(widget.peerId!)).value;
 
   void _measureComposer() {
     final box = _composerKey.currentContext?.findRenderObject() as RenderBox?;
@@ -55,9 +91,48 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (text.isEmpty) return;
 
     _input.clear();
-    await ref.read(repositoryProvider)?.send(chatId: widget.chatId, text: text);
+    await ref.read(repositoryProvider)?.send(
+      chatId: _chatId,
+      peerId: _chatId == null ? widget.peerId : null,
+      text: text,
+    );
     // Скроллим после того, как база разбудит подписчиков и лента вырастет.
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+  }
+
+  /// Картинка из галереи: сначала уходит файл, потом сообщение со ссылкой
+  /// на него. Порядок важен — сообщение без загруженного вложения сервер
+  /// отвергнет, и оно осело бы в очереди навсегда.
+  Future<void> _attach() async {
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (picked == null || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final bytes = await picked.readAsBytes();
+      final attachment = await ref.read(apiProvider).upload(
+        fileName: picked.name,
+        bytes: bytes,
+        mime: picked.mimeType ?? 'application/octet-stream',
+      );
+      final text = _input.text.trim();
+      _input.clear();
+      await ref.read(repositoryProvider)?.send(
+        chatId: _chatId,
+        peerId: _chatId == null ? widget.peerId : null,
+        text: text,
+        attachmentIds: [attachment['id'] as String],
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+    } catch (_) {
+      // Показываем отказ здесь, а не через очередь: файл не загрузился, и
+      // повторять нечего — нужно решение человека.
+      messenger
+        ..clearSnackBars()
+        ..showSnackBar(
+          const SnackBar(content: Text('Не удалось отправить файл')),
+        );
+    }
   }
 
   void _scrollToBottom() {
@@ -72,96 +147,99 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// «Печатает» уходит не чаще раза в три секунды: на каждое нажатие клавиши
   /// это был бы поток кадров ради индикатора.
   void _onTyping() {
+    final chatId = _chatId;
+    if (chatId == null) return;
     if (_typingThrottle?.isActive ?? false) return;
     _typingThrottle = Timer(const Duration(seconds: 3), () {});
-    ref.read(repositoryProvider)?.sendTyping(widget.chatId);
+    ref.read(repositoryProvider)?.sendTyping(chatId);
   }
 
   /// Отмечает прочитанным всё до последнего показанного сообщения.
-  void _markRead(List<Message> messages) {
+  void _markRead(String chatId, List<Message> messages) {
     final last = messages.where((m) => m.seq > 0).lastOrNull;
     if (last == null || last.seq <= _lastReadSeq) return;
     _lastReadSeq = last.seq;
-    ref.read(repositoryProvider)?.markRead(widget.chatId, last.seq);
+    ref.read(repositoryProvider)?.markRead(chatId, last.seq);
   }
 
   @override
   Widget build(BuildContext context) {
-    final messages = ref.watch(messagesProvider(widget.chatId));
+    final chatId = _chatId;
     final users = ref.watch(usersProvider).value ?? const {};
-    // Имя над пузырём нужно только в группе: в личной переписке собеседник
-    // один и уже назван в шапке, а подпись над каждым его словом — шум.
-    final isGroup = ref.watch(chatProvider(widget.chatId)).value?.type == 'group';
+    final chat = chatId == null
+        ? null
+        : ref.watch(chatProvider(chatId)).value;
+    final isGroup = chat?.type == 'group';
     final myUserId = ref.watch(sessionProvider).value?.userId ?? '';
-    final typing = ref.watch(typingProvider)[widget.chatId] ?? const {};
+    final typing = chatId == null
+        ? const <String>{}
+        : ref.watch(typingProvider)[chatId] ?? const <String>{};
+
+    final peer = widget.peerId != null
+        ? users[widget.peerId]
+        : (chatId == null ? null : ref.watch(chatPeersProvider).value?[chatId]);
 
     return Scaffold(
-      // Лента уезжает под шапку и под поле ввода — иначе размывать нечего и
-      // стекло выглядит просто матовой плашкой.
+      // Лента уезжает под шапку и под поле ввода: иначе при прокрутке
+      // содержимое обрывается ровно по краю панели.
       extendBodyBehindAppBar: true,
       appBar: GlassAppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              widget.title,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontSize: 17),
-            ),
-            if (typing.isNotEmpty)
-              Text(
-                'печатает…',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
+        title: _ChatTitle(
+          id: chat?.id ?? peer?.id ?? widget.title,
+          name: widget.title,
+          isGroup: isGroup,
+          peer: peer,
+          typing: typing.isNotEmpty,
+          onTap: chatId == null
+              ? null
+              : () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => ChatInfoScreen(chatId: chatId),
+                  ),
                 ),
-              ),
-          ],
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(MayakIcons.call, size: 20),
+            tooltip: 'Позвонить',
+            onPressed: () => showNotReady(context, 'Звонки'),
+          ),
+          IconButton(
+            icon: const Icon(MayakIcons.video, size: 20),
+            tooltip: 'Видеозвонок',
+            onPressed: () => showNotReady(context, 'Видеозвонки'),
+          ),
+          IconButton(
+            icon: const Icon(MayakIcons.menu, size: 20),
+            tooltip: 'Ещё',
+            onPressed: chatId == null
+                ? null
+                : () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ChatInfoScreen(chatId: chatId),
+                    ),
+                  ),
+          ),
+        ],
       ),
       body: Stack(
         children: [
           Positioned.fill(
-            child: messages.when(
-              loading: () => const StateView.loading(),
-              error: (e, _) =>
-                  StateView.error(e, title: 'Не удалось открыть переписку'),
-              data: (list) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _markRead(list);
-                  _measureComposer();
-                });
-                if (list.isEmpty) {
-                  return const StateView(
-                    icon: MayakIcons.chat,
-                    title: 'Здесь пока ничего нет',
-                    description: 'Напишите первым — сообщение уйдёт сразу.',
-                  );
-                }
-
-                return ListView.builder(
-                  controller: _scroll,
-                  padding: EdgeInsets.only(
-                    top: glassAppBarHeight(context, extra: 12),
-                    bottom: _composerHeight + 12,
+            child: chatId == null
+                ? const _FirstMessage()
+                : _Feed(
+                    chatId: chatId,
+                    myUserId: myUserId,
+                    isGroup: isGroup,
+                    users: users,
+                    scroll: _scroll,
+                    topPadding: glassAppBarHeight(context, extra: 12),
+                    bottomPadding: _composerHeight + 12,
+                    onRendered: (list) {
+                      _markRead(chatId, list);
+                      _measureComposer();
+                    },
                   ),
-                  itemCount: list.length,
-                  itemBuilder: (context, index) {
-                    final message = list[index];
-                    return _Bubble(
-                      key: ValueKey(message.id),
-                      message: message,
-                      isMine: message.senderId == myUserId,
-                      senderName: isGroup
-                          ? users[message.senderId]?.displayName ?? ''
-                          : '',
-                      showSender: !_isSameSenderAsPrevious(list, index),
-                    );
-                  },
-                );
-              },
-            ),
           ),
           Positioned(
             left: 0,
@@ -172,17 +250,242 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               controller: _input,
               onSend: _send,
               onChanged: _onTyping,
+              onAttach: _attach,
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  /// Подряд идущие сообщения одного человека подписываются один раз.
-  static bool _isSameSenderAsPrevious(List<Message> list, int index) {
-    if (index == 0) return false;
-    return list[index - 1].senderId == list[index].senderId;
+/// Шапка переписки: аватар, имя и что с человеком сейчас.
+class _ChatTitle extends StatelessWidget {
+  const _ChatTitle({
+    required this.id,
+    required this.name,
+    required this.isGroup,
+    required this.peer,
+    required this.typing,
+    required this.onTap,
+  });
+
+  final String id;
+  final String name;
+  final bool isGroup;
+  final User? peer;
+  final bool typing;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    final status = switch (true) {
+      _ when typing => ('печатает…', theme.colorScheme.primary),
+      _ when isGroup => ('Группа', theme.colorScheme.onSurfaceVariant),
+      _ when peer?.online ?? false => ('в сети', Tokens.olive),
+      _ => ('не в сети', theme.colorScheme.onSurfaceVariant),
+    };
+
+    return InkWell(
+      onTap: onTap,
+      child: Row(
+        children: [
+          PersonAvatar(
+            id: id,
+            name: name,
+            radius: 17,
+            online: peer?.online ?? false,
+            icon: isGroup ? MayakIcons.contacts : null,
+          ),
+          const SizedBox(width: Tokens.space3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium?.copyWith(fontSize: 16),
+                ),
+                Text(
+                  status.$1,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: status.$2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Лента сообщений с разделителями дат.
+class _Feed extends ConsumerWidget {
+  const _Feed({
+    required this.chatId,
+    required this.myUserId,
+    required this.isGroup,
+    required this.users,
+    required this.scroll,
+    required this.topPadding,
+    required this.bottomPadding,
+    required this.onRendered,
+  });
+
+  final String chatId;
+  final String myUserId;
+  final bool isGroup;
+  final Map<String, User> users;
+  final ScrollController scroll;
+  final double topPadding;
+  final double bottomPadding;
+  final ValueChanged<List<Message>> onRendered;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final messages = ref.watch(messagesProvider(chatId));
+
+    return messages.when(
+      loading: () => const StateView.loading(),
+      error: (e, _) => StateView.error(e, title: 'Не удалось открыть переписку'),
+      data: (list) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => onRendered(list));
+        if (list.isEmpty) return const _FirstMessage();
+
+        final rows = _rows(list);
+
+        return ListView.builder(
+          controller: scroll,
+          padding: EdgeInsets.only(top: topPadding, bottom: bottomPadding),
+          itemCount: rows.length,
+          itemBuilder: (context, index) {
+            final row = rows[index];
+            if (row.divider != null) return _DateDivider(date: row.divider!);
+
+            final message = row.message!;
+            return _Bubble(
+              key: ValueKey(message.id),
+              message: message,
+              isMine: message.senderId == myUserId,
+              senderName: isGroup
+                  ? users[message.senderId]?.displayName ?? ''
+                  : '',
+              showSender: row.startsBlock,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Раскладка ленты: перед первым сообщением каждого дня — разделитель.
+  ///
+  /// Считается здесь, а не в билдере строки: там пришлось бы на каждую
+  /// строку оглядываться на предыдущую, и разделители разъезжались бы при
+  /// прокрутке длинной ленты.
+  static List<_Row> _rows(List<Message> messages) {
+    final rows = <_Row>[];
+    DateTime? day;
+    String? previousSender;
+
+    for (final message in messages) {
+      final at = message.createdAt;
+      final messageDay = DateTime(at.year, at.month, at.day);
+      if (day != messageDay) {
+        rows.add(_Row.divider(messageDay));
+        day = messageDay;
+        previousSender = null;
+      }
+      rows.add(
+        _Row.message(message, startsBlock: previousSender != message.senderId),
+      );
+      previousSender = message.senderId;
+    }
+    return rows;
+  }
+}
+
+/// Строка ленты — либо сообщение, либо дата.
+class _Row {
+  const _Row.message(this.message, {required this.startsBlock}) : divider = null;
+  const _Row.divider(DateTime date)
+    : divider = date,
+      message = null,
+      startsBlock = false;
+
+  final Message? message;
+  final DateTime? divider;
+
+  /// Первое сообщение подряд идущих от одного человека: только у него
+  /// показывается имя и увеличенный отступ сверху.
+  final bool startsBlock;
+}
+
+/// Дата посреди ленты.
+class _DateDivider extends StatelessWidget {
+  const _DateDivider({required this.date});
+
+  final DateTime date;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Tokens.space3),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: Tokens.space3,
+            vertical: 5,
+          ),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(Tokens.br12),
+          ),
+          child: Text(
+            _label(date),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _label(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final days = today.difference(date).inDays;
+
+    if (days == 0) return 'Сегодня';
+    if (days == 1) return 'Вчера';
+    if (days < 7) return DateFormat.EEEE('ru').format(date);
+    if (date.year == now.year) return DateFormat('d MMMM', 'ru').format(date);
+    return DateFormat('d MMMM y', 'ru').format(date);
+  }
+}
+
+/// Пустая переписка.
+class _FirstMessage extends StatelessWidget {
+  const _FirstMessage();
+
+  @override
+  Widget build(BuildContext context) {
+    return const StateView(
+      icon: MayakIcons.chat,
+      title: 'Здесь пока ничего нет',
+      description: 'Напишите первым — сообщение уйдёт сразу.',
+    );
   }
 }
 
@@ -398,24 +701,37 @@ class _Composer extends StatelessWidget {
     required this.controller,
     required this.onSend,
     required this.onChanged,
+    required this.onAttach,
     super.key,
   });
 
   final TextEditingController controller;
   final VoidCallback onSend;
   final VoidCallback onChanged;
+  final VoidCallback onAttach;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return GlassSurface(
       borderSide: GlassBorder.top,
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          padding: const EdgeInsets.fromLTRB(8, 8, 12, 10),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
+              IconButton(
+                icon: Icon(
+                  MayakIcons.attach,
+                  size: 22,
+                  color: scheme.onSurfaceVariant,
+                ),
+                tooltip: 'Прикрепить',
+                onPressed: onAttach,
+              ),
               Expanded(
                 child: TextField(
                   controller: controller,

@@ -5,12 +5,14 @@ import 'package:intl/intl.dart';
 import '../../core/providers.dart';
 import '../../data/db/database.dart';
 import '../../data/ws/ws_client.dart';
-import '../../ui/icons.dart';
 import '../../ui/glass.dart';
+import '../../ui/icons.dart';
+import '../../ui/parts.dart';
 import '../../ui/state_view.dart';
-import '../../ui/theme.dart';
+import '../../ui/tokens.dart';
 import '../chat/chat_screen.dart';
-import '../profile/profile_screen.dart';
+import '../search/search_screen.dart';
+import 'new_chat_screen.dart';
 
 /// Список диалогов.
 class ChatsScreen extends ConsumerWidget {
@@ -24,20 +26,45 @@ class ChatsScreen extends ConsumerWidget {
     final session = ref.watch(sessionProvider).value;
 
     return Scaffold(
-      // Карточки уезжают под шапку — тогда стекло размывает содержимое,
-      // а не пустой фон.
-      extendBodyBehindAppBar: true,
       appBar: GlassAppBar(
-        title: const Text('Маяк'),
-        bottomHeight: 20,
-        bottom: const _ConnectionBanner(),
+        title: const Text('Сообщения'),
+        leading: const SizedBox.shrink(),
+        bottomHeight: 44 + Tokens.space3 + 20,
+        bottom: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Tokens.space4,
+                0,
+                Tokens.space4,
+                Tokens.space3,
+              ),
+              // Поле только открывает поиск: искать по всему сразу удобнее
+              // на отдельном экране, где есть вкладки и клавиатура не
+              // перекрывает результаты.
+              child: SearchField(
+                hint: 'Поиск',
+                readOnly: true,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const SearchScreen()),
+                ),
+              ),
+            ),
+            const _ConnectionBanner(),
+          ],
+        ),
         actions: [
           IconButton(
-            icon: const Icon(MayakIcons.profile),
-            tooltip: 'Профиль',
+            icon: const Icon(MayakIcons.compose, size: 20),
+            tooltip: 'Новый чат',
             onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const ProfileScreen()),
+              MaterialPageRoute<void>(builder: (_) => const NewChatScreen()),
             ),
+          ),
+          IconButton(
+            icon: const Icon(MayakIcons.menu, size: 20),
+            tooltip: 'Ещё',
+            onPressed: () => showNotReady(context, 'Дополнительные действия'),
           ),
         ],
       ),
@@ -48,10 +75,7 @@ class ChatsScreen extends ConsumerWidget {
         data: (list) {
           if (list.isEmpty) return const _EmptyChats();
           return ListView.builder(
-            padding: EdgeInsets.only(
-              top: glassAppBarHeight(context, extra: 20 + 8),
-              bottom: 16,
-            ),
+            padding: const EdgeInsets.only(top: Tokens.space2, bottom: 16),
             itemCount: list.length,
             itemBuilder: (context, index) => _ChatTile(
               chat: list[index],
@@ -77,7 +101,7 @@ class _ConnectionBanner extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(connectionStateProvider).value;
     if (state == null || state == WsStatus.online) {
-      return const SizedBox.shrink();
+      return const SizedBox(height: 20);
     }
 
     final theme = Theme.of(context);
@@ -110,26 +134,24 @@ class _ChatTile extends StatelessWidget {
   final LastMessage? lastMessage;
   final String myUserId;
 
+  bool get _isGroup => chat.type == 'group';
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final title = _title();
+    final unread = chat.unreadCount > 0;
 
     return ListTile(
-      leading: CircleAvatar(
-        radius: 25,
-        // Цвет закреплён за собеседником: в списке он работает как
-        // опознавание, и меняться между запусками не должен. У группы
-        // человека нет — там опознаётся сам чат.
-        backgroundColor: MayakTheme.accentFor(peer?.id ?? chat.id),
-        child: Text(
-          title.isEmpty ? '?' : title.characters.first.toUpperCase(),
-          style: const TextStyle(
-            color: MayakTheme.onAccent,
-            fontWeight: FontWeight.w700,
-            fontSize: 18,
-          ),
-        ),
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: Tokens.space4,
+        vertical: Tokens.space1,
+      ),
+      leading: PersonAvatar(
+        id: peer?.id ?? chat.id,
+        name: title,
+        online: peer?.online ?? false,
+        icon: _isGroup ? MayakIcons.contacts : null,
       ),
       title: Text(
         title,
@@ -141,31 +163,46 @@ class _ChatTile extends StatelessWidget {
         _preview(),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: unread
+              ? theme.colorScheme.onSurface
+              : theme.colorScheme.onSurfaceVariant,
+        ),
       ),
-      trailing: chat.unreadCount > 0
-          ? Container(
-              constraints: const BoxConstraints(minWidth: 22),
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            _time(chat.updatedAt),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: unread
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 5),
+          if (unread)
+            Container(
+              constraints: const BoxConstraints(minWidth: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: theme.colorScheme.primary,
-                borderRadius: BorderRadius.circular(11),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
                 '${chat.unreadCount}',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: theme.colorScheme.onPrimary,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             )
-          : Text(
-              DateFormat.Hm().format(chat.updatedAt),
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
+          else
+            const SizedBox(height: 18),
+        ],
+      ),
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => ChatScreen(chatId: chat.id, title: title),
@@ -187,11 +224,25 @@ class _ChatTile extends StatelessWidget {
   /// подписи выглядит наполовину не загрузившейся.
   String _preview() {
     final last = lastMessage;
-    if (last == null) return chat.type == 'group' ? 'Группа' : 'Личный чат';
+    if (last == null) return _isGroup ? 'Группа' : 'Личный чат';
     if (last.deleted) return 'Сообщение удалено';
 
     final body = last.body.isEmpty ? 'Вложение' : last.body;
     return last.senderId == myUserId ? 'Вы: $body' : body;
+  }
+
+  /// Сегодняшнее — часами, вчерашнее — словом, старое — датой. Как в любом
+  /// списке переписок: точное время недельной давности никому не нужно.
+  static String _time(DateTime at) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(at.year, at.month, at.day);
+    final ago = today.difference(day).inDays;
+
+    if (ago == 0) return DateFormat.Hm().format(at);
+    if (ago == 1) return 'Вчера';
+    if (ago < 7) return DateFormat.E('ru').format(at);
+    return DateFormat('dd.MM.yy').format(at);
   }
 }
 
@@ -200,11 +251,14 @@ class _EmptyChats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const StateView(
+    return StateView(
       icon: MayakIcons.chats,
-      title: 'Пока пусто',
-      description:
-          'Диалог появится здесь, как только вам напишут или вы напишете первым.',
+      title: 'Начните новый чат',
+      description: 'Выберите контакт из списка или создайте группу.',
+      actionLabel: 'Выбрать контакт',
+      onAction: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const NewChatScreen()),
+      ),
     );
   }
 }

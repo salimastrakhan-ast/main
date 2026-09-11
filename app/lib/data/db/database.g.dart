@@ -1417,6 +1417,36 @@ class $UsersTable extends Users with TableInfo<$UsersTable, User> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _isContactMeta = const VerificationMeta(
+    'isContact',
+  );
+  @override
+  late final GeneratedColumn<bool> isContact = GeneratedColumn<bool>(
+    'is_contact',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_contact" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _isFavoriteMeta = const VerificationMeta(
+    'isFavorite',
+  );
+  @override
+  late final GeneratedColumn<bool> isFavorite = GeneratedColumn<bool>(
+    'is_favorite',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_favorite" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1426,6 +1456,8 @@ class $UsersTable extends Users with TableInfo<$UsersTable, User> {
     phone,
     online,
     lastSeenAt,
+    isContact,
+    isFavorite,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1486,6 +1518,18 @@ class $UsersTable extends Users with TableInfo<$UsersTable, User> {
         ),
       );
     }
+    if (data.containsKey('is_contact')) {
+      context.handle(
+        _isContactMeta,
+        isContact.isAcceptableOrUnknown(data['is_contact']!, _isContactMeta),
+      );
+    }
+    if (data.containsKey('is_favorite')) {
+      context.handle(
+        _isFavoriteMeta,
+        isFavorite.isAcceptableOrUnknown(data['is_favorite']!, _isFavoriteMeta),
+      );
+    }
     return context;
   }
 
@@ -1523,6 +1567,14 @@ class $UsersTable extends Users with TableInfo<$UsersTable, User> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_seen_at'],
       ),
+      isContact: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_contact'],
+      )!,
+      isFavorite: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_favorite'],
+      )!,
     );
   }
 
@@ -1540,6 +1592,13 @@ class User extends DataClass implements Insertable<User> {
   final String? phone;
   final bool online;
   final DateTime? lastSeenAt;
+
+  /// Есть ли он в моей адресной книге. Знать это надо и офлайн, поэтому
+  /// отметка лежит рядом с профилем, а не запрашивается каждый раз.
+  final bool isContact;
+
+  /// Избранное — решение человека, оно только на этом устройстве.
+  final bool isFavorite;
   const User({
     required this.id,
     required this.displayName,
@@ -1548,6 +1607,8 @@ class User extends DataClass implements Insertable<User> {
     this.phone,
     required this.online,
     this.lastSeenAt,
+    required this.isContact,
+    required this.isFavorite,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1567,6 +1628,8 @@ class User extends DataClass implements Insertable<User> {
     if (!nullToAbsent || lastSeenAt != null) {
       map['last_seen_at'] = Variable<DateTime>(lastSeenAt);
     }
+    map['is_contact'] = Variable<bool>(isContact);
+    map['is_favorite'] = Variable<bool>(isFavorite);
     return map;
   }
 
@@ -1587,6 +1650,8 @@ class User extends DataClass implements Insertable<User> {
       lastSeenAt: lastSeenAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lastSeenAt),
+      isContact: Value(isContact),
+      isFavorite: Value(isFavorite),
     );
   }
 
@@ -1603,6 +1668,8 @@ class User extends DataClass implements Insertable<User> {
       phone: serializer.fromJson<String?>(json['phone']),
       online: serializer.fromJson<bool>(json['online']),
       lastSeenAt: serializer.fromJson<DateTime?>(json['lastSeenAt']),
+      isContact: serializer.fromJson<bool>(json['isContact']),
+      isFavorite: serializer.fromJson<bool>(json['isFavorite']),
     );
   }
   @override
@@ -1616,6 +1683,8 @@ class User extends DataClass implements Insertable<User> {
       'phone': serializer.toJson<String?>(phone),
       'online': serializer.toJson<bool>(online),
       'lastSeenAt': serializer.toJson<DateTime?>(lastSeenAt),
+      'isContact': serializer.toJson<bool>(isContact),
+      'isFavorite': serializer.toJson<bool>(isFavorite),
     };
   }
 
@@ -1627,6 +1696,8 @@ class User extends DataClass implements Insertable<User> {
     Value<String?> phone = const Value.absent(),
     bool? online,
     Value<DateTime?> lastSeenAt = const Value.absent(),
+    bool? isContact,
+    bool? isFavorite,
   }) => User(
     id: id ?? this.id,
     displayName: displayName ?? this.displayName,
@@ -1635,6 +1706,8 @@ class User extends DataClass implements Insertable<User> {
     phone: phone.present ? phone.value : this.phone,
     online: online ?? this.online,
     lastSeenAt: lastSeenAt.present ? lastSeenAt.value : this.lastSeenAt,
+    isContact: isContact ?? this.isContact,
+    isFavorite: isFavorite ?? this.isFavorite,
   );
   User copyWithCompanion(UsersCompanion data) {
     return User(
@@ -1649,6 +1722,10 @@ class User extends DataClass implements Insertable<User> {
       lastSeenAt: data.lastSeenAt.present
           ? data.lastSeenAt.value
           : this.lastSeenAt,
+      isContact: data.isContact.present ? data.isContact.value : this.isContact,
+      isFavorite: data.isFavorite.present
+          ? data.isFavorite.value
+          : this.isFavorite,
     );
   }
 
@@ -1661,7 +1738,9 @@ class User extends DataClass implements Insertable<User> {
           ..write('avatarUrl: $avatarUrl, ')
           ..write('phone: $phone, ')
           ..write('online: $online, ')
-          ..write('lastSeenAt: $lastSeenAt')
+          ..write('lastSeenAt: $lastSeenAt, ')
+          ..write('isContact: $isContact, ')
+          ..write('isFavorite: $isFavorite')
           ..write(')'))
         .toString();
   }
@@ -1675,6 +1754,8 @@ class User extends DataClass implements Insertable<User> {
     phone,
     online,
     lastSeenAt,
+    isContact,
+    isFavorite,
   );
   @override
   bool operator ==(Object other) =>
@@ -1686,7 +1767,9 @@ class User extends DataClass implements Insertable<User> {
           other.avatarUrl == this.avatarUrl &&
           other.phone == this.phone &&
           other.online == this.online &&
-          other.lastSeenAt == this.lastSeenAt);
+          other.lastSeenAt == this.lastSeenAt &&
+          other.isContact == this.isContact &&
+          other.isFavorite == this.isFavorite);
 }
 
 class UsersCompanion extends UpdateCompanion<User> {
@@ -1697,6 +1780,8 @@ class UsersCompanion extends UpdateCompanion<User> {
   final Value<String?> phone;
   final Value<bool> online;
   final Value<DateTime?> lastSeenAt;
+  final Value<bool> isContact;
+  final Value<bool> isFavorite;
   final Value<int> rowid;
   const UsersCompanion({
     this.id = const Value.absent(),
@@ -1706,6 +1791,8 @@ class UsersCompanion extends UpdateCompanion<User> {
     this.phone = const Value.absent(),
     this.online = const Value.absent(),
     this.lastSeenAt = const Value.absent(),
+    this.isContact = const Value.absent(),
+    this.isFavorite = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   UsersCompanion.insert({
@@ -1716,6 +1803,8 @@ class UsersCompanion extends UpdateCompanion<User> {
     this.phone = const Value.absent(),
     this.online = const Value.absent(),
     this.lastSeenAt = const Value.absent(),
+    this.isContact = const Value.absent(),
+    this.isFavorite = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id);
   static Insertable<User> custom({
@@ -1726,6 +1815,8 @@ class UsersCompanion extends UpdateCompanion<User> {
     Expression<String>? phone,
     Expression<bool>? online,
     Expression<DateTime>? lastSeenAt,
+    Expression<bool>? isContact,
+    Expression<bool>? isFavorite,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1736,6 +1827,8 @@ class UsersCompanion extends UpdateCompanion<User> {
       if (phone != null) 'phone': phone,
       if (online != null) 'online': online,
       if (lastSeenAt != null) 'last_seen_at': lastSeenAt,
+      if (isContact != null) 'is_contact': isContact,
+      if (isFavorite != null) 'is_favorite': isFavorite,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1748,6 +1841,8 @@ class UsersCompanion extends UpdateCompanion<User> {
     Value<String?>? phone,
     Value<bool>? online,
     Value<DateTime?>? lastSeenAt,
+    Value<bool>? isContact,
+    Value<bool>? isFavorite,
     Value<int>? rowid,
   }) {
     return UsersCompanion(
@@ -1758,6 +1853,8 @@ class UsersCompanion extends UpdateCompanion<User> {
       phone: phone ?? this.phone,
       online: online ?? this.online,
       lastSeenAt: lastSeenAt ?? this.lastSeenAt,
+      isContact: isContact ?? this.isContact,
+      isFavorite: isFavorite ?? this.isFavorite,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1786,6 +1883,12 @@ class UsersCompanion extends UpdateCompanion<User> {
     if (lastSeenAt.present) {
       map['last_seen_at'] = Variable<DateTime>(lastSeenAt.value);
     }
+    if (isContact.present) {
+      map['is_contact'] = Variable<bool>(isContact.value);
+    }
+    if (isFavorite.present) {
+      map['is_favorite'] = Variable<bool>(isFavorite.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1802,6 +1905,8 @@ class UsersCompanion extends UpdateCompanion<User> {
           ..write('phone: $phone, ')
           ..write('online: $online, ')
           ..write('lastSeenAt: $lastSeenAt, ')
+          ..write('isContact: $isContact, ')
+          ..write('isFavorite: $isFavorite, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2648,6 +2753,211 @@ class OutboxCompanion extends UpdateCompanion<OutboxData> {
   }
 }
 
+class $PrefsTable extends Prefs with TableInfo<$PrefsTable, Pref> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PrefsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _valueMeta = const VerificationMeta('value');
+  @override
+  late final GeneratedColumn<String> value = GeneratedColumn<String>(
+    'value',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [name, value];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'prefs';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Pref> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('value')) {
+      context.handle(
+        _valueMeta,
+        value.isAcceptableOrUnknown(data['value']!, _valueMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_valueMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {name};
+  @override
+  Pref map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Pref(
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      value: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}value'],
+      )!,
+    );
+  }
+
+  @override
+  $PrefsTable createAlias(String alias) {
+    return $PrefsTable(attachedDatabase, alias);
+  }
+}
+
+class Pref extends DataClass implements Insertable<Pref> {
+  final String name;
+  final String value;
+  const Pref({required this.name, required this.value});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['name'] = Variable<String>(name);
+    map['value'] = Variable<String>(value);
+    return map;
+  }
+
+  PrefsCompanion toCompanion(bool nullToAbsent) {
+    return PrefsCompanion(name: Value(name), value: Value(value));
+  }
+
+  factory Pref.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Pref(
+      name: serializer.fromJson<String>(json['name']),
+      value: serializer.fromJson<String>(json['value']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'name': serializer.toJson<String>(name),
+      'value': serializer.toJson<String>(value),
+    };
+  }
+
+  Pref copyWith({String? name, String? value}) =>
+      Pref(name: name ?? this.name, value: value ?? this.value);
+  Pref copyWithCompanion(PrefsCompanion data) {
+    return Pref(
+      name: data.name.present ? data.name.value : this.name,
+      value: data.value.present ? data.value.value : this.value,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Pref(')
+          ..write('name: $name, ')
+          ..write('value: $value')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(name, value);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Pref && other.name == this.name && other.value == this.value);
+}
+
+class PrefsCompanion extends UpdateCompanion<Pref> {
+  final Value<String> name;
+  final Value<String> value;
+  final Value<int> rowid;
+  const PrefsCompanion({
+    this.name = const Value.absent(),
+    this.value = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PrefsCompanion.insert({
+    required String name,
+    required String value,
+    this.rowid = const Value.absent(),
+  }) : name = Value(name),
+       value = Value(value);
+  static Insertable<Pref> custom({
+    Expression<String>? name,
+    Expression<String>? value,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (name != null) 'name': name,
+      if (value != null) 'value': value,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PrefsCompanion copyWith({
+    Value<String>? name,
+    Value<String>? value,
+    Value<int>? rowid,
+  }) {
+    return PrefsCompanion(
+      name: name ?? this.name,
+      value: value ?? this.value,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (value.present) {
+      map['value'] = Variable<String>(value.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PrefsCompanion(')
+          ..write('name: $name, ')
+          ..write('value: $value, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -2656,6 +2966,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $UsersTable users = $UsersTable(this);
   late final $ChatMembersTable chatMembers = $ChatMembersTable(this);
   late final $OutboxTable outbox = $OutboxTable(this);
+  late final $PrefsTable prefs = $PrefsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2666,6 +2977,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     users,
     chatMembers,
     outbox,
+    prefs,
   ];
 }
 
@@ -3304,6 +3616,8 @@ typedef $$UsersTableCreateCompanionBuilder =
       Value<String?> phone,
       Value<bool> online,
       Value<DateTime?> lastSeenAt,
+      Value<bool> isContact,
+      Value<bool> isFavorite,
       Value<int> rowid,
     });
 typedef $$UsersTableUpdateCompanionBuilder =
@@ -3315,6 +3629,8 @@ typedef $$UsersTableUpdateCompanionBuilder =
       Value<String?> phone,
       Value<bool> online,
       Value<DateTime?> lastSeenAt,
+      Value<bool> isContact,
+      Value<bool> isFavorite,
       Value<int> rowid,
     });
 
@@ -3358,6 +3674,16 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
 
   ColumnFilters<DateTime> get lastSeenAt => $composableBuilder(
     column: $table.lastSeenAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isContact => $composableBuilder(
+    column: $table.isContact,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isFavorite => $composableBuilder(
+    column: $table.isFavorite,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3405,6 +3731,16 @@ class $$UsersTableOrderingComposer
     column: $table.lastSeenAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get isContact => $composableBuilder(
+    column: $table.isContact,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isFavorite => $composableBuilder(
+    column: $table.isFavorite,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$UsersTableAnnotationComposer
@@ -3438,6 +3774,14 @@ class $$UsersTableAnnotationComposer
 
   GeneratedColumn<DateTime> get lastSeenAt => $composableBuilder(
     column: $table.lastSeenAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isContact =>
+      $composableBuilder(column: $table.isContact, builder: (column) => column);
+
+  GeneratedColumn<bool> get isFavorite => $composableBuilder(
+    column: $table.isFavorite,
     builder: (column) => column,
   );
 }
@@ -3477,6 +3821,8 @@ class $$UsersTableTableManager
                 Value<String?> phone = const Value.absent(),
                 Value<bool> online = const Value.absent(),
                 Value<DateTime?> lastSeenAt = const Value.absent(),
+                Value<bool> isContact = const Value.absent(),
+                Value<bool> isFavorite = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => UsersCompanion(
                 id: id,
@@ -3486,6 +3832,8 @@ class $$UsersTableTableManager
                 phone: phone,
                 online: online,
                 lastSeenAt: lastSeenAt,
+                isContact: isContact,
+                isFavorite: isFavorite,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3497,6 +3845,8 @@ class $$UsersTableTableManager
                 Value<String?> phone = const Value.absent(),
                 Value<bool> online = const Value.absent(),
                 Value<DateTime?> lastSeenAt = const Value.absent(),
+                Value<bool> isContact = const Value.absent(),
+                Value<bool> isFavorite = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => UsersCompanion.insert(
                 id: id,
@@ -3506,6 +3856,8 @@ class $$UsersTableTableManager
                 phone: phone,
                 online: online,
                 lastSeenAt: lastSeenAt,
+                isContact: isContact,
+                isFavorite: isFavorite,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -3968,6 +4320,135 @@ typedef $$OutboxTableProcessedTableManager =
       OutboxData,
       PrefetchHooks Function()
     >;
+typedef $$PrefsTableCreateCompanionBuilder =
+    PrefsCompanion Function({
+      required String name,
+      required String value,
+      Value<int> rowid,
+    });
+typedef $$PrefsTableUpdateCompanionBuilder =
+    PrefsCompanion Function({
+      Value<String> name,
+      Value<String> value,
+      Value<int> rowid,
+    });
+
+class $$PrefsTableFilterComposer extends Composer<_$AppDatabase, $PrefsTable> {
+  $$PrefsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PrefsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PrefsTable> {
+  $$PrefsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PrefsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PrefsTable> {
+  $$PrefsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get value =>
+      $composableBuilder(column: $table.value, builder: (column) => column);
+}
+
+class $$PrefsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PrefsTable,
+          Pref,
+          $$PrefsTableFilterComposer,
+          $$PrefsTableOrderingComposer,
+          $$PrefsTableAnnotationComposer,
+          $$PrefsTableCreateCompanionBuilder,
+          $$PrefsTableUpdateCompanionBuilder,
+          (Pref, BaseReferences<_$AppDatabase, $PrefsTable, Pref>),
+          Pref,
+          PrefetchHooks Function()
+        > {
+  $$PrefsTableTableManager(_$AppDatabase db, $PrefsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PrefsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PrefsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PrefsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> name = const Value.absent(),
+                Value<String> value = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PrefsCompanion(name: name, value: value, rowid: rowid),
+          createCompanionCallback:
+              ({
+                required String name,
+                required String value,
+                Value<int> rowid = const Value.absent(),
+              }) =>
+                  PrefsCompanion.insert(name: name, value: value, rowid: rowid),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PrefsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PrefsTable,
+      Pref,
+      $$PrefsTableFilterComposer,
+      $$PrefsTableOrderingComposer,
+      $$PrefsTableAnnotationComposer,
+      $$PrefsTableCreateCompanionBuilder,
+      $$PrefsTableUpdateCompanionBuilder,
+      (Pref, BaseReferences<_$AppDatabase, $PrefsTable, Pref>),
+      Pref,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -3982,4 +4463,6 @@ class $AppDatabaseManager {
       $$ChatMembersTableTableManager(_db, _db.chatMembers);
   $$OutboxTableTableManager get outbox =>
       $$OutboxTableTableManager(_db, _db.outbox);
+  $$PrefsTableTableManager get prefs =>
+      $$PrefsTableTableManager(_db, _db.prefs);
 }

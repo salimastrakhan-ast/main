@@ -10,6 +10,12 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Русские подписи у системных виджетов Material и разбор дат по-русски.
+  # Без делегатов «Cancel» и «Paste» остались бы английскими посреди
+  # русского интерфейса.
+  flutter_localizations:
+    sdk: flutter
+
   # Состояние. Riverpod, а не Bloc: меньше обвязки на единицу логики, а
   # логика здесь и так в репозиториях, а не в контроллерах.
   flutter_riverpod: ^2.6.1
@@ -29,7 +35,7 @@ dependencies:
   flutter_secure_storage: ^9.2.2
 
   uuid: ^4.5.1
-  intl: ^0.19.0
+  intl: ^0.20.2
   image_picker: ^1.1.2
 
 dev_dependencies:

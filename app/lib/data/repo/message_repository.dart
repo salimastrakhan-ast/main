@@ -431,6 +431,30 @@ class MessageRepository {
     if (last != null) await _upsertMessage(last);
   }
 
+  /// Перечитывает адресную книгу с сервера.
+  ///
+  /// Отметку снимаем со всех и ставим заново тем, кто пришёл: иначе удалённый
+  /// из книги контакт остался бы в списке навсегда. Избранное при этом не
+  /// трогаем — это решение человека, а не свойство контакта.
+  Future<void> refreshContacts() async {
+    final list = await api.contacts();
+    await db.transaction(() async {
+      await db.update(db.users).write(
+        const UsersCompanion(isContact: Value(false)),
+      );
+      for (final raw in list) {
+        final user = raw as Map<String, dynamic>;
+        await _upsertUser(user);
+        await (db.update(db.users)..where((t) => t.id.equals(user['id'] as String)))
+            .write(const UsersCompanion(isContact: Value(true)));
+      }
+    });
+  }
+
+  /// Кладёт профиль в базу. Нужен экранам, которые получили его не из
+  /// событий сокета, — например, после правки собственного имени.
+  Future<void> upsertUser(Map<String, dynamic> raw) => _upsertUser(raw);
+
   Future<void> _upsertUser(Map<String, dynamic> raw) async {
     await db
         .into(db.users)

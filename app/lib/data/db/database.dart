@@ -88,6 +88,13 @@ class Users extends Table {
   BoolColumn get online => boolean().withDefault(const Constant(false))();
   DateTimeColumn get lastSeenAt => dateTime().nullable()();
 
+  /// Есть ли он в моей адресной книге. Знать это надо и офлайн, поэтому
+  /// отметка лежит рядом с профилем, а не запрашивается каждый раз.
+  BoolColumn get isContact => boolean().withDefault(const Constant(false))();
+
+  /// Избранное — решение человека, оно только на этом устройстве.
+  BoolColumn get isFavorite => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -126,6 +133,19 @@ class Outbox extends Table {
   Set<Column> get primaryKey => {clientMsgId};
 }
 
+/// Настройки приложения — то, что человек выбрал сам.
+///
+/// Живут в той же базе, а не в отдельном хранилище: одно место для всего
+/// локального состояния, одна очистка при выходе. Токены сюда не кладём —
+/// им место в защищённом хранилище устройства.
+class Prefs extends Table {
+  TextColumn get name => text()();
+  TextColumn get value => text()();
+
+  @override
+  Set<Column> get primaryKey => {name};
+}
+
 /// Последнее сообщение чата в том виде, в каком его показывает список.
 ///
 /// Отдельный тип, а не `Message`: списку нужны четыре поля из пяти
@@ -144,14 +164,42 @@ class LastMessage {
   final bool deleted;
 }
 
-@DriftDatabase(tables: [Chats, Messages, Users, ChatMembers, Outbox])
+@DriftDatabase(tables: [Chats, Messages, Users, ChatMembers, Outbox, Prefs])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(openConnection());
 
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  /// Версия 2 добавила таблицу настроек. Пересоздавать базу нельзя: в ней
+  /// лежит вся переписка, и обновление приложения не повод её потерять.
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (m) => m.createAll(),
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.createTable(prefs);
+        await m.addColumn(users, users.isContact);
+        await m.addColumn(users, users.isFavorite);
+      }
+    },
+  );
+
+  /// Значение настройки. Отсутствие строки — это «не выбирал», и решение
+  /// принимает вызывающий: у темы это «как в системе».
+  Stream<String?> watchPref(String name) {
+    return (select(prefs)..where((t) => t.name.equals(name)))
+        .watchSingleOrNull()
+        .map((row) => row?.value);
+  }
+
+  Future<void> setPref(String name, String value) {
+    return into(
+      prefs,
+    ).insertOnConflictUpdate(PrefsCompanion.insert(name: name, value: value));
+  }
 
   /// Курсоры для команды sync: по каждому чату — до какого номера мы всё
   /// знаем. Это первое, что клиент отправляет после подключения.
@@ -186,6 +234,80 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Stream<List<User>> watchUsers() => select(users).watch();
+
+  /// Адресная книга: те, кого человек знает. Сортировка по имени — список
+  /// читают глазами сверху вниз, и порядок «как пришло с сервера» здесь
+  /// ничем не оправдан.
+  Stream<List<User>> watchContacts() {
+    return (select(users)
+          ..where((t) => t.isContact.equals(true))
+          ..orderBy([(t) => OrderingTerm(expression: t.displayName)]))
+        .watch();
+  }
+
+  /// Личный чат с этим человеком, если он уже заведён.
+  ///
+  /// На сервере личный чат появляется при первом сообщении, а не при
+  /// открытии экрана. Поэтому здесь бывает null, и экран переписки должен
+  /// это пережить: пустая лента и поле ввода.
+  Stream<String?> watchPrivateChatWith(String peerId) {
+    final query = select(chatMembers).join([
+      innerJoin(chats, chats.id.equalsExp(chatMembers.chatId)),
+    ])..where(chatMembers.userId.equals(peerId) & chats.type.equals('private'));
+
+    return query.watch().map(
+      (rows) => rows.isEmpty ? null : rows.first.readTable(chats).id,
+    );
+  }
+
+  /// Участники чата вместе с профилями.
+  Stream<List<({ChatMember member, User user})>> watchMembers(String chatId) {
+    final query = select(chatMembers).join([
+      innerJoin(users, users.id.equalsExp(chatMembers.userId)),
+    ])..where(chatMembers.chatId.equals(chatId));
+
+    return query.watch().map(
+      (rows) => [
+        for (final row in rows)
+          (member: row.readTable(chatMembers), user: row.readTable(users)),
+      ],
+    );
+  }
+
+  /// Вложения чата от свежих к старым — для экрана медиа.
+  ///
+  /// Ищем по непустому полю вложений, а не отдельной таблицей: вложений на
+  /// сообщение два-три, и отдельная таблица дала бы join на каждый экран
+  /// ради этих двух строк.
+  Stream<List<Message>> watchAttachments(String chatId) {
+    return (select(messages)
+          ..where(
+            (t) =>
+                t.chatId.equals(chatId) &
+                t.attachmentsJson.isNotNull() &
+                t.deletedAt.isNull(),
+          )
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+        .watch();
+  }
+
+  /// Поиск по сообщениям — по локальной базе, не по серверу.
+  ///
+  /// Полнотекстового поиска на сервере пока нет, но всё, что человек видел,
+  /// и так лежит здесь. Поэтому поиск работает офлайн и отвечает мгновенно;
+  /// чего он не найдёт — то, что не успело синхронизироваться.
+  Future<List<Message>> searchMessages(String needle, {int limit = 50}) {
+    return (select(messages)
+          ..where((t) => t.body.like('%$needle%') & t.deletedAt.isNull())
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+          ..limit(limit))
+        .get();
+  }
+
+  Future<void> setFavorite(String userId, bool value) {
+    return (update(users)..where((t) => t.id.equals(userId)))
+        .write(UsersCompanion(isFavorite: Value(value)));
+  }
 
   /// Собеседник каждого чата — по нему подписан личный диалог.
   ///
@@ -241,9 +363,15 @@ class AppDatabase extends _$AppDatabase {
     )..orderBy([(t) => OrderingTerm(expression: t.createdAt)])).get();
   }
 
+  /// Стирает данные аккаунта при выходе: устройство может быть общим.
+  ///
+  /// Настройки при этом остаются. Тема и отметка о показанном приветствии —
+  /// свойства устройства, а не аккаунта; сбрасывать их при выходе значит
+  /// каждый раз возвращать человеку светлую тему, которую он менял.
   Future<void> clearAll() async {
     await transaction(() async {
       for (final table in allTables) {
+        if (table.actualTableName == prefs.actualTableName) continue;
         await delete(table).go();
       }
     });

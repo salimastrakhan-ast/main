@@ -104,6 +104,11 @@ class ApiClient {
 
   Future<Map<String, dynamic>> me() => _get('/v1/users/me');
 
+  /// Меняет профиль. Пока это только имя: аватары ещё не заведены.
+  Future<Map<String, dynamic>> updateMe({required String displayName}) {
+    return _send('PATCH', '/v1/users/me', {'display_name': displayName});
+  }
+
   Future<List<dynamic>> history(
     String chatId, {
     int? beforeSeq,
@@ -115,6 +120,12 @@ class ApiClient {
     };
     final json = await _get('/v1/chats/$chatId/messages', query: query);
     return json['messages'] as List<dynamic>? ?? const [];
+  }
+
+  /// Адресная книга: те из знакомых, кто уже зарегистрирован.
+  Future<List<dynamic>> contacts() async {
+    final json = await _get('/v1/contacts');
+    return json['contacts'] as List<dynamic>? ?? const [];
   }
 
   Future<List<dynamic>> syncContacts(List<Map<String, String>> contacts) async {
@@ -179,6 +190,22 @@ class ApiClient {
       headers: await _headers(auth),
       body: jsonEncode(body),
     );
+    return _parse(response);
+  }
+
+  /// Запрос произвольным методом — для PATCH, которого нет у http.post.
+  Future<Map<String, dynamic>> _send(
+    String method,
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    final request = http.Request(
+      method,
+      Uri.parse('${AppConfig.apiBase}$path'),
+    )
+      ..headers.addAll(await _headers(true))
+      ..body = jsonEncode(body);
+    final response = await http.Response.fromStream(await _http.send(request));
     return _parse(response);
   }
 

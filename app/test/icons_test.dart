@@ -29,7 +29,7 @@ void main() {
     });
 
     test('набор не пуст и покрывает все роли', () {
-      expect(MayakIcons.all, hasLength(15));
+      expect(MayakIcons.all, hasLength(46));
     });
   });
 }

@@ -31,29 +31,115 @@ abstract final class MayakIcons {
   /// Закрыть.
   static const close = IconData(57778, fontFamily: 'Lucide');
 
+  /// Вглубь: строка списка, ведущая на другой экран.
+  static const forward = IconData(57455, fontFamily: 'Lucide');
+
+  /// Меню экрана — три точки в шапке.
+  static const menu = IconData(57527, fontFamily: 'Lucide');
+
+  // --- Разделы ---
+
+  /// Переписки. Он же значок пустой переписки.
+  static const chat = IconData(57622, fontFamily: 'Lucide');
+
+  /// Список диалогов.
+  static const chats = IconData(58381, fontFamily: 'Lucide');
+
+  /// Контакты.
+  static const contacts = IconData(58478, fontFamily: 'Lucide');
+
+  /// Звонки.
+  static const calls = IconData(57651, fontFamily: 'Lucide');
+
+  /// Настройки.
+  static const settings = IconData(57684, fontFamily: 'Lucide');
+
+  /// Профиль в шапке.
+  static const profile = IconData(58465, fontFamily: 'Lucide');
+
   // --- Действия ---
 
   /// Отправить сообщение.
   static const send = IconData(57418, fontFamily: 'Lucide');
 
+  /// Новый чат.
+  static const compose = IconData(57714, fontFamily: 'Lucide');
+
+  /// Поиск.
+  static const search = IconData(57681, fontFamily: 'Lucide');
+
+  /// Прикрепить файл.
+  static const attach = IconData(57661, fontFamily: 'Lucide');
+
+  /// Эмодзи.
+  static const emoji = IconData(57700, fontFamily: 'Lucide');
+
+  /// Изменить.
+  static const edit = IconData(57849, fontFamily: 'Lucide');
+
+  /// Добавить человека.
+  static const addPerson = IconData(57762, fontFamily: 'Lucide');
+
+  /// Избранное.
+  static const star = IconData(57718, fontFamily: 'Lucide');
+
   /// Выйти из аккаунта.
   static const logout = IconData(57614, fontFamily: 'Lucide');
 
-  // --- Разделы ---
+  /// Удалить.
+  static const delete = IconData(57742, fontFamily: 'Lucide');
 
-  /// Профиль в шапке.
-  static const profile = IconData(58465, fontFamily: 'Lucide');
+  // --- Звонки ---
 
-  /// Переписка: пустой чат.
-  static const chat = IconData(57622, fontFamily: 'Lucide');
+  /// Позвонить.
+  static const call = IconData(57652, fontFamily: 'Lucide');
 
-  /// Список диалогов: пусто.
-  static const chats = IconData(58381, fontFamily: 'Lucide');
+  /// Видеозвонок.
+  static const video = IconData(57765, fontFamily: 'Lucide');
+
+  /// Входящий звонок.
+  static const callIn = IconData(57411, fontFamily: 'Lucide');
+
+  /// Исходящий звонок.
+  static const callOut = IconData(57421, fontFamily: 'Lucide');
+
+  /// Пропущенный звонок.
+  static const callMissed = IconData(57655, fontFamily: 'Lucide');
+
+  // --- Разделы настроек ---
+
+  /// Аккаунт.
+  static const account = IconData(58472, fontFamily: 'Lucide');
+
+  /// Уведомления.
+  static const bell = IconData(57433, fontFamily: 'Lucide');
+
+  /// Конфиденциальность.
+  static const privacy = IconData(57611, fontFamily: 'Lucide');
+
+  /// Данные и хранилище.
+  static const storage = IconData(57581, fontFamily: 'Lucide');
+
+  /// Внешний вид.
+  static const appearance = IconData(57821, fontFamily: 'Lucide');
+
+  /// Язык.
+  static const language = IconData(57576, fontFamily: 'Lucide');
+
+  /// Помощь.
+  static const help = IconData(57474, fontFamily: 'Lucide');
+
+  /// Светлая тема.
+  static const themeLight = IconData(57720, fontFamily: 'Lucide');
+
+  /// Тёмная тема.
+  static const themeDark = IconData(57630, fontFamily: 'Lucide');
 
   // --- Поля ввода ---
 
-  /// Номер телефона.
-  static const phone = IconData(57651, fontFamily: 'Lucide');
+  /// Номер телефона. Не та же трубка, что у звонков: рядом с полем ввода
+  /// она читалась бы как «позвонить», а не как «сюда номер».
+  static const phone = IconData(57699, fontFamily: 'Lucide');
 
   // --- Состояние связи ---
 
@@ -71,6 +157,9 @@ abstract final class MayakIcons {
   /// Отправлено.
   static const sent = IconData(57452, fontFamily: 'Lucide');
 
+  /// Прочитано.
+  static const read = IconData(58254, fontFamily: 'Lucide');
+
   /// Отправить не удалось.
   static const failed = IconData(57463, fontFamily: 'Lucide');
 
@@ -79,6 +168,15 @@ abstract final class MayakIcons {
   /// Файл.
   static const file = IconData(57548, fontFamily: 'Lucide');
 
+  /// Картинка.
+  static const image = IconData(57590, fontFamily: 'Lucide');
+
+  /// Ссылка.
+  static const link = IconData(57602, fontFamily: 'Lucide');
+
+  /// Голосовое сообщение.
+  static const voice = IconData(57624, fontFamily: 'Lucide');
+
   /// Картинку не удалось загрузить.
   static const brokenImage = IconData(57792, fontFamily: 'Lucide');
 
@@ -86,18 +184,49 @@ abstract final class MayakIcons {
   static const all = <IconData>[
     back,
     close,
-    send,
-    logout,
-    profile,
+    forward,
+    menu,
     chat,
     chats,
+    contacts,
+    calls,
+    settings,
+    profile,
+    send,
+    compose,
+    search,
+    attach,
+    emoji,
+    edit,
+    addPerson,
+    star,
+    logout,
+    delete,
+    call,
+    video,
+    callIn,
+    callOut,
+    callMissed,
+    account,
+    bell,
+    privacy,
+    storage,
+    appearance,
+    language,
+    help,
+    themeLight,
+    themeDark,
     phone,
     online,
     offline,
     pending,
     sent,
+    read,
     failed,
     file,
+    image,
+    link,
+    voice,
     brokenImage,
   ];
 }

@@ -1,45 +1,70 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'core/providers.dart';
 import 'features/auth/phone_screen.dart';
-import 'features/chats/chats_screen.dart';
+import 'features/home/home_screen.dart';
+import 'features/welcome/welcome_screen.dart';
 import 'ui/theme.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Названия месяцев и дней недели по-русски. Без этого DateFormat с
+  // локалью 'ru' падает, а разделители дат в ленте как раз на ней.
+  await initializeDateFormatting('ru');
   runApp(const ProviderScope(child: MayakApp()));
 }
 
-class MayakApp extends StatelessWidget {
+class MayakApp extends ConsumerWidget {
   const MayakApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(themeModeProvider).value ?? ThemeMode.system;
+
     return MaterialApp(
       title: 'Маяк',
       debugShowCheckedModeBanner: false,
       theme: MayakTheme.light(),
       darkTheme: MayakTheme.dark(),
+      themeMode: mode,
+      locale: const Locale('ru'),
+      supportedLocales: const [Locale('ru'), Locale('en')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: const _Root(),
     );
   }
 }
 
-/// Развилка: вошедшего ведём в чаты, остальных — на ввод номера.
+/// Развилка: вошедшего ведём в разделы, остальных — на вход, а тех, кто
+/// здесь впервые, сначала на приветствие.
 class _Root extends ConsumerWidget {
   const _Root();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
+    final welcomeSeen = ref.watch(welcomeSeenProvider);
 
     return session.when(
       loading: () => const _Splash(),
-      error: (_, __) => const PhoneScreen(),
+      error: (_, _) => const PhoneScreen(),
       data: (value) {
-        if (value == null) return const PhoneScreen();
-        // Репозиторий и сокет поднимаются здесь: до входа им нечего делать.
-        return const _Connected(child: ChatsScreen());
+        if (value != null) {
+          // Репозиторий и сокет поднимаются здесь: до входа им нечего делать.
+          return const _Connected(child: HomeScreen());
+        }
+        return welcomeSeen.when(
+          loading: () => const _Splash(),
+          error: (_, _) => const PhoneScreen(),
+          data: (seen) => seen ? const PhoneScreen() : const WelcomeScreen(),
+        );
       },
     );
   }
