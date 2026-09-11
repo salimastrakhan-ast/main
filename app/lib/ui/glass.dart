@@ -1,22 +1,23 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
 import 'icons.dart';
-import 'theme.dart';
+import 'tokens.dart';
 
-/// Матовое стекло: размытая полупрозрачная поверхность.
+/// Панели поверх содержимого: шапки, поле ввода, модальные окна.
 ///
-/// Работает только там, где под поверхностью реально проезжает содержимое.
-/// Над пустым фоном размывать нечего — получится матовая плашка с полной
-/// ценой по производительности, поэтому экраны специально перестроены так,
-/// чтобы лента уходила под шапку и под поле ввода.
+/// Раньше здесь было матовое стекло. Убрано после замера: в публичном CSS
+/// claude.com `backdrop-filter` и `blur()` не встречаются ни разу — все
+/// поверхности плоские, с волосяной границей и очень мягкой тенью. Заодно
+/// ушла цена размытия: прокрутка длинной ленты занимала 56 мс на кадр
+/// против 42 мс без него.
+///
+/// Имена файла и виджетов оставлены прежними: они про роль — «панель над
+/// содержимым», — а не про эффект.
 class GlassSurface extends StatelessWidget {
   const GlassSurface({
     required this.child,
     this.borderSide = GlassBorder.bottom,
     this.borderRadius,
-    this.opacity = 0.72,
     super.key,
   });
 
@@ -24,60 +25,41 @@ class GlassSurface extends StatelessWidget {
   final GlassBorder borderSide;
   final BorderRadius? borderRadius;
 
-  /// Плотность заливки поверх размытия.
-  ///
-  /// Ниже 0.7 текст на шапке перестаёт читаться над пёстрым содержимым —
-  /// на коралловых пузырях это заметно сразу.
-  final double opacity;
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final decoration = BoxDecoration(
-      color: scheme.surface.withValues(
-        alpha: MayakTheme.glassEnabled ? opacity : 1,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: borderRadius,
+        border: switch (borderSide) {
+          GlassBorder.none => null,
+          GlassBorder.bottom => Border(
+            bottom: BorderSide(
+              color: scheme.outlineVariant,
+              width: Tokens.borderSm,
+            ),
+          ),
+          GlassBorder.top => Border(
+            top: BorderSide(
+              color: scheme.outlineVariant,
+              width: Tokens.borderSm,
+            ),
+          ),
+          GlassBorder.all => Border.all(
+            color: scheme.outlineVariant,
+            width: Tokens.borderSm,
+          ),
+        },
       ),
-      borderRadius: borderRadius,
-      border: switch (borderSide) {
-        GlassBorder.none => null,
-        GlassBorder.bottom => Border(
-          bottom: BorderSide(color: scheme.outlineVariant),
-        ),
-        GlassBorder.top => Border(
-          top: BorderSide(color: scheme.outlineVariant),
-        ),
-        GlassBorder.all => Border.all(color: scheme.outlineVariant),
-      },
-    );
-
-    // Запасной путь: та же раскладка, просто без размытия. Раскладка обязана
-    // совпадать — иначе пришлось бы поддерживать две вёрстки, и вторая
-    // неизбежно отстала бы.
-    if (!MayakTheme.glassEnabled) {
-      return DecoratedBox(decoration: decoration, child: child);
-    }
-
-    // RepaintBoundary не даёт перерисовке списка тянуть за собой пересчёт
-    // размытия на каждом кадре прокрутки.
-    return RepaintBoundary(
-      child: ClipRRect(
-        // Без обрезки размытие растекается за пределы виджета на весь слой.
-        borderRadius: borderRadius ?? BorderRadius.zero,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: DecoratedBox(decoration: decoration, child: child),
-        ),
-      ),
+      child: child,
     );
   }
 }
 
 enum GlassBorder { none, bottom, top, all }
 
-/// Шапка на стекле.
-///
-/// Обычный [AppBar] поверх прозрачного фона, обёрнутый в [GlassSurface].
-/// Экран при этом должен стоять с `extendBodyBehindAppBar: true`.
+/// Шапка экрана.
 class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const GlassAppBar({
     required this.title,
@@ -157,45 +139,33 @@ double glassAppBarHeight(BuildContext context, {double extra = 0}) {
   return kToolbarHeight + MediaQuery.paddingOf(context).top + extra;
 }
 
-/// Диалог на стекле: фон за ним по-настоящему размывается.
+/// Модальное окно.
 ///
-/// Обычный showDialog рисует под окном сплошную заливку. Здесь в барьер
-/// добавлен BackdropFilter, поэтому приложение позади видно сквозь стекло —
-/// тот же язык, что у шапок.
+/// Затемнение без размытия — как у них. Появление за 200 мс, единственная
+/// длительность перехода в их системе.
 Future<T?> showGlassDialog<T>({
   required BuildContext context,
   required WidgetBuilder builder,
 }) {
   final scheme = Theme.of(context).colorScheme;
 
-  if (!MayakTheme.glassEnabled) {
-    return showDialog<T>(context: context, builder: builder);
-  }
-
   return showGeneralDialog<T>(
     context: context,
     barrierDismissible: true,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-    // Заливка мягче стандартной: размытие само по себе отделяет окно от фона.
-    barrierColor: scheme.scrim.withValues(alpha: 0.28),
-    transitionDuration: const Duration(milliseconds: 180),
+    barrierColor: scheme.scrim.withValues(alpha: 0.32),
+    transitionDuration: Tokens.duration,
     pageBuilder: (context, _, _) => builder(context),
     transitionBuilder: (context, animation, _, child) {
       final curved = CurvedAnimation(
         parent: animation,
         curve: Curves.easeOutCubic,
       );
-      return BackdropFilter(
-        filter: ImageFilter.blur(
-          sigmaX: 14 * curved.value,
-          sigmaY: 14 * curved.value,
-        ),
-        child: FadeTransition(
-          opacity: curved,
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.97, end: 1).animate(curved),
-            child: child,
-          ),
+      return FadeTransition(
+        opacity: curved,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.98, end: 1).animate(curved),
+          child: child,
         ),
       );
     },

@@ -121,7 +121,6 @@ class _ChatTile extends StatelessWidget {
           title.isEmpty ? '?' : title.characters.first.toUpperCase(),
           style: const TextStyle(
             color: MayakTheme.onAccent,
-            fontFamily: 'Manrope',
             fontWeight: FontWeight.w700,
             fontSize: 18,
           ),

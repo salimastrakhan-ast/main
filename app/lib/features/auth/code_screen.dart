@@ -94,12 +94,11 @@ class _CodeScreenState extends ConsumerState<CodeScreen> {
                     autofocus: true,
                     keyboardType: TextInputType.number,
                     textAlign: TextAlign.center,
-                    // Моноширинный: цифры не прыгают по мере ввода.
+                    // Цифры одной ширины: поле не дёргается по мере ввода.
                     style: const TextStyle(
-                      fontFamily: MayakTheme.monoFamily,
-                      fontFamilyFallback: MayakTheme.monoFallback,
                       fontSize: 26,
                       letterSpacing: 10,
+                      fontFeatures: MayakTheme.tabularFigures,
                     ),
                     inputFormatters: [
                       FilteringTextInputFormatter.digitsOnly,

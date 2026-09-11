@@ -1,179 +1,120 @@
 import 'package:flutter/material.dart';
 
+import 'tokens.dart';
+
 /// Тема приложения.
 ///
-/// Тёплая палитра: кремовое полотно, почти чёрный текст, коралловый акцент.
-/// Поверхности плоские, разделяются тонкими границами, а не тенями — так глаз
-/// цепляется за сообщения, а не за интерфейс вокруг них.
+/// Построена на [Tokens] — значениях, снятых с публичного CSS claude.com.
+/// Плоские поверхности, волосяные границы, очень мягкие тени, один акцент.
 abstract final class MayakTheme {
-  /// Матовое стекло на шапках, поле ввода и диалогах.
-  ///
-  /// Размытие обходится дорого на слабых Android и в вебе. Выключение не
-  /// меняет раскладку: те же поверхности становятся непрозрачными.
-  static const glassEnabled = true;
-
-  // --- Палитра ---
-
-  static const _cream = Color(0xFFFAF9F5);
-  static const _ink = Color(0xFF141413);
-  static const _coral = Color(0xFFD97757);
-  static const _warm = Color(0xFFE8E6DC);
-  static const _blue = Color(0xFF6A9BCC);
-  static const _green = Color(0xFF788C5D);
-
-  /// Серый для границ и разделителей.
-  ///
-  /// Только для форм. Как текст на кремовом он даёт 2.1:1 — нечитаемо;
-  /// для второстепенного текста есть [_inkMuted].
-  static const _stone = Color(0xFFB0AEA5);
-
-  /// Второстепенный текст на светлой теме: 5.2:1 на кремовом.
-  static const _inkMuted = Color(0xFF6B6960);
-
-  /// Он же на тёмной: 7.1:1 на чернильном.
-  static const _creamMuted = Color(0xFFA3A199);
-
-  // Ступени поверхностей: полотно, поля ввода, чужие пузыри.
-  static const _creamLow = Color(0xFFF7F5EF);
-  static const _creamMid = Color(0xFFF2F0E8);
-  static const _creamHigh = Color(0xFFEDEAE0);
-  static const _hairline = Color(0xFFDEDBCF);
-
-  static const _inkLow = Color(0xFF1A1A19);
-  static const _inkMid = Color(0xFF1F1F1E);
-  static const _inkHigh = Color(0xFF232322);
-  static const _inkTop = Color(0xFF262624);
-  static const _inkHairline = Color(0xFF33322F);
-  static const _inkOutline = Color(0xFF55534D);
-
-  /// Мягкие заливки аватаров.
-  ///
-  /// Насыщенные акценты на каждом аватаре превращали список в пёстрое
-  /// полотно. Здесь те же три цвета, разбавленные кремовым: узнавание
-  /// остаётся, шум уходит. Тёмный текст поверх даёт больше 10:1.
-  static const _washCoral = Color(0xFFEBBEAE);
-  static const _washBlue = Color(0xFFB9CFE3);
-  static const _washGreen = Color(0xFFC0C8B1);
-
-  /// Тёмные варианты акцентов — для имён отправителей.
-  ///
-  /// Насыщенные как текст не проходят: коралл на кремовом даёт 3.1:1.
-  /// Эти дают не меньше 4.5:1 и на кремовом, и на белом пузыре.
-  static const _textCoral = Color(0xFFC0502B);
-  static const _textBlue = Color(0xFF3C76B0);
-  static const _textGreen = Color(0xFF677850);
-
-  static const _errorLight = Color(0xFFA33A2A);
-  static const _errorDark = Color(0xFFE9A08F);
-
   // --- Шрифты ---
 
-  /// Заголовки. Не Poppins из фирменного набора: у него нет кириллицы —
-  /// проверено по таблице символов, «Привет» не отрисовалось бы ни одной
-  /// буквой. Manrope того же геометрического склада и с полной кириллицей.
-  static const _display = 'Manrope';
+  /// Один шрифт на весь интерфейс.
+  ///
+  /// В их системе три семейства — anthropicSans, Serif и Mono, — но это
+  /// лицензионные шрифты, и поставлять их в чужом приложении нельзя. Их
+  /// собственный запасной вариант прописан там же: system-ui. Он и взят.
+  ///
+  /// На телефонах это родной шрифт системы. В вебе движок не умеет взять
+  /// системный шрифт, не сходив за Roboto на чужой CDN — замерено
+  /// пятнадцать секунд белого экрана, — поэтому Roboto лежит в сборке. Он
+  /// же и есть системный шрифт Android, так что подмена честная.
+  static const _font = 'Roboto';
 
-  /// Текст сообщений.
-  static const _body = 'Roboto';
-
-  /// Цифры и метки: время, счётчики, статусы. Моноширинные цифры не
-  /// прыгают по ширине при каждом обновлении минуты.
-  static const _mono = 'JetBrainsMono';
-
-  /// Запасные семейства: если в Manrope не найдётся редкий символ, его
-  /// подставит Roboto, а не безымянный системный шрифт.
-  static const _fallback = [_body];
+  /// Цифры одной ширины.
+  ///
+  /// Заменяют отдельный моноширинный шрифт: время и счётчики не прыгают при
+  /// обновлении минуты, а в сборке на два семейства меньше.
+  static const tabularFigures = [FontFeature.tabularFigures()];
 
   static ThemeData light() => _build(_lightScheme);
   static ThemeData dark() => _build(_darkScheme);
 
   static const _lightScheme = ColorScheme(
     brightness: Brightness.light,
-    primary: _coral,
-    // Тёмный, а не белый: белый на коралле даёт 3.1:1 и не проходит.
-    onPrimary: _ink,
+    primary: Tokens.clay,
+    // Тёмный, а не белый: белый на clay даёт 3.1:1 и не проходит.
+    onPrimary: Tokens.gray950,
     primaryContainer: Color(0xFFF6DDD2),
-    onPrimaryContainer: _ink,
-    secondary: _blue,
-    onSecondary: _ink,
+    onPrimaryContainer: Tokens.gray950,
+    secondary: Tokens.sky,
+    onSecondary: Tokens.gray950,
     secondaryContainer: Color(0xFFDCE7F2),
-    onSecondaryContainer: _ink,
-    tertiary: _green,
-    onTertiary: _ink,
+    onSecondaryContainer: Tokens.gray950,
+    tertiary: Tokens.olive,
+    onTertiary: Tokens.gray950,
     tertiaryContainer: Color(0xFFE0E5D5),
-    onTertiaryContainer: _ink,
-    error: _errorLight,
-    onError: _cream,
+    onTertiaryContainer: Tokens.gray950,
+    error: Tokens.error,
+    onError: Tokens.gray000,
     errorContainer: Color(0xFFF5DAD4),
     onErrorContainer: Color(0xFF4A1710),
-    surface: _cream,
-    onSurface: _ink,
-    surfaceDim: _creamHigh,
-    surfaceBright: Color(0xFFFFFFFF),
-    surfaceContainerLowest: Color(0xFFFFFFFF),
-    surfaceContainerLow: _creamLow,
-    surfaceContainer: _creamMid,
-    surfaceContainerHigh: _creamHigh,
-    surfaceContainerHighest: _warm,
-    onSurfaceVariant: _inkMuted,
-    outline: _stone,
-    outlineVariant: _hairline,
-    shadow: _ink,
-    scrim: _ink,
-    inverseSurface: _ink,
-    onInverseSurface: _cream,
-    inversePrimary: _coral,
+    surface: Tokens.gray050,
+    onSurface: Tokens.gray950,
+    surfaceDim: Tokens.gray150,
+    surfaceBright: Tokens.gray000,
+    surfaceContainerLowest: Tokens.gray000,
+    surfaceContainerLow: Tokens.gray100,
+    surfaceContainer: Tokens.gray150,
+    surfaceContainerHigh: Tokens.gray200,
+    surfaceContainerHighest: Tokens.gray250,
+    // gray-550 даёт 5.3:1 на полотне. Сам gray-400 как текст — 2.1:1,
+    // он годится только для границ.
+    onSurfaceVariant: Tokens.gray550,
+    outline: Tokens.gray350,
+    outlineVariant: Tokens.gray250,
+    shadow: Tokens.gray1000,
+    scrim: Tokens.gray1000,
+    inverseSurface: Tokens.gray950,
+    onInverseSurface: Tokens.gray050,
+    inversePrimary: Tokens.clay,
   );
 
   static const _darkScheme = ColorScheme(
     brightness: Brightness.dark,
-    primary: _coral,
-    onPrimary: _ink,
+    primary: Tokens.clay,
+    onPrimary: Tokens.gray950,
     primaryContainer: Color(0xFF5C3226),
     onPrimaryContainer: Color(0xFFF6DDD2),
-    secondary: _blue,
-    onSecondary: _ink,
+    secondary: Tokens.sky,
+    onSecondary: Tokens.gray950,
     secondaryContainer: Color(0xFF2C4257),
     onSecondaryContainer: Color(0xFFDCE7F2),
-    tertiary: _green,
-    onTertiary: _ink,
+    tertiary: Tokens.olive,
+    onTertiary: Tokens.gray950,
     tertiaryContainer: Color(0xFF3A452B),
     onTertiaryContainer: Color(0xFFE0E5D5),
-    error: _errorDark,
+    error: Color(0xFFE9A08F),
     onError: Color(0xFF3A1009),
     errorContainer: Color(0xFF5F2318),
     onErrorContainer: Color(0xFFF5DAD4),
-    surface: _ink,
-    onSurface: _cream,
-    surfaceDim: Color(0xFF0F0F0E),
-    surfaceBright: _inkTop,
-    surfaceContainerLowest: Color(0xFF0F0F0E),
-    surfaceContainerLow: _inkLow,
-    surfaceContainer: _inkMid,
-    surfaceContainerHigh: _inkHigh,
-    surfaceContainerHighest: _inkTop,
-    onSurfaceVariant: _creamMuted,
-    outline: _inkOutline,
-    outlineVariant: _inkHairline,
-    shadow: Color(0xFF000000),
-    scrim: Color(0xFF000000),
-    inverseSurface: _cream,
-    onInverseSurface: _ink,
-    inversePrimary: _coral,
+    surface: Tokens.gray950,
+    onSurface: Tokens.gray050,
+    surfaceDim: Tokens.gray1000,
+    surfaceBright: Tokens.gray800,
+    surfaceContainerLowest: Tokens.gray1000,
+    surfaceContainerLow: Tokens.gray900,
+    surfaceContainer: Tokens.gray850,
+    surfaceContainerHigh: Tokens.gray800,
+    surfaceContainerHighest: Tokens.gray750,
+    onSurfaceVariant: Tokens.gray400,
+    outline: Tokens.gray650,
+    outlineVariant: Tokens.gray750,
+    shadow: Tokens.gray1000,
+    scrim: Tokens.gray1000,
+    inverseSurface: Tokens.gray050,
+    onInverseSurface: Tokens.gray950,
+    inversePrimary: Tokens.clay,
   );
 
   static ThemeData _build(ColorScheme scheme) {
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      // Шрифты лежат в сборке. Иначе движок в вебе пойдёт за ними на чужой
-      // CDN и до ответа не покажет ни кадра — замерено пятнадцать секунд.
-      fontFamily: _body,
-      fontFamilyFallback: _fallback,
+      fontFamily: _font,
       textTheme: _textTheme,
       scaffoldBackgroundColor: scheme.surface,
 
-      // Плоско и с волосяной линией внизу вместо тени.
       appBarTheme: AppBarTheme(
         backgroundColor: scheme.surface,
         surfaceTintColor: Colors.transparent,
@@ -181,44 +122,42 @@ abstract final class MayakTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        // Заголовок спокойнее прежнего: шапка обрамляет содержимое, а не
-        // соревнуется с ним.
         titleTextStyle: TextStyle(
-          fontFamily: _display,
-          fontFamilyFallback: _fallback,
+          fontFamily: _font,
           fontSize: 17,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w600,
           letterSpacing: -0.2,
           color: scheme.onSurface,
         ),
-        iconTheme: IconThemeData(color: scheme.onSurface, size: 22),
+        iconTheme: IconThemeData(color: scheme.onSurface, size: 20),
         actionsIconTheme: IconThemeData(
           color: scheme.onSurfaceVariant,
-          size: 22,
+          size: 20,
         ),
-        shape: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+        shape: Border(
+          bottom: BorderSide(
+            color: scheme.outlineVariant,
+            width: Tokens.borderSm,
+          ),
+        ),
       ),
 
-      // Иконки тонкие и не чернее текста: в спокойном интерфейсе они
-      // подсказка, а не акцент.
-      iconTheme: IconThemeData(color: scheme.onSurfaceVariant, size: 22),
+      iconTheme: IconThemeData(color: scheme.onSurfaceVariant, size: 20),
 
-      // Поле ввода светлее полотна и очерчено волосяной линией: так оно
-      // читается как отдельная поверхность, а не как вдавленная плашка.
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: scheme.surfaceContainerLowest,
         hintStyle: TextStyle(color: scheme.onSurfaceVariant, fontSize: 15),
         border: _inputBorder(scheme.outlineVariant),
         enabledBorder: _inputBorder(scheme.outlineVariant),
-        focusedBorder: _inputBorder(scheme.primary, width: 1.5),
+        // Кольцо фокуса — их цвет focus, он же clay-dark.
+        focusedBorder: _inputBorder(Tokens.clayDark, width: Tokens.borderMd),
         errorBorder: _inputBorder(scheme.error),
-        focusedErrorBorder: _inputBorder(scheme.error, width: 1.5),
+        focusedErrorBorder: _inputBorder(scheme.error, width: Tokens.borderMd),
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 15,
+          horizontal: Tokens.space4,
+          vertical: Tokens.space3 + 2,
         ),
-        // Иконки в поле тише текста: они подсказка, а не содержание.
         prefixIconColor: scheme.onSurfaceVariant,
         suffixIconColor: scheme.onSurfaceVariant,
       ),
@@ -232,13 +171,13 @@ abstract final class MayakTheme {
         style: ButtonStyle(
           overlayColor: _overlay(scheme.onSurface),
           shape: WidgetStatePropertyAll(
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(Tokens.radiusShell),
+            ),
           ),
         ),
       ),
 
-      // Переходы между экранами: проявление со сдвигом, одинаково на всех
-      // платформах. Задаётся один раз и работает на каждом Navigator.push.
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
           TargetPlatform.android: _FadeThroughTransitions(),
@@ -252,12 +191,15 @@ abstract final class MayakTheme {
 
       dividerTheme: DividerThemeData(
         color: scheme.outlineVariant,
-        thickness: 1,
-        space: 1,
+        thickness: Tokens.borderSm,
+        space: Tokens.borderSm,
       ),
 
       listTileTheme: const ListTileThemeData(
-        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: Tokens.space4,
+          vertical: Tokens.space1 + 2,
+        ),
       ),
 
       dialogTheme: DialogThemeData(
@@ -265,23 +207,29 @@ abstract final class MayakTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: scheme.outlineVariant),
+          borderRadius: BorderRadius.circular(Tokens.br16),
+          side: BorderSide(
+            color: scheme.outlineVariant,
+            width: Tokens.borderSm,
+          ),
         ),
         titleTextStyle: TextStyle(
-          fontFamily: _display,
-          fontFamilyFallback: _fallback,
-          fontSize: 19,
-          fontWeight: FontWeight.w700,
+          fontFamily: _font,
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.2,
           color: scheme.onSurface,
         ),
         contentTextStyle: TextStyle(
-          fontFamily: _body,
+          fontFamily: _font,
           fontSize: 14,
-          height: 1.4,
+          height: 1.5,
           color: scheme.onSurfaceVariant,
         ),
-        insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+        insetPadding: const EdgeInsets.symmetric(
+          horizontal: Tokens.space6 + 4,
+          vertical: Tokens.space6,
+        ),
       ),
 
       bottomSheetTheme: BottomSheetThemeData(
@@ -289,7 +237,7 @@ abstract final class MayakTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(Tokens.br16)),
         ),
       ),
 
@@ -301,7 +249,9 @@ abstract final class MayakTheme {
         ),
         behavior: SnackBarBehavior.floating,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(Tokens.radiusShell),
+        ),
       ),
 
       progressIndicatorTheme: ProgressIndicatorThemeData(
@@ -309,33 +259,39 @@ abstract final class MayakTheme {
         linearTrackColor: scheme.surfaceContainerHigh,
       ),
       // Чернильная волна Material чужая этому языку: нажатие показывается
-      // ровной подсветкой, как на кнопках claude.ai.
+      // ровной подсветкой.
       splashFactory: NoSplash.splashFactory,
     );
   }
 
+  static OutlineInputBorder _inputBorder(
+    Color color, {
+    double width = Tokens.borderSm,
+  }) {
+    return OutlineInputBorder(
+      borderRadius: BorderRadius.circular(Tokens.radiusInput),
+      borderSide: BorderSide(color: color, width: width),
+    );
+  }
+
   // --- Кнопки ---
-  //
-  // Состояния задаются через WidgetStateProperty. Фокус с клавиатуры —
-  // не украшение: без видимого кольца по приложению нельзя ходить табом,
-  // а веб-клиент у нас есть.
 
   static const _buttonText = TextStyle(
-    fontFamily: _display,
-    fontFamilyFallback: _fallback,
-    fontSize: 16,
-    fontWeight: FontWeight.w700,
+    fontFamily: _font,
+    fontSize: 15,
+    fontWeight: FontWeight.w600,
+    letterSpacing: -0.1,
   );
 
   /// Ровная подсветка вместо чернильной волны.
   static WidgetStateProperty<Color?> _overlay(Color base) {
     return WidgetStateProperty.resolveWith((states) {
       if (states.contains(WidgetState.pressed)) {
-        return base.withValues(alpha: 0.14);
+        return base.withValues(alpha: 0.12);
       }
       if (states.contains(WidgetState.hovered) ||
           states.contains(WidgetState.focused)) {
-        return base.withValues(alpha: 0.07);
+        return base.withValues(alpha: 0.06);
       }
       return null;
     });
@@ -343,9 +299,8 @@ abstract final class MayakTheme {
 
   /// Кольцо фокуса с клавиатуры.
   ///
-  /// Цвет кольца задаётся отдельно от акцента: на коралловой кнопке
-  /// коралловое кольцо невидимо, и фокус пропадает совсем. На заливке кольцо
-  /// рисуется цветом текста, на светлом фоне — акцентом.
+  /// Цвет задаётся отдельно от акцента: на кнопке цвета clay кольцо того же
+  /// clay невидимо, и фокус пропадает совсем.
   static WidgetStateProperty<BorderSide?> _focusRing(
     ColorScheme scheme, {
     required Color focus,
@@ -353,12 +308,12 @@ abstract final class MayakTheme {
   }) {
     return WidgetStateProperty.resolveWith((states) {
       if (states.contains(WidgetState.focused)) {
-        return BorderSide(color: focus, width: 2);
+        return BorderSide(color: focus, width: Tokens.borderLg);
       }
       if (states.contains(WidgetState.disabled)) {
-        return BorderSide(color: scheme.outlineVariant);
+        return BorderSide(color: scheme.outlineVariant, width: Tokens.borderSm);
       }
-      return BorderSide(color: rest);
+      return BorderSide(color: rest, width: Tokens.borderSm);
     });
   }
 
@@ -368,7 +323,10 @@ abstract final class MayakTheme {
         if (states.contains(WidgetState.disabled)) {
           return scheme.surfaceContainerHigh;
         }
-        return scheme.primary;
+        // Их же значения для наведения и нажатия.
+        if (states.contains(WidgetState.pressed)) return Tokens.clayDark;
+        if (states.contains(WidgetState.hovered)) return Tokens.clayHover;
+        return Tokens.clay;
       }),
       foregroundColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.disabled)) {
@@ -376,18 +334,22 @@ abstract final class MayakTheme {
         }
         return scheme.onPrimary;
       }),
-      overlayColor: _overlay(scheme.onPrimary),
+      // Подсветка не нужна: цвет уже меняется самой заливкой.
+      overlayColor: const WidgetStatePropertyAll(Colors.transparent),
       side: _focusRing(
         scheme,
         focus: scheme.onPrimary,
         rest: Colors.transparent,
       ),
       elevation: const WidgetStatePropertyAll(0),
-      minimumSize: const WidgetStatePropertyAll(Size.fromHeight(52)),
+      minimumSize: const WidgetStatePropertyAll(Size.fromHeight(48)),
       textStyle: const WidgetStatePropertyAll(_buttonText),
       shape: WidgetStatePropertyAll(
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(Tokens.radiusShell),
+        ),
       ),
+      animationDuration: Tokens.duration,
     );
   }
 
@@ -400,12 +362,15 @@ abstract final class MayakTheme {
         return scheme.onSurface;
       }),
       overlayColor: _overlay(scheme.onSurface),
-      side: _focusRing(scheme, focus: scheme.primary, rest: scheme.outline),
-      minimumSize: const WidgetStatePropertyAll(Size(64, 46)),
+      side: _focusRing(scheme, focus: Tokens.clayDark, rest: scheme.outline),
+      minimumSize: const WidgetStatePropertyAll(Size(64, 44)),
       textStyle: const WidgetStatePropertyAll(_buttonText),
       shape: WidgetStatePropertyAll(
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(Tokens.radiusShell),
+        ),
       ),
+      animationDuration: Tokens.duration,
     );
   }
 
@@ -418,119 +383,102 @@ abstract final class MayakTheme {
         return scheme.onSurface;
       }),
       overlayColor: _overlay(scheme.onSurface),
-      side: _focusRing(scheme, focus: scheme.primary, rest: Colors.transparent),
-      minimumSize: const WidgetStatePropertyAll(Size(64, 46)),
+      side: _focusRing(
+        scheme,
+        focus: Tokens.clayDark,
+        rest: Colors.transparent,
+      ),
+      minimumSize: const WidgetStatePropertyAll(Size(64, 44)),
       textStyle: const WidgetStatePropertyAll(_buttonText),
       shape: WidgetStatePropertyAll(
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(Tokens.radiusShell),
+        ),
       ),
-    );
-  }
-
-  static OutlineInputBorder _inputBorder(Color color, {double width = 1}) {
-    return OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: BorderSide(color: color, width: width),
+      animationDuration: Tokens.duration,
     );
   }
 
   /// Типографика.
   ///
-  /// Цвета здесь не задаются намеренно: их подставит схема, и одна и та же
-  /// таблица работает в обеих темах.
+  /// Одно семейство на всё, различие — в размере и насыщенности. Жирность
+  /// заголовков 600, а не 700: в их интерфейсе заголовки плотные, но не
+  /// чёрные, и отрицательный трекинг держит их собранными.
   static const _textTheme = TextTheme(
     headlineLarge: TextStyle(
-      fontFamily: _display,
-      fontFamilyFallback: _fallback,
-      fontSize: 30,
-      fontWeight: FontWeight.w700,
-      letterSpacing: -0.5,
+      fontSize: 28,
+      fontWeight: FontWeight.w600,
+      letterSpacing: -0.6,
+      height: 1.2,
     ),
     headlineMedium: TextStyle(
-      fontFamily: _display,
-      fontFamilyFallback: _fallback,
-      fontSize: 26,
-      fontWeight: FontWeight.w700,
-      letterSpacing: -0.4,
+      fontSize: 24,
+      fontWeight: FontWeight.w600,
+      letterSpacing: -0.5,
+      height: 1.2,
     ),
     headlineSmall: TextStyle(
-      fontFamily: _display,
-      fontFamilyFallback: _fallback,
-      fontSize: 22,
-      fontWeight: FontWeight.w700,
+      fontSize: 20,
+      fontWeight: FontWeight.w600,
       letterSpacing: -0.3,
+      height: 1.25,
     ),
     titleLarge: TextStyle(
-      fontFamily: _display,
-      fontFamilyFallback: _fallback,
-      fontSize: 20,
-      fontWeight: FontWeight.w700,
+      fontSize: 18,
+      fontWeight: FontWeight.w600,
       letterSpacing: -0.2,
     ),
     titleMedium: TextStyle(
-      fontFamily: _display,
-      fontFamilyFallback: _fallback,
-      fontSize: 16,
-      fontWeight: FontWeight.w700,
+      fontSize: 15,
+      fontWeight: FontWeight.w600,
+      letterSpacing: -0.1,
     ),
-    titleSmall: TextStyle(
-      fontFamily: _display,
-      fontFamilyFallback: _fallback,
-      fontSize: 14,
-      fontWeight: FontWeight.w700,
-    ),
-    bodyLarge: TextStyle(fontSize: 16, height: 1.4),
-    bodyMedium: TextStyle(fontSize: 14, height: 1.4),
-    bodySmall: TextStyle(fontSize: 13, height: 1.35),
+    titleSmall: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+    bodyLarge: TextStyle(fontSize: 16, height: 1.5),
+    bodyMedium: TextStyle(fontSize: 14, height: 1.5),
+    bodySmall: TextStyle(fontSize: 13, height: 1.45),
     labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
     labelMedium: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-    // Время, счётчики, статусы.
+    // Время, счётчики, статусы: цифры одной ширины, чтобы не прыгали.
     labelSmall: TextStyle(
-      fontFamily: _mono,
-      fontFamilyFallback: _fallback,
       fontSize: 11,
-      fontWeight: FontWeight.w400,
-      letterSpacing: 0,
+      fontWeight: FontWeight.w500,
+      fontFeatures: tabularFigures,
     ),
   );
 
   // --- Готовые куски для экранов ---
 
-  /// Цвет своего пузыря.
-  ///
-  /// Тёплый серый, а не коралл. Стена коралловых пузырей перетягивала на
-  /// себя всё внимание; терракот теперь работает как редкий акцент —
-  /// кнопка отправки, счётчик непрочитанного, знак приложения.
-  ///
-  /// Цвета заданы явно, а не через ступени поверхностей Material: в тёмной
-  /// теме ступени идут в обратную сторону, и чужой пузырь оказался бы
-  /// темнее полотна. Правило одно в обеих темах — свой пузырь плотнее
-  /// полотна, чужой едва заметнее.
+  /// Цвет своего пузыря: плотнее полотна.
   static Color ownBubble(ColorScheme scheme) =>
-      scheme.brightness == Brightness.light
-      ? const Color(0xFFE8E6DC)
-      : const Color(0xFF2E2D2B);
+      scheme.brightness == Brightness.light ? Tokens.gray200 : Tokens.gray800;
 
-  /// Цвет чужого пузыря.
+  /// Цвет чужого пузыря: едва заметнее полотна.
   static Color otherBubble(ColorScheme scheme) =>
-      scheme.brightness == Brightness.light
-      ? const Color(0xFFFFFFFF)
-      : const Color(0xFF1C1C1A);
+      scheme.brightness == Brightness.light ? Tokens.gray000 : Tokens.gray850;
 
-  /// Текст в пузыре — обычный, потому что оба пузыря нейтральные.
+  /// Текст в пузыре — обычный, оба пузыря нейтральные.
   static Color onOwnBubble(ColorScheme scheme) => scheme.onSurface;
 
-  /// Мягкие заливки аватаров и тёмные акценты для имён — по одному индексу.
-  static const _washes = [_washCoral, _washBlue, _washGreen];
-  static const _textAccents = [_textCoral, _textBlue, _textGreen];
+  /// Мягкие заливки аватаров: те же акценты, разбавленные полотном.
+  static const _washes = [
+    Color(0xFFEBBEAE),
+    Color(0xFFB9CFE3),
+    Color(0xFFC0C8B1),
+  ];
 
-  /// Стабильный цвет аватара по идентификатору.
-  ///
-  /// Один и тот же человек всегда одного цвета: цвет работает как опознавание
-  /// в списке, и меняться между запусками он не должен.
+  /// Тёмные варианты акцентов для имён: насыщенные как текст не проходят по
+  /// контрасту, эти дают не меньше 4.5:1.
+  static const _textAccents = [
+    Color(0xFFC0502B),
+    Color(0xFF3C76B0),
+    Color(0xFF677850),
+  ];
+
+  /// Цвет аватара, закреплённый за человеком.
   static Color accentFor(String id) => _washes[_slot(id)];
 
-  /// Цвет имени отправителя — тёмный вариант того же акцента, что у аватара.
+  /// Цвет имени отправителя — тёмный вариант того же акцента.
   static Color textAccentFor(String id) => _textAccents[_slot(id)];
 
   static int _slot(String id) {
@@ -542,18 +490,10 @@ abstract final class MayakTheme {
   }
 
   /// Текст поверх заливки аватара.
-  static const onAccent = _ink;
-
-  /// Шрифт для цифр и меток, когда нужен явно.
-  static const monoFamily = _mono;
-  static const monoFallback = _fallback;
+  static const onAccent = Tokens.gray950;
 }
 
-/// Переход между экранами: проявление со сдвигом на восемь пикселей.
-///
-/// Стандартный андроидный переход выезжает снизу на всю высоту и в этом
-/// языке выглядит грубо. Здесь движение короткое и почти незаметное — так же
-/// сдержанно, как в веб-интерфейсах Claude.
+/// Переход между экранами: проявление со сдвигом.
 class _FadeThroughTransitions extends PageTransitionsBuilder {
   const _FadeThroughTransitions();
 
