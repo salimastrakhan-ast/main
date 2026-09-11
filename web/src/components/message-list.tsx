@@ -1,0 +1,219 @@
+import type { ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Check, CheckCheck, Copy, Languages, Reply } from "lucide-react";
+import { toast } from "sonner";
+import { UserAvatar } from "@/components/user-avatar";
+import { dayKey, formatBubbleTime, formatDayLabel } from "@/lib/format";
+import { t, targetLangNames } from "@/lib/i18n";
+import { useMe, useMessenger } from "@/lib/store";
+import type { Message } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+export function MessageList({ chatId }: { chatId: string }) {
+  const uiLang = useMessenger((s) => s.uiLang);
+  const targetLang = useMessenger((s) => s.targetLang);
+  const messages = useMessenger((s) => s.messages);
+  const chats = useMessenger((s) => s.chats);
+  const contacts = useMessenger((s) => s.contacts);
+  const me = useMe();
+  const typingChatId = useMessenger((s) => s.typingChatId);
+  const translatingChatId = useMessenger((s) => s.translatingChatId);
+  const revealedOriginal = useMessenger((s) => s.revealedOriginal);
+  const setReplyTo = useMessenger((s) => s.setReplyTo);
+  const translateMessage = useMessenger((s) => s.translateMessage);
+  const toggleOriginal = useMessenger((s) => s.toggleOriginal);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  const chat = chats.find((c) => c.id === chatId);
+  const list = messages.filter((m) => m.chatId === chatId);
+  const showNames = chat?.kind === "group";
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [list.length, typingChatId, chatId]);
+
+  const items: Array<{ type: "day"; key: string; label: string } | { type: "msg"; key: string; message: Message }> =
+    [];
+  let lastDay = "";
+  for (const message of list) {
+    const key = dayKey(message.createdAt);
+    if (key !== lastDay) {
+      items.push({ type: "day", key: `d-${key}`, label: formatDayLabel(message.createdAt, uiLang) });
+      lastDay = key;
+    }
+    items.push({ type: "msg", key: message.id, message });
+  }
+
+  return (
+    <div className="scroll-thin flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-4">
+      <div className="mt-auto flex flex-col gap-1.5">
+        {items.map((item) => {
+          if (item.type === "day") {
+            return (
+              <div key={item.key} className="my-2 flex justify-center">
+                <span className="rounded-full bg-elevated/80 px-3 py-1 text-xs text-muted">
+                  {item.label}
+                </span>
+              </div>
+            );
+          }
+          const message = item.message;
+          const mine = message.senderId === me.id;
+          const sender = mine ? me : contacts[message.senderId];
+          const live = Boolean(chat?.translateOn && !mine);
+          const tr = message.translations?.[targetLang];
+          const showOriginal = revealedOriginal[message.id];
+          const body = live && tr && !showOriginal ? tr.text : message.text;
+          const reply = message.replyToId
+            ? messages.find((m) => m.id === message.replyToId)
+            : undefined;
+
+          return (
+            <div
+              key={message.id}
+              className={cn("group flex gap-2", mine ? "flex-row-reverse" : "flex-row")}
+            >
+              {showNames && !mine ? (
+                <UserAvatar
+                  src={sender?.avatar}
+                  initials={sender?.initials ?? "?"}
+                  name={sender?.name ?? ""}
+                  size="sm"
+                  className="mt-auto"
+                />
+              ) : null}
+
+              <div className={cn("flex max-w-bubble flex-col", mine ? "items-end" : "items-start")}>
+                {showNames && !mine ? (
+                  <span className="mb-0.5 px-1 text-xs font-medium text-accent">
+                    {sender?.name}
+                  </span>
+                ) : null}
+
+                <div
+                  className={cn(
+                    "relative px-3 pt-2 pb-1.5 text-sm leading-snug text-pretty shadow-[var(--shadow-border)]",
+                    mine
+                      ? "rounded-lg rounded-br-xs bg-bubble-out"
+                      : "rounded-lg rounded-bl-xs bg-bubble-in",
+                  )}
+                  onClick={() => setActiveId((id) => (id === message.id ? null : message.id))}
+                >
+                  {reply ? (
+                    <div className="mb-1.5 border-l-2 border-accent pl-2 text-xs text-muted">
+                      <span className="block font-medium text-accent">
+                        {reply.senderId === me.id ? t(uiLang, "you") : contacts[reply.senderId]?.name}
+                      </span>
+                      <span className="line-clamp-2">{reply.text}</span>
+                    </div>
+                  ) : null}
+
+                  <p className="whitespace-pre-wrap">
+                    {body}
+                    <span className="inline-flex h-4 w-14" />
+                  </p>
+                  <span className="absolute right-2 bottom-1 inline-flex items-center gap-1 text-xs tabular-nums text-muted">
+                    {live && tr && !showOriginal ? (
+                      <Languages className="size-3 opacity-70" />
+                    ) : null}
+                    {formatBubbleTime(message.createdAt)}
+                    {mine ? (
+                      message.status === "read" ? (
+                        <CheckCheck className="size-3.5 text-accent" />
+                      ) : (
+                        <Check className="size-3.5" />
+                      )
+                    ) : null}
+                  </span>
+                </div>
+
+                {live && tr ? (
+                  <button
+                    type="button"
+                    className="mt-0.5 px-1 text-xs text-subtle hover:text-muted"
+                    onClick={() => toggleOriginal(message.id)}
+                  >
+                    {showOriginal ? t(uiLang, "showTranslation") : t(uiLang, "showOriginal")}
+                    {tr.from && tr.from !== "und"
+                      ? ` · ${targetLangNames[targetLang][uiLang]}`
+                      : ""}
+                  </button>
+                ) : null}
+
+                <div
+                  className={cn(
+                    "mt-0.5 gap-0.5",
+                    mine ? "flex-row-reverse" : "flex-row",
+                    activeId === message.id ? "flex" : "hidden group-hover:flex",
+                  )}
+                >
+                  <IconAction
+                    label={t(uiLang, "reply")}
+                    onClick={() => setReplyTo(message.id)}
+                  >
+                    <Reply className="size-3.5" />
+                  </IconAction>
+                  <IconAction
+                    label={t(uiLang, "copy")}
+                    onClick={() => {
+                      void navigator.clipboard.writeText(body);
+                      toast(t(uiLang, "copied"));
+                    }}
+                  >
+                    <Copy className="size-3.5" />
+                  </IconAction>
+                  {!mine ? (
+                    <IconAction
+                      label={t(uiLang, "translate")}
+                      onClick={() => void translateMessage(message.id)}
+                    >
+                      <Languages className="size-3.5" />
+                    </IconAction>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {typingChatId === chatId ? (
+          <div className="flex">
+            <div className="flex items-center gap-1 rounded-lg rounded-bl-xs bg-bubble-in px-3 py-2.5 shadow-[var(--shadow-border)]">
+              <span className="typing-dot size-1.5 rounded-full bg-muted" />
+              <span className="typing-dot size-1.5 rounded-full bg-muted [animation-delay:120ms]" />
+              <span className="typing-dot size-1.5 rounded-full bg-muted [animation-delay:240ms]" />
+            </div>
+          </div>
+        ) : null}
+
+        {translatingChatId === chatId ? (
+          <p className="px-1 text-center text-xs text-muted">{t(uiLang, "translating")}</p>
+        ) : null}
+
+        <div ref={bottomRef} />
+      </div>
+    </div>
+  );
+}
+
+function IconAction({
+  children,
+  label,
+  onClick,
+}: {
+  children: ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      className="flex size-7 items-center justify-center rounded-full bg-elevated text-muted shadow-[var(--shadow-border)] hover:text-fg"
+    >
+      {children}
+    </button>
+  );
+}

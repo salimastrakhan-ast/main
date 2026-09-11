@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -62,6 +63,10 @@ func (c *Conn) handle(ctx context.Context, env ws.Envelope) {
 		c.handleAddMember(ctx, env)
 	case ws.CmdChatLeave:
 		c.handleLeave(ctx, env)
+	case ws.CmdChatPin:
+		c.handlePin(ctx, env)
+	case ws.CmdChatMute:
+		c.handleMute(ctx, env)
 	case ws.CmdAuth:
 		c.replyError(env.ID, ws.ErrCodeConflict, "Соединение уже авторизовано")
 	default:
@@ -427,4 +432,39 @@ func (h *Hub) notifyOffline(ctx context.Context, msg domain.Message, members []u
 			h.log.Error("не отправлен пуш", "err", err, "user", userID)
 		}
 	}
+}
+
+// handlePin закрепляет чат наверху списка.
+//
+// Настройка аккаунта, а не устройства: закрепив переписку на телефоне,
+// человек ждёт её наверху и в браузере.
+func (c *Conn) handlePin(ctx context.Context, env ws.Envelope) {
+	var payload ws.ChatPinData
+	if err := decodeData(env, &payload); err != nil {
+		c.replyError(env.ID, ws.ErrCodeBadRequest, err.Error())
+		return
+	}
+	if err := c.hub.store.SetPinned(ctx, payload.ChatID, c.userID, payload.Pinned); err != nil {
+		c.fail(env.ID, err)
+		return
+	}
+	c.reply(env.ID, ws.TypeAck, struct{}{})
+}
+
+// handleMute выключает звук чата — на срок или совсем.
+func (c *Conn) handleMute(ctx context.Context, env ws.Envelope) {
+	var payload ws.ChatMuteData
+	if err := decodeData(env, &payload); err != nil {
+		c.replyError(env.ID, ws.ErrCodeBadRequest, err.Error())
+		return
+	}
+	var until time.Time
+	if payload.Until != nil {
+		until = *payload.Until
+	}
+	if err := c.hub.store.SetMuted(ctx, payload.ChatID, c.userID, until); err != nil {
+		c.fail(env.ID, err)
+		return
+	}
+	c.reply(env.ID, ws.TypeAck, struct{}{})
 }

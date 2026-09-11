@@ -19,6 +19,7 @@ import (
 	"github.com/salimastrakhan-ast/main/server/internal/ratelimit"
 	"github.com/salimastrakhan-ast/main/server/internal/realtime"
 	"github.com/salimastrakhan-ast/main/server/internal/store"
+	"github.com/salimastrakhan-ast/main/server/internal/translate"
 )
 
 func main() {
@@ -82,7 +83,7 @@ func run() error {
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           api.NewServer(cfg, st, authSvc, hub, storage).Handler(),
+		Handler:           api.NewServer(cfg, st, authSvc, hub, storage, translate.NoopTranslator{Logger: logger}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		// Таймаут записи не ставим: у долгоживущих WebSocket-соединений он
 		// рвёт связь по расписанию. Свои таймауты они держат сами.

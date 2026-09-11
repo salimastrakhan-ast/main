@@ -324,11 +324,13 @@ func (s *Store) chatSummaries(ctx context.Context, userID uuid.UUID, only []uuid
 		       me.last_read_seq,
 		       (SELECT count(*) FROM messages m
 		         WHERE m.chat_id = c.id AND m.seq > me.last_read_seq
-		           AND m.sender_id <> $1 AND m.deleted_at IS NULL) AS unread
+		           AND m.sender_id <> $1 AND m.deleted_at IS NULL) AS unread,
+		       me.pinned,
+		       me.muted_until IS NOT NULL AND me.muted_until > now() AS muted
 		FROM chat_members me
 		JOIN chats c ON c.id = me.chat_id
 		WHERE me.user_id = $1 AND ($2::uuid[] IS NULL OR c.id = ANY($2))
-		ORDER BY c.last_seq DESC`, userID, only)
+		ORDER BY me.pinned DESC, c.last_seq DESC`, userID, only)
 	if err != nil {
 		return nil, fmt.Errorf("выборка диалогов: %w", err)
 	}
@@ -340,7 +342,8 @@ func (s *Store) chatSummaries(ctx context.Context, userID uuid.UUID, only []uuid
 		var summary domain.ChatSummary
 		c := &summary.Chat
 		if err := rows.Scan(&c.ID, &c.Type, &c.Title, &c.AvatarURL, &c.CreatedBy,
-			&c.CreatedAt, &c.LastSeq, &summary.LastReadSeq, &summary.UnreadCount); err != nil {
+			&c.CreatedAt, &c.LastSeq, &summary.LastReadSeq, &summary.UnreadCount,
+			&summary.Pinned, &summary.Muted); err != nil {
 			return nil, fmt.Errorf("чтение диалога: %w", err)
 		}
 		summaries = append(summaries, summary)

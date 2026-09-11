@@ -113,4 +113,9 @@ type ChatSummary struct {
 	LastMessage *Message `json:"last_message,omitempty"`
 	LastReadSeq int64    `json:"last_read_seq"`
 	UnreadCount int64    `json:"unread_count"`
+
+	// Закреплён и беззвучен — для текущего читателя, а не для чата вообще:
+	// у каждого участника они свои.
+	Pinned bool `json:"pinned"`
+	Muted  bool `json:"muted"`
 }

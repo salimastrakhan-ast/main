@@ -62,6 +62,21 @@ type ChatCreateData struct {
 	MemberIDs []uuid.UUID `json:"member_ids"`
 }
 
+// ChatPinData — закрепить или открепить чат.
+type ChatPinData struct {
+	ChatID uuid.UUID `json:"chat_id"`
+	Pinned bool      `json:"pinned"`
+}
+
+// ChatMuteData — выключить звук чата.
+//
+// Пустой Until означает «вернуть звук»: отдельного поля «включить» не надо,
+// а срок позволяет «на час» — то, о чём просят чаще, чем о вечной тишине.
+type ChatMuteData struct {
+	ChatID uuid.UUID  `json:"chat_id"`
+	Until  *time.Time `json:"until,omitempty"`
+}
+
 type ChatAddMemberData struct {
 	ChatID  uuid.UUID   `json:"chat_id"`
 	UserIDs []uuid.UUID `json:"user_ids"`

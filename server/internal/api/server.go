@@ -8,6 +8,7 @@ import (
 	"github.com/salimastrakhan-ast/main/server/internal/media"
 	"github.com/salimastrakhan-ast/main/server/internal/realtime"
 	"github.com/salimastrakhan-ast/main/server/internal/store"
+	"github.com/salimastrakhan-ast/main/server/internal/translate"
 )
 
 // Server связывает HTTP-маршруты с сервисами.
@@ -17,10 +18,14 @@ type Server struct {
 	auth  *auth.Service
 	hub   *realtime.Hub
 	media *media.Storage
+	tr    translate.Translator
 }
 
-func NewServer(cfg config.Config, st *store.Store, authSvc *auth.Service, hub *realtime.Hub, storage *media.Storage) *Server {
-	return &Server{cfg: cfg, store: st, auth: authSvc, hub: hub, media: storage}
+func NewServer(cfg config.Config, st *store.Store, authSvc *auth.Service, hub *realtime.Hub, storage *media.Storage, tr translate.Translator) *Server {
+	if tr == nil {
+		tr = translate.NoopTranslator{}
+	}
+	return &Server{cfg: cfg, store: st, auth: authSvc, hub: hub, media: storage, tr: tr}
 }
 
 // Handler собирает маршрутизатор.
@@ -51,6 +56,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/chats/{id}/members", s.requireAuth(s.handleChatMembers))
 
 	mux.HandleFunc("POST /v1/media/upload", s.requireAuth(s.handleUpload))
+
+	mux.HandleFunc("POST /v1/ai/translate", s.requireAuth(s.handleTranslate))
 
 	// Токен проверяется первым кадром внутри соединения, а не заголовком:
 	// браузерный WebSocket не умеет слать Authorization при подключении.

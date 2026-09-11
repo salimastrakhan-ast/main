@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -248,4 +249,43 @@ func (s *Store) ChatPartners(ctx context.Context, userID uuid.UUID, limit int) (
 		out = append(out, id)
 	}
 	return out, rows.Err()
+}
+
+// SetPinned закрепляет чат для одного участника.
+//
+// Проверка членства встроена в условие: не участник просто не найдёт строку,
+// и отдельный запрос «а можно ли» не нужен.
+func (s *Store) SetPinned(ctx context.Context, chatID, userID uuid.UUID, pinned bool) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE chat_members SET pinned = $3
+		WHERE chat_id = $1 AND user_id = $2`, chatID, userID, pinned)
+	if err != nil {
+		return fmt.Errorf("закрепление чата: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrForbidden
+	}
+	return nil
+}
+
+// SetMuted выключает звук чата до указанного момента.
+//
+// Со сроком, а не навсегда: «выключить на час» просят чаще, а вечное
+// молчание человек потом не может объяснить и ищет, где же он его включил.
+// Нулевой срок означает «звук вернуть».
+func (s *Store) SetMuted(ctx context.Context, chatID, userID uuid.UUID, until time.Time) error {
+	var value *time.Time
+	if !until.IsZero() {
+		value = &until
+	}
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE chat_members SET muted_until = $3
+		WHERE chat_id = $1 AND user_id = $2`, chatID, userID, value)
+	if err != nil {
+		return fmt.Errorf("беззвучный режим: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrForbidden
+	}
+	return nil
 }
