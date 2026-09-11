@@ -72,6 +72,7 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 
 const myPhone = phone(0);
 const peerPhone = phone(1);
+const thirdPhone = phone(2);
 
 const app = await open(browser);
 await app.page.screenshot({ path: `${OUT}/01-вход.png` });
@@ -120,10 +121,70 @@ check('ответ дошёл до собеседника', delivered === 'И т�
 text = await app.page.locator('body').innerText();
 check('свой ответ виден в ленте', text.includes('И тебе привет'), text.slice(0, 200));
 
-// Настройки
-await app.page.getByRole('button', { name: 'Настройки' }).first().click().catch(() => {});
+// --- Новый чат из интерфейса ---
+//
+// До этого переписка всегда появлялась снаружи: собеседник писал первым.
+// Здесь проверяется обратный путь — человек сам выбирает, кому написать, а
+// чат на сервере заводится первым же сообщением.
+const third = await apiLogin(thirdPhone);
+await fetch(`${API}/v1/users/me`, {
+  method: 'PATCH',
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${third.access_token}` },
+  body: JSON.stringify({ display_name: 'Вера Новикова' }),
+});
+// Книгу контактов на телефоне заполняет система; в браузере — некому.
+// Токен для этого берём отдельным входом по тому же номеру: браузер держит
+// свой в localStorage, и доставать его оттуда значило бы лезть во внутренности.
+const mine = await apiLogin(myPhone);
+await fetch(`${API}/v1/contacts/sync`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${mine.access_token}` },
+  body: JSON.stringify({ contacts: [{ phone: thirdPhone, name: 'Вера Новикова' }] }),
+});
+// Список подтянется на следующей синхронизации — перезагружаем страницу.
+await app.page.reload({ waitUntil: 'networkidle' });
+await app.page.waitForTimeout(3000);
+
+await app.page.locator('button[aria-label="Новое сообщение"]:visible').first().click();
+await app.page.waitForTimeout(900);
+check('экран «новый чат» открылся', await app.page.getByText('Создать группу').first().isVisible());
+
+await app.page.getByText('Вера Новикова').first().click();
+await app.page.waitForTimeout(900);
+await app.page.locator('textarea').first().fill('Пишу первым');
+await app.page.keyboard.press('Enter');
+await app.page.waitForTimeout(3000);
+await app.page.screenshot({ path: `${OUT}/06-новый-чат.png` });
+
+const started = await app.page.evaluate(() => {
+  const raw = localStorage.getItem('tito-messenger');
+  const state = raw ? JSON.parse(raw).state : {};
+  const message = (state.messages ?? []).find((m) => m.text === 'Пишу первым');
+  return { status: message?.status, chats: (state.chats ?? []).length };
+});
+check('первое сообщение ушло, а не упало', started.status === 'sent', String(started.status));
+check('новая переписка встала в список', started.chats >= 2, `чатов ${started.chats}`);
+
+// --- Группа ---
+await app.page.locator('button[aria-label="Новое сообщение"]:visible').first().click();
+await app.page.waitForTimeout(800);
+await app.page.getByText('Создать группу').first().click();
+await app.page.waitForTimeout(600);
+await app.page.getByText('Вера Новикова').first().click();
+await app.page.waitForTimeout(300);
+await app.page.locator('input[aria-label="Название группы"]').fill('Команда Tito');
+await app.page.getByRole('button', { name: 'Создать' }).click();
+await app.page.waitForTimeout(3000);
+await app.page.screenshot({ path: `${OUT}/07-группа.png` });
+check('группа создана и открыта',
+  (await app.page.locator('body').innerText()).includes('Команда Tito'));
+
+// --- Настройки ---
+await app.page.locator('button[aria-label="Меню"]:visible').first().click();
 await app.page.waitForTimeout(1200);
-await app.page.screenshot({ path: `${OUT}/06-настройки.png` });
+await app.page.screenshot({ path: `${OUT}/08-настройки.png` });
+check('выход из аккаунта выведен в настройки',
+  await app.page.getByText('Выйти').first().isVisible());
 
 sock.close();
 await app.context.close();

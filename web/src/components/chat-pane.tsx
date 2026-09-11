@@ -22,11 +22,13 @@ import { UserAvatar } from "@/components/user-avatar";
 import { chatStatus } from "@/lib/format";
 import { t } from "@/lib/i18n";
 import { chatTitle, useMessenger } from "@/lib/store";
+import type { Chat } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function ChatPane() {
   const uiLang = useMessenger((s) => s.uiLang);
   const selectedChatId = useMessenger((s) => s.selectedChatId);
+  const draftPeerId = useMessenger((s) => s.draftPeerId);
   const chats = useMessenger((s) => s.chats);
   const contacts = useMessenger((s) => s.contacts);
   const translatingChatId = useMessenger((s) => s.translatingChatId);
@@ -35,7 +37,28 @@ export function ChatPane() {
   const togglePin = useMessenger((s) => s.togglePin);
   const toggleMute = useMessenger((s) => s.toggleMute);
 
-  const chat = chats.find((c) => c.id === selectedChatId);
+  const opened = chats.find((c) => c.id === selectedChatId);
+  // Переписки с человеком может ещё не быть: на сервере она заводится
+  // первым сообщением. Пока её нет, показываем ту же панель по собеседнику
+  // — иначе с экрана «новый чат» некуда было бы писать.
+  const draftPeer = draftPeerId ? contacts[draftPeerId] : undefined;
+  const chat: Chat | undefined =
+    opened ??
+    (draftPeer
+      ? {
+          id: "",
+          kind: "dm",
+          title: draftPeer.name,
+          peerId: draftPeer.id,
+          initials: draftPeer.initials,
+          avatar: draftPeer.avatar,
+          pinned: false,
+          muted: false,
+          unread: 0,
+          translateOn: false,
+          lastMessageAt: Date.now(),
+        }
+      : undefined);
 
   if (!chat) {
     return (

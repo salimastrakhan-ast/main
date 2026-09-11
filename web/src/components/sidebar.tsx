@@ -65,7 +65,13 @@ export function Sidebar() {
           <AppMark className="size-7" />
           <span className="font-display text-base font-medium tracking-tight">{t(uiLang, "appName")}</span>
         </div>
-        <Button variant="icon" size="icon" aria-label={t(uiLang, "newMessage")} type="button">
+        <Button
+          variant="icon"
+          size="icon"
+          aria-label={t(uiLang, "newMessage")}
+          type="button"
+          onClick={() => setSidebarView("new")}
+        >
           <SquarePen className="size-5" />
         </Button>
       </header>

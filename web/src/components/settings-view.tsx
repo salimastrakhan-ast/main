@@ -1,4 +1,5 @@
-import { ChevronLeft } from "lucide-react";
+import { useRef } from "react";
+import { ChevronLeft, LogOut } from "lucide-react";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,8 @@ export function SettingsView() {
   const setNotifications = useMessenger((s) => s.setNotifications);
   const setMe = useMessenger((s) => s.setMe);
   const setSidebarView = useMessenger((s) => s.setSidebarView);
+  const signOut = useMessenger((s) => s.signOut);
+  const nameField = useRef<HTMLInputElement>(null);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar">
@@ -37,7 +40,10 @@ export function SettingsView() {
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-3 pb-6">
         <button
           type="button"
-          onClick={() => setSidebarView("profile")}
+          onClick={() => {
+            nameField.current?.scrollIntoView({ block: "center" });
+            nameField.current?.focus();
+          }}
           className="flex w-full items-center gap-3 rounded-lg bg-surface p-3 text-left shadow-[var(--shadow-border)] transition-colors duration-150 hover:bg-elevated"
         >
           <UserAvatar src={me.avatar} initials={me.initials} name={me.name} size="lg" />
@@ -108,13 +114,28 @@ export function SettingsView() {
         <section className="space-y-3 rounded-lg bg-surface p-3 shadow-[var(--shadow-border)]">
           <label className="block">
             <span className="mb-1.5 block text-xs text-muted">{t(uiLang, "name")}</span>
-            <Input value={me.name} onChange={(e) => setMe({ name: e.target.value })} />
+            <Input
+              ref={nameField}
+              value={me.name}
+              onChange={(e) => setMe({ name: e.target.value })}
+            />
           </label>
           <label className="block">
             <span className="mb-1.5 block text-xs text-muted">{t(uiLang, "about")}</span>
             <Input value={me.about} onChange={(e) => setMe({ about: e.target.value })} />
           </label>
         </section>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (window.confirm(t(uiLang, "signOutConfirm"))) void signOut();
+          }}
+          className="mt-6 flex w-full items-center gap-3 rounded-lg bg-surface px-3 py-3 text-left text-sm text-danger shadow-[var(--shadow-border)] transition-colors duration-150 hover:bg-elevated"
+        >
+          <LogOut className="size-4 shrink-0" />
+          {t(uiLang, "signOut")}
+        </button>
 
         <p className="mt-6 px-1 text-xs leading-relaxed text-subtle">{t(uiLang, "titoAbout")}</p>
       </div>

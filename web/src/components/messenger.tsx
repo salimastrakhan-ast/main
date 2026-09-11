@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Toaster } from "sonner";
 import { ChatPane } from "@/components/chat-pane";
+import { NewChatView } from "@/components/new-chat-view";
 import { SettingsView } from "@/components/settings-view";
 import { Sidebar } from "@/components/sidebar";
 import { AppMark } from "@/components/mark";
@@ -11,6 +12,7 @@ import { cn } from "@/lib/utils";
 export function Messenger() {
   const [mounted, setMounted] = useState(false);
   const selectedChatId = useMessenger((s) => s.selectedChatId);
+  const draftPeerId = useMessenger((s) => s.draftPeerId);
   const sidebarView = useMessenger((s) => s.sidebarView);
   const uiLang = useMessenger((s) => s.uiLang);
 
@@ -40,7 +42,9 @@ export function Messenger() {
     );
   }
 
-  const showChat = Boolean(selectedChatId);
+  // Начатая, но ещё не заведённая переписка занимает правую часть так же,
+  // как настоящая: на узком экране иначе некуда было бы писать.
+  const showChat = Boolean(selectedChatId || draftPeerId);
 
   return (
     <TooltipProvider delayDuration={250}>
@@ -51,7 +55,13 @@ export function Messenger() {
             showChat && sidebarView === "chats" ? "hidden md:flex" : "flex",
           )}
         >
-          {sidebarView === "chats" ? <Sidebar /> : <SettingsView />}
+          {sidebarView === "chats" ? (
+            <Sidebar />
+          ) : sidebarView === "new" ? (
+            <NewChatView />
+          ) : (
+            <SettingsView />
+          )}
         </aside>
         <main className={cn("min-w-0 flex-1", showChat ? "flex" : "hidden md:flex")}>
           <div className="h-full w-full">

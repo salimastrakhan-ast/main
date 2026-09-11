@@ -133,6 +133,12 @@ type State = {
   status: WsStatus;
 
   selectedChatId: string | null;
+  /// С кем начата переписка, которой ещё нет на сервере.
+  ///
+  /// Личный чат заводится первым сообщением, а не открытием экрана. До
+  /// этого показывать нечего и выбирать нечего — поэтому собеседник
+  /// держится отдельно от выбранного чата.
+  draftPeerId: string | null;
   folder: FolderId;
   search: string;
   sidebarView: SidebarView;
@@ -157,6 +163,9 @@ type Actions = {
   setFolder: (f: FolderId) => void;
   setSidebarView: (v: SidebarView) => void;
   selectChat: (id: string | null) => void;
+  startChatWith: (userId: string) => void;
+  createGroup: (title: string, memberIds: string[]) => Promise<void>;
+  findPeople: (query: string) => Promise<Contact[]>;
   setReplyTo: (id: string | null) => void;
   toggleOriginal: (id: string) => void;
   togglePin: (chatId: string) => void;
@@ -227,6 +236,7 @@ export const useMessenger = create<MessengerStore>()(
       status: "offline",
 
       selectedChatId: null,
+      draftPeerId: null,
       folder: "all",
       search: "",
       sidebarView: "chats",
@@ -322,6 +332,7 @@ export const useMessenger = create<MessengerStore>()(
       selectChat: (id) => {
         set((s) => ({
           selectedChatId: id,
+          draftPeerId: null,
           replyToId: null,
           sidebarView: "chats",
           chats: id
@@ -335,6 +346,57 @@ export const useMessenger = create<MessengerStore>()(
         void get().ensureLiveTranslation(id);
       },
 
+      /// Открывает переписку с человеком.
+      ///
+      /// Если она уже была — открываем её, а не заводим черновик рядом:
+      /// иначе у одного человека оказалось бы два места.
+      startChatWith: (userId) => {
+        const existing = get().chats.find(
+          (c) => c.kind === "dm" && c.peerId === userId,
+        );
+        if (existing) {
+          get().selectChat(existing.id);
+          return;
+        }
+        set({
+          draftPeerId: userId,
+          selectedChatId: null,
+          replyToId: null,
+          sidebarView: "chats",
+        });
+      },
+
+      createGroup: async (title, memberIds) => {
+        const result = await ws.call(Cmd.chatCreate, {
+          title: title.trim(),
+          member_ids: memberIds,
+        });
+        // Сервер отвечает самим чатом, а не сводкой по нему: участников,
+        // непрочитанного и последнего сообщения в ответе нет. Собирать
+        // сводку руками значит выдумать её половину — проще спросить.
+        const chat = result.chat as { id?: string } | undefined;
+        if (!chat?.id) return;
+        await syncAll();
+        get().selectChat(chat.id);
+      },
+
+      /// Поиск человека, которого нет в книге контактов, — по номеру или
+      /// имени. Книга заполняется тем, что синхронизировал телефон; в
+      /// браузере её может не быть вовсе.
+      findPeople: async (query) => {
+        const q = query.trim();
+        if (q.length < 2) return [];
+        try {
+          const found = (await api.searchUsers(q)) as ServerUser[];
+          const mine = get().me?.id;
+          return found
+            .filter((u) => u.id !== mine)
+            .map((u) => toContact(u, false));
+        } catch {
+          return [];
+        }
+      },
+
       // --- Отправка ---
 
       sendMessage: async (chatId, text) => {
@@ -345,6 +407,11 @@ export const useMessenger = create<MessengerStore>()(
         if (!me) return;
 
         const chat = get().chats.find((c) => c.id === chatId);
+        // Пустой chatId — переписка, которой ещё нет: сервер заведёт её сам
+        // по собеседнику в первом же сообщении.
+        const peerId = chat?.peerId ?? (chatId ? undefined : get().draftPeerId ?? undefined);
+        if (!chatId && !peerId) return;
+
         const clientMsgId = crypto.randomUUID();
         const replyToId = get().replyToId ?? undefined;
 
@@ -368,7 +435,7 @@ export const useMessenger = create<MessengerStore>()(
           replyToId: null,
           outbox: [
             ...s.outbox,
-            { clientMsgId, chatId, peerId: chat?.peerId, text: trimmed, replyToId },
+            { clientMsgId, chatId, peerId, text: trimmed, replyToId },
           ],
           chats: s.chats.map((c) =>
             c.id === chatId ? { ...c, lastMessageAt: draft.createdAt, unread: 0 } : c,
@@ -379,6 +446,9 @@ export const useMessenger = create<MessengerStore>()(
       },
 
       sendTyping: (chatId) => {
+        // Чата может ещё не быть — переписка только начата. Сообщать «печатает»
+        // некуда, да и сервер такой кадр отвергнет.
+        if (!chatId) return;
         ws.notify(Cmd.typing, { chat_id: chatId });
       },
 
@@ -688,7 +758,11 @@ async function drainOutbox(): Promise<void> {
 async function trySend(item: Outgoing): Promise<boolean> {
   try {
     const result = await ws.call(Cmd.messageSend, {
-      chat_id: item.chatId,
+      // Именно `|| undefined`: у переписки, которой ещё нет, chatId пустая
+      // строка, а сервер читает это поле как UUID и на пустой строке
+      // отказывает целому кадру. Сообщение при этом помечается «не ушло» —
+      // выглядит как отказ по существу, хотя дело в одном лишнем поле.
+      chat_id: item.chatId || undefined,
       peer_id: item.chatId ? undefined : item.peerId,
       text: item.text,
       client_msg_id: item.clientMsgId,
@@ -699,6 +773,20 @@ async function trySend(item: Outgoing): Promise<boolean> {
     set((s) => ({
       outbox: s.outbox.filter((o) => o.clientMsgId !== item.clientMsgId),
     }));
+
+    // Переписки не было — сервер завёл её первым сообщением и вернул номер.
+    // Черновик в ленте лежит без чата; без этого он остался бы сиротой, а
+    // экран — пустым при живом ответе собеседника.
+    if (raw && !item.chatId) {
+      set((s) => ({
+        messages: s.messages.map((m) =>
+          m.clientMsgId === item.clientMsgId ? { ...m, chatId: raw.chat_id } : m,
+        ),
+        selectedChatId: s.draftPeerId ? raw.chat_id : s.selectedChatId,
+        draftPeerId: null,
+      }));
+      await syncAll();
+    }
     return true;
   } catch (error) {
     if (error instanceof ProtocolError && error.retriable) return false;

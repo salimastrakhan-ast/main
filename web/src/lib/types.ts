@@ -6,7 +6,7 @@ export type ChatKind = "ai" | "dm" | "group" | "saved";
 
 export type FolderId = "all" | "personal" | "groups" | "ai";
 
-export type SidebarView = "chats" | "settings" | "profile";
+export type SidebarView = "chats" | "settings" | "new";
 
 export type Gender = "f" | "m";
 
