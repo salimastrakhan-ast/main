@@ -124,7 +124,7 @@ class _BackButton extends StatelessWidget {
       return const SizedBox.shrink();
     }
     return IconButton(
-      icon: const Icon(MayakIcons.back),
+      icon: const Icon(TitoIcons.back),
       tooltip: MaterialLocalizations.of(context).backButtonTooltip,
       onPressed: () => Navigator.maybePop(context),
     );

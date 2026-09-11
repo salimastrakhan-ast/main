@@ -28,10 +28,10 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   static const _items = [
-    NavItem(icon: MayakIcons.chats, label: 'Чаты'),
-    NavItem(icon: MayakIcons.contacts, label: 'Контакты'),
-    NavItem(icon: MayakIcons.calls, label: 'Звонки'),
-    NavItem(icon: MayakIcons.settings, label: 'Настройки'),
+    NavItem(icon: TitoIcons.chats, label: 'Чаты'),
+    NavItem(icon: TitoIcons.contacts, label: 'Контакты'),
+    NavItem(icon: TitoIcons.calls, label: 'Звонки'),
+    NavItem(icon: TitoIcons.settings, label: 'Настройки'),
   ];
 
   int _index = 0;
@@ -54,7 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return Scaffold(
         body: Row(
           children: [
-            MayakNavRail(
+            TitoNavRail(
               items: _items,
               index: _index,
               onSelect: (i) => setState(() => _index = i),
@@ -67,7 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       body: content,
-      bottomNavigationBar: MayakNavBar(
+      bottomNavigationBar: TitoNavBar(
         items: _items,
         index: _index,
         onSelect: (i) => setState(() => _index = i),

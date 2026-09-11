@@ -16,8 +16,8 @@ class NavItem {
 /// лежит таблетка-подложка, которой в нашем оформлении нет нигде больше.
 /// Здесь выбранное отмечено только цветом — так же, как выбранная вкладка
 /// в остальном интерфейсе.
-class MayakNavBar extends StatelessWidget {
-  const MayakNavBar({
+class TitoNavBar extends StatelessWidget {
+  const TitoNavBar({
     required this.items,
     required this.index,
     required this.onSelect,
@@ -108,8 +108,8 @@ class _BarItem extends StatelessWidget {
 ///
 /// На планшете и в браузере нижняя панель уезжает к краю экрана, до неё
 /// далеко тянуться, и место под неё всё равно отнимается по всей ширине.
-class MayakNavRail extends StatelessWidget {
-  const MayakNavRail({
+class TitoNavRail extends StatelessWidget {
+  const TitoNavRail({
     required this.items,
     required this.index,
     required this.onSelect,

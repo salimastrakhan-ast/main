@@ -46,7 +46,7 @@ class ChatInfoScreen extends ConsumerWidget {
         actions: [
           if (isGroup)
             IconButton(
-              icon: const Icon(MayakIcons.edit, size: 20),
+              icon: const Icon(TitoIcons.edit, size: 20),
               tooltip: 'Изменить',
               onPressed: () => showNotReady(context, 'Изменение группы'),
             ),
@@ -61,7 +61,7 @@ class ChatInfoScreen extends ConsumerWidget {
               name: title,
               radius: 44,
               online: peer?.online ?? false,
-              icon: isGroup ? MayakIcons.contacts : null,
+              icon: isGroup ? TitoIcons.contacts : null,
             ),
           ),
           const SizedBox(height: Tokens.space4),
@@ -83,19 +83,19 @@ class ChatInfoScreen extends ConsumerWidget {
             child: Row(
               children: [
                 _Action(
-                  icon: MayakIcons.search,
+                  icon: TitoIcons.search,
                   label: 'Поиск',
                   onTap: () => showNotReady(context, 'Поиск по переписке'),
                 ),
                 const SizedBox(width: Tokens.space2),
                 _Action(
-                  icon: MayakIcons.bell,
+                  icon: TitoIcons.bell,
                   label: 'Уведомления',
                   onTap: () => showNotReady(context, 'Настройки уведомлений'),
                 ),
                 const SizedBox(width: Tokens.space2),
                 _Action(
-                  icon: MayakIcons.addPerson,
+                  icon: TitoIcons.addPerson,
                   label: 'Добавить',
                   onTap: () => showNotReady(context, 'Добавление участников'),
                 ),
@@ -139,7 +139,7 @@ class ChatInfoScreen extends ConsumerWidget {
           ],
           const RowDivider(indent: 0),
           SettingsRow(
-            icon: MayakIcons.image,
+            icon: TitoIcons.image,
             title: 'Медиа, файлы, ссылки',
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
@@ -152,7 +152,7 @@ class ChatInfoScreen extends ConsumerWidget {
                 ),
                 const SizedBox(width: Tokens.space2),
                 Icon(
-                  MayakIcons.forward,
+                  TitoIcons.forward,
                   size: 18,
                   color: theme.colorScheme.outline,
                 ),
@@ -165,13 +165,13 @@ class ChatInfoScreen extends ConsumerWidget {
             ),
           ),
           SettingsRow(
-            icon: MayakIcons.settings,
+            icon: TitoIcons.settings,
             title: 'Настройки чата',
             onTap: () => showNotReady(context, 'Настройки чата'),
           ),
           if (isGroup)
             SettingsRow(
-              icon: MayakIcons.logout,
+              icon: TitoIcons.logout,
               title: 'Покинуть группу',
               danger: true,
               onTap: () => _confirmLeave(context, ref),

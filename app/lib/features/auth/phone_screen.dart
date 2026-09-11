@@ -93,7 +93,7 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    'Маяк',
+                    'Tito',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.headlineMedium,
                   ),
@@ -116,7 +116,7 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                     ],
                     decoration: const InputDecoration(
                       hintText: '+7 999 123-45-67',
-                      prefixIcon: Icon(MayakIcons.phone, size: 20),
+                      prefixIcon: Icon(TitoIcons.phone, size: 20),
                     ),
                     onChanged: (_) => setState(() {}),
                     onSubmitted: (_) => _looksComplete ? _submit() : null,

@@ -42,7 +42,7 @@ tidy:
 	cd server && go mod tidy
 
 psql:
-	PGPASSWORD=mayak psql -h localhost -p 5433 -U mayak -d mayak
+	PGPASSWORD=tito psql -h localhost -p 5433 -U tito -d tito
 
 redis:
 	redis-cli -p 6380
@@ -64,7 +64,7 @@ app-test:
 	cd app && flutter test
 
 app-web:
-	cd app && flutter build web --release --dart-define=MAYAK_API=$(or $(API),http://localhost:8080)
+	cd app && flutter build web --release --dart-define=TITO_API=$(or $(API),http://localhost:8080)
 
 # Знак приложения: перерисовать из темы и разложить по платформам.
 # Нужен Pillow: pip install Pillow

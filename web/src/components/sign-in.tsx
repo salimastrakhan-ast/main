@@ -58,7 +58,7 @@ export function SignIn({ onDone }: { onDone: () => void }) {
             <MessageCircle className="size-8" />
           </span>
           <h1 className="mt-5 font-display text-2xl font-semibold tracking-tight">
-            Маяк
+            Tito
           </h1>
           <p className="mt-2 text-sm text-muted">
             {step === "phone"

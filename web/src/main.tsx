@@ -47,7 +47,7 @@ function App() {
     return (
       <div className="flex h-dvh flex-col items-center justify-center bg-bg text-fg">
         <AppMark className="size-12" />
-        <p className="mt-3 font-display text-lg font-medium tracking-tight">Маяк</p>
+        <p className="mt-3 font-display text-lg font-medium tracking-tight">Tito</p>
       </div>
     );
   }

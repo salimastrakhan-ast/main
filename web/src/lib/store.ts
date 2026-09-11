@@ -270,7 +270,7 @@ export const useMessenger = create<MessengerStore>()(
         ws.close();
         await api.logout();
         // Стираем и кэш: устройство может быть общим.
-        localStorage.removeItem("mayak-messenger");
+        localStorage.removeItem("tito-messenger");
         window.location.reload();
       },
 
@@ -511,7 +511,7 @@ export const useMessenger = create<MessengerStore>()(
       },
     }),
     {
-      name: "mayak-messenger",
+      name: "tito-messenger",
       // Кэш, а не источник правды: при расхождении побеждает сервер.
       partialize: (s) => ({
         me: s.me,

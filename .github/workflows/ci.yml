@@ -16,12 +16,12 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: mayak
-          POSTGRES_PASSWORD: mayak
-          POSTGRES_DB: mayak
+          POSTGRES_USER: tito
+          POSTGRES_PASSWORD: tito
+          POSTGRES_DB: tito
         ports: ['5433:5432']
         options: >-
-          --health-cmd "pg_isready -U mayak -d mayak"
+          --health-cmd "pg_isready -U tito -d tito"
           --health-interval 2s --health-timeout 3s --health-retries 30
       redis:
         image: redis:7-alpine

@@ -24,33 +24,33 @@ class AppearanceScreen extends ConsumerWidget {
         children: [
           const SectionLabel('Тема'),
           _Choice(
-            icon: MayakIcons.settings,
+            icon: TitoIcons.settings,
             title: 'Как в системе',
             subtitle: 'Меняется вместе с настройками устройства',
             selected: mode == ThemeMode.system,
             onTap: () => setThemeMode(ref, ThemeMode.system),
           ),
           _Choice(
-            icon: MayakIcons.themeLight,
+            icon: TitoIcons.themeLight,
             title: 'Светлая',
             selected: mode == ThemeMode.light,
             onTap: () => setThemeMode(ref, ThemeMode.light),
           ),
           _Choice(
-            icon: MayakIcons.themeDark,
+            icon: TitoIcons.themeDark,
             title: 'Тёмная',
             selected: mode == ThemeMode.dark,
             onTap: () => setThemeMode(ref, ThemeMode.dark),
           ),
           const SectionLabel('Прочее'),
           SettingsRow(
-            icon: MayakIcons.appearance,
+            icon: TitoIcons.appearance,
             title: 'Размер текста',
             subtitle: 'Как в системе',
             onTap: () => showNotReady(context, 'Настройка размера текста'),
           ),
           SettingsRow(
-            icon: MayakIcons.image,
+            icon: TitoIcons.image,
             title: 'Фон переписки',
             subtitle: 'Однотонный',
             onTap: () => showNotReady(context, 'Выбор фона'),
@@ -86,7 +86,7 @@ class _Choice extends StatelessWidget {
       subtitle: subtitle,
       onTap: onTap,
       trailing: selected
-          ? Icon(MayakIcons.sent, size: 20, color: scheme.primary)
+          ? Icon(TitoIcons.sent, size: 20, color: scheme.primary)
           : const SizedBox(width: Tokens.space5),
     );
   }

@@ -70,10 +70,10 @@ class _ChatMediaScreenState extends ConsumerState<ChatMediaScreen> {
   };
 
   IconData get _emptyIcon => switch (_tab) {
-    0 => MayakIcons.image,
-    1 => MayakIcons.file,
-    2 => MayakIcons.link,
-    _ => MayakIcons.voice,
+    0 => TitoIcons.image,
+    1 => TitoIcons.file,
+    2 => TitoIcons.link,
+    _ => TitoIcons.voice,
   };
 
   String get _emptyTitle => switch (_tab) {
@@ -225,12 +225,12 @@ class _Tile extends StatelessWidget {
       child: ColoredBox(
         color: scheme.surfaceContainerHighest,
         child: url == null
-            ? Icon(MayakIcons.brokenImage, color: scheme.outline)
+            ? Icon(TitoIcons.brokenImage, color: scheme.outline)
             : Image.network(
                 url,
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) =>
-                    Icon(MayakIcons.brokenImage, color: scheme.outline),
+                    Icon(TitoIcons.brokenImage, color: scheme.outline),
               ),
       ),
     );
@@ -259,9 +259,9 @@ class _Rows extends StatelessWidget {
             backgroundColor: theme.colorScheme.surfaceContainerHighest,
             child: Icon(
               switch (item.kind) {
-                'link' => MayakIcons.link,
-                'voice' || 'audio' => MayakIcons.voice,
-                _ => MayakIcons.file,
+                'link' => TitoIcons.link,
+                'voice' || 'audio' => TitoIcons.voice,
+                _ => TitoIcons.file,
               },
               size: 18,
               color: theme.colorScheme.onSurfaceVariant,

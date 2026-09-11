@@ -46,10 +46,10 @@ class _CallsScreenState extends State<CallsScreen> {
         ),
       ),
       body: StateView(
-        icon: MayakIcons.calls,
+        icon: TitoIcons.calls,
         title: 'Звонков пока нет',
         description: 'Звонки появятся в следующей версии — '
-            'сейчас в «Маяке» только переписка.',
+            'сейчас в «Titoе» только переписка.',
         actionLabel: 'Что уже работает',
         onAction: () => showNotReady(context, 'Звонки'),
       ),

@@ -2,7 +2,7 @@ import type { TargetLang, UiLang } from "./types";
 
 export const translations = {
   ru: {
-    appName: "Маяк",
+    appName: "Tito",
     tagline: "Сообщения и живой перевод.",
     search: "Поиск",
     all: "Все",
@@ -69,13 +69,13 @@ export const translations = {
     english: "English",
     cancelReply: "Отменить ответ",
     titoAbout:
-      "«Маяк» — мессенджер с живым переводом. Сообщения ходят через собственный сервер, переписка не уходит на чужой.",
+      "«Tito» — мессенджер с живым переводом. Сообщения ходят через собственный сервер, переписка не уходит на чужой.",
     draftEmpty: "Сначала напишите черновик",
     noContext: "В чате пока не на что отвечать",
     done: "Готово",
   },
   en: {
-    appName: "Маяк",
+    appName: "Tito",
     tagline: "Messages and live translation.",
     search: "Search",
     all: "All",
@@ -142,7 +142,7 @@ export const translations = {
     english: "English",
     cancelReply: "Cancel reply",
     titoAbout:
-      "Mayak is a messenger with live translation. Messages go through our own server.",
+      "Tito is a messenger with live translation. Messages go through our own server.",
     draftEmpty: "Write a draft first",
     noContext: "Nothing to reply to yet",
     done: "Done",

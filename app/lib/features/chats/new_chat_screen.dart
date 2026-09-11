@@ -119,17 +119,17 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
       floatingActionButton: _group && _picked.isNotEmpty
           ? FloatingActionButton.extended(
               onPressed: _createGroup,
-              icon: const Icon(MayakIcons.sent, size: 18),
+              icon: const Icon(TitoIcons.sent, size: 18),
               label: Text('Создать · ${_picked.length}'),
             )
           : null,
       body: contacts.isEmpty
           ? StateView(
-              icon: MayakIcons.chats,
+              icon: TitoIcons.chats,
               title: 'Начните новый чат',
               description:
                   'Контакты появятся, когда кто-то из ваших знакомых '
-                  'зарегистрируется в «Маяке».',
+                  'зарегистрируется в «Titoе».',
               actionLabel: 'Создать группу',
               onAction: () => setState(() => _group = true),
             )
@@ -137,7 +137,7 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
               children: [
                 if (!_group)
                   SettingsRow(
-                    icon: MayakIcons.contacts,
+                    icon: TitoIcons.contacts,
                     title: 'Создать группу',
                     subtitle: 'Несколько человек в одной переписке',
                     onTap: () => setState(() => _group = true),
@@ -197,7 +197,7 @@ class _PersonRow extends StatelessWidget {
       ),
       trailing: group
           ? Icon(
-              picked ? MayakIcons.sent : MayakIcons.attach,
+              picked ? TitoIcons.sent : TitoIcons.attach,
               size: 20,
               color: picked
                   ? theme.colorScheme.primary

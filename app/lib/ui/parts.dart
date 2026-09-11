@@ -38,17 +38,17 @@ class PersonAvatar extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: radius,
-            backgroundColor: MayakTheme.accentFor(id),
+            backgroundColor: TitoTheme.accentFor(id),
             child: icon != null
                 ? Icon(
                     icon,
                     size: radius * 0.9,
-                    color: MayakTheme.onAccent,
+                    color: TitoTheme.onAccent,
                   )
                 : Text(
                     name.isEmpty ? '?' : name.characters.first.toUpperCase(),
                     style: TextStyle(
-                      color: MayakTheme.onAccent,
+                      color: TitoTheme.onAccent,
                       fontWeight: FontWeight.w700,
                       fontSize: radius * 0.72,
                     ),
@@ -110,14 +110,14 @@ class SearchField extends StatelessWidget {
         hintText: hint,
         isDense: true,
         prefixIcon: Icon(
-          MayakIcons.search,
+          TitoIcons.search,
           size: 18,
           color: scheme.onSurfaceVariant,
         ),
         prefixIconConstraints: const BoxConstraints(minWidth: 40),
         suffixIcon: controller != null && controller!.text.isNotEmpty
             ? IconButton(
-                icon: const Icon(MayakIcons.close, size: 16),
+                icon: const Icon(TitoIcons.close, size: 16),
                 tooltip: 'Очистить',
                 onPressed: () {
                   controller!.clear();
@@ -236,7 +236,7 @@ class SettingsRow extends StatelessWidget {
           (danger || onTap == null
               ? null
               : Icon(
-                  MayakIcons.forward,
+                  TitoIcons.forward,
                   size: 18,
                   color: theme.colorScheme.outline,
                 )),

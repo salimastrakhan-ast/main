@@ -12,7 +12,7 @@ QueryExecutor openConnection() {
     // createInBackground уводит запросы в отдельный изолят: иначе большая
     // выборка истории подвешивает кадры анимации.
     return NativeDatabase.createInBackground(
-      File(p.join(dir.path, 'mayak.sqlite')),
+      File(p.join(dir.path, 'tito.sqlite')),
     );
   });
 }

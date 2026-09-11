@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mayak/core/config.dart';
-import 'package:mayak/data/ws/envelope.dart';
+import 'package:tito/core/config.dart';
+import 'package:tito/data/ws/envelope.dart';
 
 void main() {
   group('Конверт протокола', () {

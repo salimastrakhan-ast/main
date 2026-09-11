@@ -1,4 +1,4 @@
-# Веб-клиент «Маяка»
+# Веб-клиент «Tito»
 
 Интерфейс перенесён из присланного образца (Tito): тёмная бирюзовая тема,
 боковая панель со списком чатов рядом с перепиской, живой перевод.
@@ -18,7 +18,7 @@ npm run dev        # http://localhost:5173
 клиента:
 
 ```sh
-MAYAK_CORS_ORIGINS=http://localhost:5173 make run
+TITO_CORS_ORIGINS=http://localhost:5173 make run
 ```
 
 Адрес API задаётся на сборке: `VITE_API_BASE=https://api.example.com npm run build`.

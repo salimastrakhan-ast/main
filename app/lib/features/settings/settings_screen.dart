@@ -62,7 +62,7 @@ class SettingsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: Tokens.space6),
           SettingsRow(
-            icon: MayakIcons.account,
+            icon: TitoIcons.account,
             title: 'Аккаунт',
             subtitle: me?.phone ?? 'Номер телефона',
             onTap: () => Navigator.of(context).push(
@@ -70,25 +70,25 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
           SettingsRow(
-            icon: MayakIcons.bell,
+            icon: TitoIcons.bell,
             title: 'Уведомления',
             subtitle: 'Звуки, вибрация, предпросмотр',
             onTap: () => showNotReady(context, 'Настройки уведомлений'),
           ),
           SettingsRow(
-            icon: MayakIcons.privacy,
+            icon: TitoIcons.privacy,
             title: 'Конфиденциальность',
             subtitle: 'Кто видит мой профиль, чаты',
             onTap: () => showNotReady(context, 'Настройки приватности'),
           ),
           SettingsRow(
-            icon: MayakIcons.storage,
+            icon: TitoIcons.storage,
             title: 'Данные и хранилище',
             subtitle: 'Использование сети, автозагрузка',
             onTap: () => showNotReady(context, 'Управление хранилищем'),
           ),
           SettingsRow(
-            icon: MayakIcons.appearance,
+            icon: TitoIcons.appearance,
             title: 'Внешний вид',
             subtitle: switch (mode) {
               ThemeMode.light => 'Светлая тема',
@@ -100,13 +100,13 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
           SettingsRow(
-            icon: MayakIcons.language,
+            icon: TitoIcons.language,
             title: 'Язык',
             subtitle: 'Русский',
             onTap: () => showNotReady(context, 'Другие языки'),
           ),
           SettingsRow(
-            icon: MayakIcons.help,
+            icon: TitoIcons.help,
             title: 'Помощь',
             subtitle: 'Вопросы и поддержка',
             onTap: () => showNotReady(context, 'Справка'),
@@ -114,7 +114,7 @@ class SettingsScreen extends ConsumerWidget {
           const SizedBox(height: Tokens.space3),
           const RowDivider(indent: 0),
           SettingsRow(
-            icon: MayakIcons.logout,
+            icon: TitoIcons.logout,
             title: 'Выйти',
             danger: true,
             onTap: () => _signOut(context, ref),

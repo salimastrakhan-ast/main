@@ -53,7 +53,7 @@ class SessionStore {
   SessionStore({FlutterSecureStorage? storage})
     : _storage = storage ?? const FlutterSecureStorage();
 
-  static const _key = 'mayak.session';
+  static const _key = 'tito.session';
 
   final FlutterSecureStorage _storage;
   Session? _cached;

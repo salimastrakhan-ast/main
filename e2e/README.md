@@ -12,10 +12,10 @@
 ```bash
 # 1. Инфраструктура и сервер
 make up
-MAYAK_CORS_ORIGINS=http://localhost:8090 make run
+TITO_CORS_ORIGINS=http://localhost:8090 make run
 
 # 2. Веб-сборка клиента
-cd app && flutter build web --release --dart-define=MAYAK_API=http://localhost:8080
+cd app && flutter build web --release --dart-define=TITO_API=http://localhost:8080
 
 # 3. Раздача сборки (отдельный терминал)
 python3 e2e/serve.py app/build/web 8090

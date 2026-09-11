@@ -43,9 +43,9 @@ class WelcomeScreen extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(30),
                 ),
                 child: const Icon(
-                  MayakIcons.chat,
+                  TitoIcons.chat,
                   size: 48,
-                  color: MayakTheme.onAccent,
+                  color: TitoTheme.onAccent,
                 ),
               ),
               const SizedBox(height: Tokens.space8),

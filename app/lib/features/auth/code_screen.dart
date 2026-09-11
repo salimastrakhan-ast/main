@@ -98,7 +98,7 @@ class _CodeScreenState extends ConsumerState<CodeScreen> {
                     style: const TextStyle(
                       fontSize: 26,
                       letterSpacing: 10,
-                      fontFeatures: MayakTheme.tabularFigures,
+                      fontFeatures: TitoTheme.tabularFigures,
                     ),
                     inputFormatters: [
                       FilteringTextInputFormatter.digitsOnly,

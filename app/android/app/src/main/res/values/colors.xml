@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Кремовый фон бренда: окно до первого кадра. -->
-    <color name="mayak_background">#FAF9F5</color>
+    <color name="tito_background">#FAF9F5</color>
     <!-- Коралловый: подложка адаптивной иконки. Значение прописывает
          генератор из pubspec, править здесь бессмысленно. -->
     <color name="ic_launcher_background">#D97757</color>

@@ -30,7 +30,7 @@ export class ApiError extends Error {
   }
 }
 
-const STORAGE_KEY = "mayak.session";
+const STORAGE_KEY = "tito.session";
 
 function readSession(): Session | null {
   try {

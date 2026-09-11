@@ -1,13 +1,13 @@
 /// Настройки сборки.
 ///
 /// Адрес сервера задаётся при сборке:
-///   flutter run --dart-define=MAYAK_API=https://api.example.ru
+///   flutter run --dart-define=TITO_API=https://api.example.ru
 /// Значение по умолчанию рассчитано на локальный сервер из Makefile.
 class AppConfig {
   const AppConfig._();
 
   static const apiBase = String.fromEnvironment(
-    'MAYAK_API',
+    'TITO_API',
     defaultValue: 'http://localhost:8080',
   );
 

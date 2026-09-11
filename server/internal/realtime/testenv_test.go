@@ -37,8 +37,8 @@ import (
 // конфликте и уникальные индексы. На моках всё это прошло бы «успешно» и в
 // сломанном виде.
 const (
-	defaultTestDB    = "postgres://mayak:mayak@localhost:5433/mayak_test?sslmode=disable"
-	defaultAdminDB   = "postgres://mayak:mayak@localhost:5433/mayak?sslmode=disable"
+	defaultTestDB    = "postgres://tito:tito@localhost:5433/tito_test?sslmode=disable"
+	defaultAdminDB   = "postgres://tito:tito@localhost:5433/tito?sslmode=disable"
 	defaultTestRedis = "redis://localhost:6380/1"
 )
 
@@ -118,7 +118,7 @@ func newEnv(t *testing.T) *env {
 
 func openTestDB(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	t.Helper()
-	dsn := envOr("MAYAK_TEST_DATABASE_URL", defaultTestDB)
+	dsn := envOr("TITO_TEST_DATABASE_URL", defaultTestDB)
 
 	// Создание базы идемпотентно и стоит один запрос, зато первый прогон на
 	// чистой машине не спотыкается об отсутствующую базу.
@@ -142,7 +142,7 @@ func createTestDatabase(t *testing.T, ctx context.Context, dsn string) bool {
 		name = name[:i]
 	}
 
-	admin, err := store.Connect(ctx, envOr("MAYAK_TEST_ADMIN_URL", defaultAdminDB))
+	admin, err := store.Connect(ctx, envOr("TITO_TEST_ADMIN_URL", defaultAdminDB))
 	if err != nil {
 		return false
 	}
@@ -157,7 +157,7 @@ func createTestDatabase(t *testing.T, ctx context.Context, dsn string) bool {
 
 func openTestRedis(t *testing.T, ctx context.Context) *redis.Client {
 	t.Helper()
-	rdb, err := ratelimit.Connect(ctx, envOr("MAYAK_TEST_REDIS_URL", defaultTestRedis))
+	rdb, err := ratelimit.Connect(ctx, envOr("TITO_TEST_REDIS_URL", defaultTestRedis))
 	if err != nil {
 		t.Skipf("Redis недоступен (%v). Поднимите инфраструктуру: make up", err)
 	}

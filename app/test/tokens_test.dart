@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mayak/ui/theme.dart';
-import 'package:mayak/ui/tokens.dart';
+import 'package:tito/ui/theme.dart';
+import 'package:tito/ui/tokens.dart';
 
 /// Значения сняты с публичного CSS claude.com. Тест держит их на месте:
 /// если кто-то «поправит на глаз», это сразу видно, а не всплывёт через
@@ -49,7 +49,7 @@ void main() {
     });
 
     test('окна и панели без подъёма', () {
-      for (final theme in [MayakTheme.light(), MayakTheme.dark()]) {
+      for (final theme in [TitoTheme.light(), TitoTheme.dark()]) {
         expect(theme.dialogTheme.elevation, 0);
         expect(theme.bottomSheetTheme.elevation, 0);
         expect(theme.appBarTheme.elevation, 0);
@@ -60,7 +60,7 @@ void main() {
 
   group('Кнопки', () {
     test('наведение и нажатие берут их же цвета', () {
-      final style = MayakTheme.light().filledButtonTheme.style!;
+      final style = TitoTheme.light().filledButtonTheme.style!;
       final bg = style.backgroundColor!;
       expect(bg.resolve({}), Tokens.clay);
       expect(bg.resolve({WidgetState.hovered}), Tokens.clayHover);
@@ -68,7 +68,7 @@ void main() {
     });
 
     test('скругление кнопок — их shell-radius', () {
-      final shape = MayakTheme.light().filledButtonTheme.style!.shape!
+      final shape = TitoTheme.light().filledButtonTheme.style!.shape!
           .resolve({}) as RoundedRectangleBorder;
       expect((shape.borderRadius as BorderRadius).topLeft.x, Tokens.radiusShell);
     });
@@ -78,7 +78,7 @@ void main() {
     // Фирменные шрифты лицензионные. Их собственный запасной вариант —
     // system-ui; на телефонах это родной шрифт системы.
     test('одно семейство на весь интерфейс', () {
-      for (final theme in [MayakTheme.light(), MayakTheme.dark()]) {
+      for (final theme in [TitoTheme.light(), TitoTheme.dark()]) {
         final families = {
           theme.textTheme.headlineMedium?.fontFamily,
           theme.textTheme.bodyMedium?.fontFamily,
@@ -90,8 +90,8 @@ void main() {
     });
 
     test('цифры одной ширины у меток', () {
-      expect(MayakTheme.light().textTheme.labelSmall?.fontFeatures,
-          MayakTheme.tabularFigures);
+      expect(TitoTheme.light().textTheme.labelSmall?.fontFeatures,
+          TitoTheme.tabularFigures);
     });
   });
 }

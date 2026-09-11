@@ -55,14 +55,14 @@ class ChatsScreen extends ConsumerWidget {
         ),
         actions: [
           IconButton(
-            icon: const Icon(MayakIcons.compose, size: 20),
+            icon: const Icon(TitoIcons.compose, size: 20),
             tooltip: 'Новый чат',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const NewChatScreen()),
             ),
           ),
           IconButton(
-            icon: const Icon(MayakIcons.menu, size: 20),
+            icon: const Icon(TitoIcons.menu, size: 20),
             tooltip: 'Ещё',
             onPressed: () => showNotReady(context, 'Дополнительные действия'),
           ),
@@ -151,7 +151,7 @@ class _ChatTile extends StatelessWidget {
         id: peer?.id ?? chat.id,
         name: title,
         online: peer?.online ?? false,
-        icon: _isGroup ? MayakIcons.contacts : null,
+        icon: _isGroup ? TitoIcons.contacts : null,
       ),
       title: Text(
         title,
@@ -252,7 +252,7 @@ class _EmptyChats extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StateView(
-      icon: MayakIcons.chats,
+      icon: TitoIcons.chats,
       title: 'Начните новый чат',
       description: 'Выберите контакт из списка или создайте группу.',
       actionLabel: 'Выбрать контакт',

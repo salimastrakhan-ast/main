@@ -200,17 +200,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(MayakIcons.call, size: 20),
+            icon: const Icon(TitoIcons.call, size: 20),
             tooltip: 'Позвонить',
             onPressed: () => showNotReady(context, 'Звонки'),
           ),
           IconButton(
-            icon: const Icon(MayakIcons.video, size: 20),
+            icon: const Icon(TitoIcons.video, size: 20),
             tooltip: 'Видеозвонок',
             onPressed: () => showNotReady(context, 'Видеозвонки'),
           ),
           IconButton(
-            icon: const Icon(MayakIcons.menu, size: 20),
+            icon: const Icon(TitoIcons.menu, size: 20),
             tooltip: 'Ещё',
             onPressed: chatId == null
                 ? null
@@ -297,7 +297,7 @@ class _ChatTitle extends StatelessWidget {
             name: name,
             radius: 17,
             online: peer?.online ?? false,
-            icon: isGroup ? MayakIcons.contacts : null,
+            icon: isGroup ? TitoIcons.contacts : null,
           ),
           const SizedBox(width: Tokens.space3),
           Expanded(
@@ -482,7 +482,7 @@ class _FirstMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const StateView(
-      icon: MayakIcons.chat,
+      icon: TitoIcons.chat,
       title: 'Здесь пока ничего нет',
       description: 'Напишите первым — сообщение уйдёт сразу.',
     );
@@ -542,8 +542,8 @@ class _Bubble extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           decoration: BoxDecoration(
             color: isMine
-                ? MayakTheme.ownBubble(theme.colorScheme)
-                : MayakTheme.otherBubble(theme.colorScheme),
+                ? TitoTheme.ownBubble(theme.colorScheme)
+                : TitoTheme.otherBubble(theme.colorScheme),
             // Своему пузырю граница не нужна: коралл сам себя очерчивает.
             border: isMine
                 ? null
@@ -566,7 +566,7 @@ class _Bubble extends StatelessWidget {
                     senderName,
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontSize: 13,
-                      color: MayakTheme.textAccentFor(message.senderId),
+                      color: TitoTheme.textAccentFor(message.senderId),
                     ),
                   ),
                 ),
@@ -639,10 +639,10 @@ class _StateIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return switch (state) {
-      SendState.pending => Icon(MayakIcons.pending, size: 13, color: color),
-      SendState.sent => Icon(MayakIcons.sent, size: 13, color: color),
+      SendState.pending => Icon(TitoIcons.pending, size: 13, color: color),
+      SendState.sent => Icon(TitoIcons.sent, size: 13, color: color),
       SendState.failed => Icon(
-        MayakIcons.failed,
+        TitoIcons.failed,
         size: 13,
         color: Theme.of(context).colorScheme.error,
       ),
@@ -673,7 +673,7 @@ class _Attachment extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(MayakIcons.file, size: 20),
+        const Icon(TitoIcons.file, size: 20),
         const SizedBox(width: 8),
         Flexible(
           child: Text(
@@ -692,7 +692,7 @@ class _AttachmentStub extends StatelessWidget {
   @override
   Widget build(BuildContext context) => const SizedBox(
     height: 120,
-    child: Center(child: Icon(MayakIcons.brokenImage)),
+    child: Center(child: Icon(TitoIcons.brokenImage)),
   );
 }
 
@@ -725,7 +725,7 @@ class _Composer extends StatelessWidget {
             children: [
               IconButton(
                 icon: Icon(
-                  MayakIcons.attach,
+                  TitoIcons.attach,
                   size: 22,
                   color: scheme.onSurfaceVariant,
                 ),
@@ -790,7 +790,7 @@ class _SendButtonState extends State<_SendButton> {
             borderRadius: BorderRadius.circular(14),
           ),
           // Здесь терракоту и место: одна кнопка действия на экран.
-          child: Icon(MayakIcons.send, size: 22, color: scheme.onPrimary),
+          child: Icon(TitoIcons.send, size: 22, color: scheme.onPrimary),
         ),
       ),
     );

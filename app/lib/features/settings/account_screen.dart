@@ -93,18 +93,18 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           const SizedBox(height: Tokens.space8),
           const RowDivider(indent: 0),
           SettingsRow(
-            icon: MayakIcons.phone,
+            icon: TitoIcons.phone,
             title: 'Номер телефона',
             subtitle: me?.phone ?? '—',
           ),
           SettingsRow(
-            icon: MayakIcons.privacy,
+            icon: TitoIcons.privacy,
             title: 'Сменить номер',
             subtitle: 'На нём держится вход в аккаунт',
             onTap: () => showNotReady(context, 'Смена номера'),
           ),
           SettingsRow(
-            icon: MayakIcons.delete,
+            icon: TitoIcons.delete,
             title: 'Удалить аккаунт',
             danger: true,
             onTap: () => showNotReady(context, 'Удаление аккаунта'),

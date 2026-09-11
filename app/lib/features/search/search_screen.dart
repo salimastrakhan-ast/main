@@ -74,7 +74,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       ),
       body: needle.length < 2
           ? const StateView(
-              icon: MayakIcons.search,
+              icon: TitoIcons.search,
               title: 'Что ищем?',
               description: 'Введите хотя бы две буквы — '
                   'найдём среди диалогов, людей и сообщений.',
@@ -121,7 +121,7 @@ class _Chats extends ConsumerWidget {
             id: peer?.id ?? chat.id,
             name: title,
             online: peer?.online ?? false,
-            icon: chat.type == 'group' ? MayakIcons.contacts : null,
+            icon: chat.type == 'group' ? TitoIcons.contacts : null,
           ),
           title: Text(title),
           subtitle: Text(chat.type == 'group' ? 'Группа' : 'Личный чат'),
@@ -250,7 +250,7 @@ class _Media extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const StateView(
-      icon: MayakIcons.image,
+      icon: TitoIcons.image,
       title: 'Поиск по медиа появится позже',
       description: 'Пока файлы можно найти на экране сведений о чате.',
     );
@@ -263,7 +263,7 @@ class _Nothing extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const StateView(
-      icon: MayakIcons.search,
+      icon: TitoIcons.search,
       title: 'Ничего не нашлось',
       description: 'Попробуйте другое слово.',
     );

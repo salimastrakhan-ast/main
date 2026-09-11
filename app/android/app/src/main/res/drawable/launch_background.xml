@@ -2,5 +2,5 @@
 <!-- Фон окна, пока движок не отрисовал первый кадр.
      Кремовый, а не белый: иначе на запуске видна вспышка. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@color/mayak_background" />
+    <item android:drawable="@color/tito_background" />
 </layer-list>

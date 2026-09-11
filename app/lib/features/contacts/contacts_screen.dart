@@ -139,11 +139,11 @@ class _People extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (people.isEmpty) {
       return StateView(
-        icon: MayakIcons.contacts,
+        icon: TitoIcons.contacts,
         title: query.isEmpty ? 'Контактов пока нет' : 'Никого не нашлось',
         description: query.isEmpty
             ? 'Контакты появятся, когда кто-то из ваших знакомых '
-                  'зарегистрируется в «Маяке».'
+                  'зарегистрируется в «Titoе».'
             : 'Попробуйте другое имя или номер.',
       );
     }
@@ -216,7 +216,7 @@ class _PersonRow extends ConsumerWidget {
       ),
       trailing: IconButton(
         icon: Icon(
-          MayakIcons.star,
+          TitoIcons.star,
           size: 18,
           color: person.isFavorite
               ? theme.colorScheme.primary
@@ -259,7 +259,7 @@ class _Groups extends StatelessWidget {
 
     if (groups.isEmpty) {
       return const StateView(
-        icon: MayakIcons.contacts,
+        icon: TitoIcons.contacts,
         title: 'Групп пока нет',
         description: 'Создайте группу из списка диалогов.',
       );
@@ -273,7 +273,7 @@ class _Groups extends StatelessWidget {
           leading: PersonAvatar(
             id: group.id,
             name: group.title,
-            icon: MayakIcons.contacts,
+            icon: TitoIcons.contacts,
           ),
           title: Text(
             group.title.isEmpty ? 'Группа' : group.title,

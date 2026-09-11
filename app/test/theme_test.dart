@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mayak/ui/theme.dart';
+import 'package:tito/ui/theme.dart';
 
 /// Цвет кольца фокуса у кнопки в заданном состоянии.
 BorderSide? ringOf(ButtonStyle? style, Set<WidgetState> states) =>
@@ -15,7 +15,7 @@ void main() {
     // клавиатурой перестаёт понимать, где находится. Проверяем, что цвета
     // кольца и заливки различаются.
     test('на главной кнопке отличается от её заливки', () {
-      for (final theme in [MayakTheme.light(), MayakTheme.dark()]) {
+      for (final theme in [TitoTheme.light(), TitoTheme.dark()]) {
         final style = theme.filledButtonTheme.style;
         final focused = ringOf(style, {WidgetState.focused});
         final fill = fillOf(style, {});
@@ -29,7 +29,7 @@ void main() {
     });
 
     test('на вторичной кнопке заметнее обычного контура', () {
-      for (final theme in [MayakTheme.light(), MayakTheme.dark()]) {
+      for (final theme in [TitoTheme.light(), TitoTheme.dark()]) {
         final style = theme.outlinedButtonTheme.style;
         final rest = ringOf(style, {});
         final focused = ringOf(style, {WidgetState.focused});
@@ -41,7 +41,7 @@ void main() {
     });
 
     test('заблокированная кнопка выглядит иначе активной', () {
-      final theme = MayakTheme.light();
+      final theme = TitoTheme.light();
       final style = theme.filledButtonTheme.style;
       expect(fillOf(style, {WidgetState.disabled}), isNot(equals(fillOf(style, {}))));
     });
@@ -49,23 +49,23 @@ void main() {
 
   group('Палитра', () {
     test('светлая и тёмная схемы не совпадают', () {
-      expect(MayakTheme.light().colorScheme.surface,
-          isNot(equals(MayakTheme.dark().colorScheme.surface)));
+      expect(TitoTheme.light().colorScheme.surface,
+          isNot(equals(TitoTheme.dark().colorScheme.surface)));
     });
 
     test('акцент сохранён точно, без тонального пересчёта Material', () {
       // Ради этого схема собирается руками: ColorScheme.fromSeed прогнал бы
       // коралловый через свой алгоритм и выдал похожий, но другой цвет.
       const coral = Color(0xFFD97757);
-      expect(MayakTheme.light().colorScheme.primary, coral);
-      expect(MayakTheme.dark().colorScheme.primary, coral);
+      expect(TitoTheme.light().colorScheme.primary, coral);
+      expect(TitoTheme.dark().colorScheme.primary, coral);
     });
 
     test('цвет аватара закреплён за человеком', () {
-      final first = MayakTheme.accentFor('user-42');
-      expect(MayakTheme.accentFor('user-42'), first,
+      final first = TitoTheme.accentFor('user-42');
+      expect(TitoTheme.accentFor('user-42'), first,
           reason: 'цвет обязан быть одинаковым между запусками');
-      expect(MayakTheme.accentFor('user-43'), isNot(equals(first)),
+      expect(TitoTheme.accentFor('user-43'), isNot(equals(first)),
           reason: 'разные люди не должны сливаться в один цвет');
     });
   });

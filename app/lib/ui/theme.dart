@@ -6,7 +6,7 @@ import 'tokens.dart';
 ///
 /// Построена на [Tokens] — значениях, снятых с публичного CSS claude.com.
 /// Плоские поверхности, волосяные границы, очень мягкие тени, один акцент.
-abstract final class MayakTheme {
+abstract final class TitoTheme {
   // --- Шрифты ---
 
   /// Один шрифт на весь интерфейс.

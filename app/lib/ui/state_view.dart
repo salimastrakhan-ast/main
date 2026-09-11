@@ -35,9 +35,9 @@ class StateView extends StatelessWidget {
     String title = 'Не удалось загрузить',
     VoidCallback? onRetry,
   }) {
-    developer.log('ошибка на экране', error: error, name: 'mayak.ui');
+    developer.log('ошибка на экране', error: error, name: 'tito.ui');
     return StateView(
-      icon: MayakIcons.offline,
+      icon: TitoIcons.offline,
       title: title,
       description: 'Проверьте соединение и попробуйте ещё раз.',
       actionLabel: onRetry == null ? null : 'Повторить',

@@ -3,11 +3,11 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mayak/core/providers.dart';
-import 'package:mayak/data/api/session_store.dart';
-import 'package:mayak/data/db/database.dart';
-import 'package:mayak/data/ws/ws_client.dart';
-import 'package:mayak/features/chats/chats_screen.dart';
+import 'package:tito/core/providers.dart';
+import 'package:tito/data/api/session_store.dart';
+import 'package:tito/data/db/database.dart';
+import 'package:tito/data/ws/ws_client.dart';
+import 'package:tito/features/chats/chats_screen.dart';
 
 /// Из чего складывается строка в списке диалогов.
 ///

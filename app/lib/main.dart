@@ -14,21 +14,21 @@ Future<void> main() async {
   // Названия месяцев и дней недели по-русски. Без этого DateFormat с
   // локалью 'ru' падает, а разделители дат в ленте как раз на ней.
   await initializeDateFormatting('ru');
-  runApp(const ProviderScope(child: MayakApp()));
+  runApp(const ProviderScope(child: TitoApp()));
 }
 
-class MayakApp extends ConsumerWidget {
-  const MayakApp({super.key});
+class TitoApp extends ConsumerWidget {
+  const TitoApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final mode = ref.watch(themeModeProvider).value ?? ThemeMode.system;
 
     return MaterialApp(
-      title: 'Маяк',
+      title: 'Tito',
       debugShowCheckedModeBanner: false,
-      theme: MayakTheme.light(),
-      darkTheme: MayakTheme.dark(),
+      theme: TitoTheme.light(),
+      darkTheme: TitoTheme.dark(),
       themeMode: mode,
       locale: const Locale('ru'),
       supportedLocales: const [Locale('ru'), Locale('en')],

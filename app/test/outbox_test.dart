@@ -3,12 +3,12 @@ import 'dart:async';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mayak/data/api/api_client.dart';
-import 'package:mayak/data/api/session_store.dart';
-import 'package:mayak/data/db/database.dart';
-import 'package:mayak/data/repo/message_repository.dart';
-import 'package:mayak/data/ws/envelope.dart';
-import 'package:mayak/data/ws/transport.dart';
+import 'package:tito/data/api/api_client.dart';
+import 'package:tito/data/api/session_store.dart';
+import 'package:tito/data/db/database.dart';
+import 'package:tito/data/repo/message_repository.dart';
+import 'package:tito/data/ws/envelope.dart';
+import 'package:tito/data/ws/transport.dart';
 
 /// Поддельный транспорт: сервера и сети нет, поведение задаётся тестом.
 class FakeTransport implements MessageTransport {
