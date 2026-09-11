@@ -179,10 +179,44 @@ await app.page.screenshot({ path: `${OUT}/07-группа.png` });
 check('группа создана и открыта',
   (await app.page.locator('body').innerText()).includes('Команда Tito'));
 
+// --- Вложение ---
+//
+// Скрепка до этого показывала «скоро». Проверяем весь путь: файл уходит на
+// сервер, сообщение — кадром со списком номеров, картинка видна в ленте.
+const png = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAF0lEQVR4nGP8z8DAwMDAwMTAwMDAwAAAFQABv1c6xQAAAABJRU5ErkJggg==',
+  'base64',
+);
+await app.page.setInputFiles('input[type="file"]', {
+  name: 'кот.png',
+  mimeType: 'image/png',
+  buffer: png,
+});
+await app.page.waitForTimeout(4000);
+await app.page.screenshot({ path: `${OUT}/08-вложение.png` });
+
+const withFile = await app.page.evaluate(() => {
+  const raw = localStorage.getItem('tito-messenger');
+  const state = raw ? JSON.parse(raw).state : {};
+  const message = (state.messages ?? []).find((m) => m.attachments?.length);
+  return {
+    status: message?.status,
+    kind: message?.attachments?.[0]?.kind,
+    name: message?.attachments?.[0]?.fileName,
+  };
+});
+check('файл загрузился и сообщение ушло', withFile.status === 'sent', JSON.stringify(withFile));
+check('вложение опознано картинкой', withFile.kind === 'image', String(withFile.kind));
+check('картинка видна в ленте', (await app.page.locator('img[alt="кот.png"]').count()) > 0);
+// Сообщение без текста оставляло в списке пустую строку «Вы:» — будто оно
+// потерялось по дороге.
+check('в списке вложение подписано родом, а не пустотой',
+  (await app.page.locator('body').innerText()).includes('Вы: Фото'));
+
 // --- Настройки ---
 await app.page.locator('button[aria-label="Меню"]:visible').first().click();
 await app.page.waitForTimeout(1200);
-await app.page.screenshot({ path: `${OUT}/08-настройки.png` });
+await app.page.screenshot({ path: `${OUT}/09-настройки.png` });
 check('выход из аккаунта выведен в настройки',
   await app.page.getByText('Выйти').first().isVisible());
 

@@ -18,12 +18,20 @@ type Props = {
   chatId: string;
 };
 
+/// Предел размера файла.
+///
+/// Тот же, что по умолчанию у сервера (`TITO_MAX_UPLOAD_MB`). Проверка
+/// здесь — чтобы не гнать мегабайты по сети ради отказа; если на сервере
+/// лимит понизили, его ответ всё равно перехватывается ниже.
+const MAX_FILE = 50 * 1024 * 1024;
+
 export function Composer({ chatId }: Props) {
   const uiLang = useMessenger((s) => s.uiLang);
   const messages = useMessenger((s) => s.messages);
   const replyToId = useMessenger((s) => s.replyToId);
   const setReplyTo = useMessenger((s) => s.setReplyTo);
   const sendMessage = useMessenger((s) => s.sendMessage);
+  const sendFiles = useMessenger((s) => s.sendFiles);
   const runDraftTool = useMessenger((s) => s.runDraftTool);
   const draftBusy = useMessenger((s) => s.draftBusy);
   const contacts = useMessenger((s) => s.contacts);
@@ -31,6 +39,7 @@ export function Composer({ chatId }: Props) {
 
   const [value, setValue] = useState("");
   const areaRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const reply = replyToId ? messages.find((m) => m.id === replyToId) : undefined;
 
@@ -51,6 +60,21 @@ export function Composer({ chatId }: Props) {
     if (!text || draftBusy) return;
     void sendMessage(chatId, text);
     setValue("");
+  }
+
+  async function attach(files: FileList | null) {
+    const chosen = [...(files ?? [])];
+    if (!chosen.length) return;
+    const tooBig = chosen.find((f) => f.size > MAX_FILE);
+    if (tooBig) {
+      toast(t(uiLang, "fileTooBig"));
+      return;
+    }
+    try {
+      await sendFiles(chatId, chosen);
+    } catch {
+      toast(t(uiLang, "uploadFailed"));
+    }
   }
 
   async function onTool(mode: "improve" | "translate" | "reply") {
@@ -89,6 +113,19 @@ export function Composer({ chatId }: Props) {
       ) : null}
 
       <div className="flex items-end gap-1.5">
+        <input
+          ref={fileRef}
+          type="file"
+          multiple
+          hidden
+          aria-label={t(uiLang, "attach")}
+          onChange={(e) => {
+            void attach(e.target.files);
+            // Сбрасываем значение: иначе выбор того же файла второй раз
+            // подряд не вызовет события, и скрепка «перестанет работать».
+            e.target.value = "";
+          }}
+        />
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -96,13 +133,14 @@ export function Composer({ chatId }: Props) {
               size="icon"
               type="button"
               className="shrink-0"
-              aria-label={t(uiLang, "attachSoon")}
-              onClick={() => toast(t(uiLang, "attachSoon"))}
+              aria-label={t(uiLang, "attach")}
+              disabled={draftBusy}
+              onClick={() => fileRef.current?.click()}
             >
               <Paperclip className="size-5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{t(uiLang, "attachSoon")}</TooltipContent>
+          <TooltipContent>{t(uiLang, "attach")}</TooltipContent>
         </Tooltip>
 
         <div className="flex min-w-0 flex-1 items-end rounded-xl bg-elevated px-3 py-1 shadow-[var(--shadow-border)]">

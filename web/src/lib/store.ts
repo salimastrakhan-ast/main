@@ -16,6 +16,8 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { api } from "./api";
 import type {
+  Attachment,
+  AttachmentKind,
   Chat,
   Contact,
   FolderId,
@@ -46,6 +48,17 @@ type ServerChat = {
   last_seq: number;
 };
 
+type ServerAttachment = {
+  id: string;
+  kind: AttachmentKind;
+  url?: string;
+  file_name?: string;
+  mime: string;
+  size: number;
+  width?: number;
+  height?: number;
+};
+
 type ServerMessage = {
   id: string;
   chat_id: string;
@@ -56,7 +69,21 @@ type ServerMessage = {
   created_at: string;
   reply_to_id?: string;
   deleted_at?: string;
+  attachments?: ServerAttachment[];
 };
+
+function toAttachment(raw: ServerAttachment): Attachment {
+  return {
+    id: raw.id,
+    kind: raw.kind,
+    url: raw.url,
+    fileName: raw.file_name,
+    mime: raw.mime,
+    size: raw.size,
+    width: raw.width,
+    height: raw.height,
+  };
+}
 
 type ServerSummary = {
   chat: ServerChat;
@@ -101,6 +128,7 @@ function toMessage(raw: ServerMessage): Message {
     createdAt: new Date(raw.created_at).getTime(),
     status: "sent",
     replyToId: raw.reply_to_id,
+    attachments: raw.attachments?.map(toAttachment),
     seq: raw.seq,
     clientMsgId: raw.client_msg_id,
     deleted: Boolean(raw.deleted_at),
@@ -115,6 +143,8 @@ type Outgoing = {
   peerId?: string;
   text: string;
   replyToId?: string;
+  /// Файлы уходят на сервер до сообщения, здесь остаются только их номера.
+  attachmentIds?: string[];
 };
 
 type State = {
@@ -170,7 +200,12 @@ type Actions = {
   toggleOriginal: (id: string) => void;
   togglePin: (chatId: string) => void;
   toggleMute: (chatId: string) => void;
-  sendMessage: (chatId: string, text: string) => Promise<void>;
+  sendMessage: (
+    chatId: string,
+    text: string,
+    attachments?: Attachment[],
+  ) => Promise<void>;
+  sendFiles: (chatId: string, files: File[]) => Promise<void>;
   sendTyping: (chatId: string) => void;
   toggleTranslate: (chatId: string) => Promise<void>;
   translateMessage: (messageId: string) => Promise<void>;
@@ -399,9 +434,11 @@ export const useMessenger = create<MessengerStore>()(
 
       // --- Отправка ---
 
-      sendMessage: async (chatId, text) => {
+      sendMessage: async (chatId, text, attachments) => {
         const trimmed = text.trim();
-        if (!trimmed) return;
+        // Пустое сообщение отправлять некуда, но картинка без подписи —
+        // обычное дело, и её текст пустой.
+        if (!trimmed && !attachments?.length) return;
 
         const me = get().me;
         if (!me) return;
@@ -426,6 +463,7 @@ export const useMessenger = create<MessengerStore>()(
           createdAt: Date.now(),
           status: "sending",
           replyToId,
+          attachments,
           seq: 0,
           clientMsgId,
         };
@@ -435,7 +473,14 @@ export const useMessenger = create<MessengerStore>()(
           replyToId: null,
           outbox: [
             ...s.outbox,
-            { clientMsgId, chatId, peerId, text: trimmed, replyToId },
+            {
+              clientMsgId,
+              chatId,
+              peerId,
+              text: trimmed,
+              replyToId,
+              attachmentIds: attachments?.map((a) => a.id),
+            },
           ],
           chats: s.chats.map((c) =>
             c.id === chatId ? { ...c, lastMessageAt: draft.createdAt, unread: 0 } : c,
@@ -443,6 +488,27 @@ export const useMessenger = create<MessengerStore>()(
         }));
 
         await drainOutbox();
+      },
+
+      /// Отправляет файлы.
+      ///
+      /// Файл уходит ДО сообщения: так виден прогресс, а само сообщение
+      /// отправляется одним кадром со списком номеров. Порядок обратный —
+      /// сначала кадр, потом файлы — оставил бы сообщение без вложения,
+      /// если загрузка не удалась.
+      sendFiles: async (chatId, files) => {
+        if (!files.length) return;
+        set({ draftBusy: true });
+        try {
+          const uploaded: Attachment[] = [];
+          for (const file of files) {
+            const raw = (await api.upload(file)) as unknown as ServerAttachment;
+            uploaded.push(toAttachment(raw));
+          }
+          await get().sendMessage(chatId, "", uploaded);
+        } finally {
+          set({ draftBusy: false });
+        }
       },
 
       sendTyping: (chatId) => {
@@ -767,6 +833,7 @@ async function trySend(item: Outgoing): Promise<boolean> {
       text: item.text,
       client_msg_id: item.clientMsgId,
       reply_to_id: item.replyToId,
+      attachment_ids: item.attachmentIds,
     });
     const raw = result.message as ServerMessage | undefined;
     if (raw) mergeMessage(raw);
@@ -927,18 +994,35 @@ export function chatTitle(chat: Chat, uiLang: UiLang) {
   return chat.title;
 }
 
+/// Чем подписано вложение в списке диалогов.
+///
+/// У картинки подписи нет вовсе, и строка «Вы:» оставалась пустой — будто
+/// сообщение потерялось. Поэтому у сообщения без текста в списке стоит род
+/// вложения.
+const attachmentLabels: Record<UiLang, Record<AttachmentKind, string>> = {
+  ru: { image: "Фото", video: "Видео", audio: "Аудио", file: "Файл" },
+  en: { image: "Photo", video: "Video", audio: "Audio", file: "File" },
+};
+
 export function lastPreview(
   messages: Message[],
   chatId: string,
   meLabel: string,
 ): string {
   const me = get().me;
+  const uiLang = get().uiLang;
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
     if (message?.chatId !== chatId) continue;
     if (message.deleted) return "Сообщение удалено";
     const prefix = message.senderId === me?.id ? `${meLabel}: ` : "";
-    return `${prefix}${message.text.replace(/\s+/g, " ")}`;
+    const attachment = message.attachments?.[0];
+    const body = message.text.trim()
+      ? message.text.replace(/\s+/g, " ")
+      : attachment
+        ? attachmentLabels[uiLang][attachment.kind]
+        : "";
+    return `${prefix}${body}`;
   }
   return "";
 }

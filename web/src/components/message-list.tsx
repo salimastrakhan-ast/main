@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Check, CheckCheck, Copy, Languages, Reply } from "lucide-react";
 import { toast } from "sonner";
+import { AttachmentView } from "@/components/attachment";
 import { UserAvatar } from "@/components/user-avatar";
 import { dayKey, formatBubbleTime, formatDayLabel } from "@/lib/format";
 import { t, targetLangNames } from "@/lib/i18n";
@@ -109,10 +110,28 @@ export function MessageList({ chatId }: { chatId: string }) {
                     </div>
                   ) : null}
 
-                  <p className="whitespace-pre-wrap">
-                    {body}
-                    <span className="inline-flex h-4 w-14" />
-                  </p>
+                  {message.attachments?.length ? (
+                    <div className="mb-1.5 flex flex-col gap-1.5">
+                      {message.attachments.map((attachment) => (
+                        <AttachmentView
+                          key={attachment.id}
+                          attachment={attachment}
+                          uiLang={uiLang}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {body || !message.attachments?.length ? (
+                    <p className="whitespace-pre-wrap">
+                      {body}
+                      <span className="inline-flex h-4 w-14" />
+                    </p>
+                  ) : (
+                    // Картинка без подписи: место под время всё равно нужно,
+                    // иначе оно ляжет на угол снимка.
+                    <p className="h-4 w-14" />
+                  )}
                   <span className="absolute right-2 bottom-1 inline-flex items-center gap-1 text-xs tabular-nums text-muted">
                     {live && tr && !showOriginal ? (
                       <Languages className="size-3 opacity-70" />

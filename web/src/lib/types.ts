@@ -41,6 +41,21 @@ export type Chat = {
   lastMessageAt: number;
 };
 
+export type AttachmentKind = "image" | "video" | "audio" | "file";
+
+export type Attachment = {
+  id: string;
+  kind: AttachmentKind;
+  /// Ссылка на файл. Временная: сервер подписывает её при выдаче, поэтому
+  /// хранить её дольше показа смысла нет.
+  url?: string;
+  fileName?: string;
+  mime: string;
+  size: number;
+  width?: number;
+  height?: number;
+};
+
 export type Message = {
   id: string;
   chatId: string;
@@ -49,6 +64,7 @@ export type Message = {
   createdAt: number;
   status: MessageStatus;
   replyToId?: string;
+  attachments?: Attachment[];
   translations?: Partial<Record<TargetLang, { text: string; from: string }>>;
 
   /// Номер в чате. Ноль у неотправленных: настоящий выдаёт сервер.
