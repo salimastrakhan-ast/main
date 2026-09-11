@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Шаблон Flutter объявляет INTERNET только в debug- и profile-манифестах:
+         без этой строки релизный APK запускается, но в сеть не выходит. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="Tito"
         android:name="${applicationName}"
