@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../ui/icons.dart';
 import '../../data/api/api_client.dart';
 import 'code_screen.dart';
 
@@ -82,20 +83,28 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                         color: theme.colorScheme.primary,
                         borderRadius: BorderRadius.circular(18),
                       ),
-                      child: Text('М',
-                          style: theme.textTheme.headlineMedium?.copyWith(
-                              color: theme.colorScheme.onPrimary)),
+                      child: Text(
+                        'М',
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          color: theme.colorScheme.onPrimary,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 24),
-                  Text('Маяк',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.headlineMedium),
+                  Text(
+                    'Маяк',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineMedium,
+                  ),
                   const SizedBox(height: 8),
-                  Text('Введите номер телефона',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant)),
+                  Text(
+                    'Введите номер телефона',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                   const SizedBox(height: 32),
                   TextField(
                     controller: _controller,
@@ -107,15 +116,17 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                     ],
                     decoration: const InputDecoration(
                       hintText: '+7 999 123-45-67',
-                      prefixIcon: Icon(Icons.call_outlined, size: 20),
+                      prefixIcon: Icon(MayakIcons.phone, size: 20),
                     ),
                     onChanged: (_) => setState(() {}),
                     onSubmitted: (_) => _looksComplete ? _submit() : null,
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 12),
-                    Text(_error!,
-                        style: TextStyle(color: theme.colorScheme.error)),
+                    Text(
+                      _error!,
+                      style: TextStyle(color: theme.colorScheme.error),
+                    ),
                   ],
                   const SizedBox(height: 24),
                   FilledButton(
@@ -124,7 +135,8 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                         ? const SizedBox(
                             height: 20,
                             width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2))
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : const Text('Получить код'),
                   ),
                 ],

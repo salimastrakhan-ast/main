@@ -35,6 +35,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.14.4
   flutter_lints: ^5.0.0
   drift_dev: ^2.20.3
   build_runner: ^2.4.13
@@ -69,6 +70,14 @@ flutter:
         - asset: assets/fonts/Manrope-Bold.ttf
           weight: 700
 
+    # Иконки. Шрифт взят из набора Lucide и объявлен одним семейством.
+    # Пакет lucide_icons_flutter не подключён намеренно: он объявляет семь
+    # семейств под разные толщины штриха, и шесть неиспользуемых попадали в
+    # сборку целиком — 2.7 МБ при нужных пяти килобайтах.
+    - family: Lucide
+      fonts:
+        - asset: assets/fonts/Lucide.ttf
+
     # Цифры и метки: моноширинные цифры не прыгают по ширине при обновлении.
     - family: JetBrainsMono
       fonts:
@@ -76,3 +85,21 @@ flutter:
           weight: 400
         - asset: assets/fonts/JetBrainsMono-Medium.ttf
           weight: 500
+
+# Знак приложения. Исходник рисует tool/generate_icon.py — тем же кораллом
+# и тем же Manrope, что в интерфейсе.
+#
+#   make app-icon   — перерисовать знак и разложить по платформам
+flutter_launcher_icons:
+  image_path: assets/icon/app_icon.png
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  web:
+    generate: true
+    image_path: assets/icon/app_icon.png
+    background_color: "#faf9f5"
+    theme_color: "#d97757"
+  # Адаптивная иконка Android: фон рисует лаунчер, наш слой — только буква.
+  adaptive_icon_background: "#d97757"
+  adaptive_icon_foreground: assets/icon/app_icon_foreground.png

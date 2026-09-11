@@ -49,7 +49,7 @@ redis:
 
 # --- Клиент ---
 
-.PHONY: app-get app-gen app-test app-analyze app-web e2e
+.PHONY: app-get app-gen app-test app-analyze app-web app-icon e2e
 
 app-get:
 	cd app && flutter pub get
@@ -65,6 +65,11 @@ app-test:
 
 app-web:
 	cd app && flutter build web --release --dart-define=MAYAK_API=$(or $(API),http://localhost:8080)
+
+# Знак приложения: перерисовать из темы и разложить по платформам.
+# Нужен Pillow: pip install Pillow
+app-icon:
+	cd app && python3 tool/generate_icon.py && dart run flutter_launcher_icons
 
 # Сквозная проверка: живой клиент против живого сервера. Подробности в e2e/README.md
 e2e:

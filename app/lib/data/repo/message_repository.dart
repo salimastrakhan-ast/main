@@ -40,7 +40,8 @@ class MessageRepository {
   bool _drainAgain = false;
 
   Stream<List<Chat>> watchChats() => db.watchChats();
-  Stream<List<Message>> watchMessages(String chatId) => db.watchMessages(chatId);
+  Stream<List<Message>> watchMessages(String chatId) =>
+      db.watchMessages(chatId);
   Stream<List<User>> watchUsers() => db.watchUsers();
 
   // --- Отправка ---
@@ -65,32 +66,36 @@ class MessageRepository {
       if (chatId != null) {
         // Пока чата нет (пишем новому собеседнику), рисовать сообщение
         // некуда — оно появится, когда сервер заведёт чат и вернёт его id.
-        await db.into(db.messages).insert(
-          MessagesCompanion.insert(
-            id: clientMsgId,
-            chatId: chatId,
-            senderId: myUserId,
-            body: Value(text),
-            replyToId: Value(replyToId),
-            clientMsgId: clientMsgId,
-            createdAt: now,
-            sendState: const Value(SendState.pending),
-          ),
-        );
+        await db
+            .into(db.messages)
+            .insert(
+              MessagesCompanion.insert(
+                id: clientMsgId,
+                chatId: chatId,
+                senderId: myUserId,
+                body: Value(text),
+                replyToId: Value(replyToId),
+                clientMsgId: clientMsgId,
+                createdAt: now,
+                sendState: const Value(SendState.pending),
+              ),
+            );
       }
-      await db.into(db.outbox).insert(
-        OutboxCompanion.insert(
-          clientMsgId: clientMsgId,
-          chatId: Value(chatId),
-          peerId: Value(peerId),
-          body: Value(text),
-          replyToId: Value(replyToId),
-          attachmentIdsJson: Value(
-            attachmentIds.isEmpty ? null : jsonEncode(attachmentIds),
-          ),
-          createdAt: now,
-        ),
-      );
+      await db
+          .into(db.outbox)
+          .insert(
+            OutboxCompanion.insert(
+              clientMsgId: clientMsgId,
+              chatId: Value(chatId),
+              peerId: Value(peerId),
+              body: Value(text),
+              replyToId: Value(replyToId),
+              attachmentIdsJson: Value(
+                attachmentIds.isEmpty ? null : jsonEncode(attachmentIds),
+              ),
+              createdAt: now,
+            ),
+          );
     });
 
     unawaited(drainOutbox());
@@ -145,13 +150,13 @@ class MessageRepository {
       await db.transaction(() async {
         // Черновик лежал под временным идентификатором — заменяем его
         // строкой с сервера, иначе сообщение задвоится в ленте.
-        await (db.delete(db.messages)
-              ..where((t) => t.id.equals(item.clientMsgId)))
-            .go();
+        await (db.delete(
+          db.messages,
+        )..where((t) => t.id.equals(item.clientMsgId))).go();
         await _upsertMessage(message, state: SendState.sent);
-        await (db.delete(db.outbox)
-              ..where((t) => t.clientMsgId.equals(item.clientMsgId)))
-            .go();
+        await (db.delete(
+          db.outbox,
+        )..where((t) => t.clientMsgId.equals(item.clientMsgId))).go();
       });
       return true;
     } on ProtocolException catch (e) {
@@ -159,14 +164,14 @@ class MessageRepository {
         // Например, выкинули из чата. Повторять нечего — показываем отказ,
         // дальше решает человек.
         await db.transaction(() async {
-          await (db.update(db.messages)
-                ..where((t) => t.id.equals(item.clientMsgId)))
-              .write(const MessagesCompanion(
-                sendState: Value(SendState.failed),
-              ));
-          await (db.delete(db.outbox)
-                ..where((t) => t.clientMsgId.equals(item.clientMsgId)))
-              .go();
+          await (db.update(
+            db.messages,
+          )..where((t) => t.id.equals(item.clientMsgId))).write(
+            const MessagesCompanion(sendState: Value(SendState.failed)),
+          );
+          await (db.delete(
+            db.outbox,
+          )..where((t) => t.clientMsgId.equals(item.clientMsgId))).go();
         });
         return true;
       }
@@ -222,11 +227,14 @@ class MessageRepository {
 
   /// Догружает страницу истории вверх от самого старого известного сообщения.
   Future<int> loadOlder(String chatId) async {
-    final oldest = await (db.select(db.messages)
-          ..where((t) => t.chatId.equals(chatId) & t.seq.isBiggerThanValue(0))
-          ..orderBy([(t) => OrderingTerm(expression: t.seq)])
-          ..limit(1))
-        .getSingleOrNull();
+    final oldest =
+        await (db.select(db.messages)
+              ..where(
+                (t) => t.chatId.equals(chatId) & t.seq.isBiggerThanValue(0),
+              )
+              ..orderBy([(t) => OrderingTerm(expression: t.seq)])
+              ..limit(1))
+            .getSingleOrNull();
 
     final page = await api.history(chatId, beforeSeq: oldest?.seq ?? 0);
     await db.transaction(() async {
@@ -265,10 +273,9 @@ class MessageRepository {
         // остаток надо дочитать через историю, и до тех пор в ленте дыра.
         final truncated = delta['truncated'] as bool? ?? false;
         if (!truncated) {
-          await (db.update(db.chats)..where((t) => t.id.equals(chatId)))
-              .write(ChatsCompanion(
-                syncedSeq: Value(delta['last_seq'] as int? ?? 0),
-              ));
+          await (db.update(db.chats)..where((t) => t.id.equals(chatId))).write(
+            ChatsCompanion(syncedSeq: Value(delta['last_seq'] as int? ?? 0)),
+          );
         }
       }
     });
@@ -298,8 +305,12 @@ class MessageRepository {
     final chatId = (summary['chat'] as Map<String, dynamic>)['id'] as String;
     if (data['gone'] == true) {
       await db.transaction(() async {
-        await (db.delete(db.messages)..where((t) => t.chatId.equals(chatId))).go();
-        await (db.delete(db.chatMembers)..where((t) => t.chatId.equals(chatId))).go();
+        await (db.delete(
+          db.messages,
+        )..where((t) => t.chatId.equals(chatId))).go();
+        await (db.delete(
+          db.chatMembers,
+        )..where((t) => t.chatId.equals(chatId))).go();
         await (db.delete(db.chats)..where((t) => t.id.equals(chatId))).go();
       });
       return;
@@ -309,23 +320,28 @@ class MessageRepository {
 
   Future<void> _onReadUpdate(Map<String, dynamic>? data) async {
     if (data == null) return;
-    await db.into(db.chatMembers).insertOnConflictUpdate(
-      ChatMembersCompanion.insert(
-        chatId: data['chat_id'] as String,
-        userId: data['user_id'] as String,
-        lastReadSeq: Value(data['last_read_seq'] as int? ?? 0),
-      ),
-    );
+    await db
+        .into(db.chatMembers)
+        .insertOnConflictUpdate(
+          ChatMembersCompanion.insert(
+            chatId: data['chat_id'] as String,
+            userId: data['user_id'] as String,
+            lastReadSeq: Value(data['last_read_seq'] as int? ?? 0),
+          ),
+        );
   }
 
   Future<void> _onPresence(Map<String, dynamic>? data) async {
     if (data == null) return;
     final lastSeen = data['last_seen'] as String?;
-    await (db.update(db.users)..where((t) => t.id.equals(data['user_id'] as String)))
-        .write(UsersCompanion(
-          online: Value(data['online'] as bool? ?? false),
-          lastSeenAt: Value(lastSeen == null ? null : DateTime.parse(lastSeen)),
-        ));
+    await (db.update(
+      db.users,
+    )..where((t) => t.id.equals(data['user_id'] as String))).write(
+      UsersCompanion(
+        online: Value(data['online'] as bool? ?? false),
+        lastSeenAt: Value(lastSeen == null ? null : DateTime.parse(lastSeen)),
+      ),
+    );
   }
 
   // --- Запись в базу ---
@@ -338,27 +354,29 @@ class MessageRepository {
     final chatId = raw['chat_id'] as String;
     final attachments = raw['attachments'] as List<dynamic>?;
 
-    await db.into(db.messages).insertOnConflictUpdate(
-      MessagesCompanion.insert(
-        id: raw['id'] as String,
-        chatId: chatId,
-        seq: Value(seq),
-        updatedSeq: Value(raw['updated_seq'] as int? ?? seq),
-        senderId: raw['sender_id'] as String,
-        body: Value(raw['text'] as String? ?? ''),
-        replyToId: Value(raw['reply_to_id'] as String?),
-        clientMsgId: raw['client_msg_id'] as String? ?? raw['id'] as String,
-        createdAt: DateTime.parse(raw['created_at'] as String),
-        editedAt: Value(_date(raw['edited_at'])),
-        deletedAt: Value(_date(raw['deleted_at'])),
-        attachmentsJson: Value(
-          attachments == null || attachments.isEmpty
-              ? null
-              : jsonEncode(attachments),
-        ),
-        sendState: Value(state),
-      ),
-    );
+    await db
+        .into(db.messages)
+        .insertOnConflictUpdate(
+          MessagesCompanion.insert(
+            id: raw['id'] as String,
+            chatId: chatId,
+            seq: Value(seq),
+            updatedSeq: Value(raw['updated_seq'] as int? ?? seq),
+            senderId: raw['sender_id'] as String,
+            body: Value(raw['text'] as String? ?? ''),
+            replyToId: Value(raw['reply_to_id'] as String?),
+            clientMsgId: raw['client_msg_id'] as String? ?? raw['id'] as String,
+            createdAt: DateTime.parse(raw['created_at'] as String),
+            editedAt: Value(_date(raw['edited_at'])),
+            deletedAt: Value(_date(raw['deleted_at'])),
+            attachmentsJson: Value(
+              attachments == null || attachments.isEmpty
+                  ? null
+                  : jsonEncode(attachments),
+            ),
+            sendState: Value(state),
+          ),
+        );
 
     // Событие о новом сообщении двигает и курсор чата: иначе после
     // перезапуска клиент запросил бы то, что уже показывает.
@@ -372,32 +390,36 @@ class MessageRepository {
     final chat = summary['chat'] as Map<String, dynamic>;
     final chatId = chat['id'] as String;
 
-    await db.into(db.chats).insertOnConflictUpdate(
-      ChatsCompanion.insert(
-        id: chatId,
-        type: chat['type'] as String,
-        title: Value(chat['title'] as String? ?? ''),
-        avatarUrl: Value(chat['avatar_url'] as String?),
-        lastSeq: Value(chat['last_seq'] as int? ?? 0),
-        lastReadSeq: Value(summary['last_read_seq'] as int? ?? 0),
-        unreadCount: Value(summary['unread_count'] as int? ?? 0),
-        updatedAt: Value(DateTime.now()),
-      ),
-    );
+    await db
+        .into(db.chats)
+        .insertOnConflictUpdate(
+          ChatsCompanion.insert(
+            id: chatId,
+            type: chat['type'] as String,
+            title: Value(chat['title'] as String? ?? ''),
+            avatarUrl: Value(chat['avatar_url'] as String?),
+            lastSeq: Value(chat['last_seq'] as int? ?? 0),
+            lastReadSeq: Value(summary['last_read_seq'] as int? ?? 0),
+            unreadCount: Value(summary['unread_count'] as int? ?? 0),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
 
     for (final raw in (summary['users'] as List<dynamic>? ?? const [])) {
       await _upsertUser(raw as Map<String, dynamic>);
     }
     for (final raw in (summary['members'] as List<dynamic>? ?? const [])) {
       final member = raw as Map<String, dynamic>;
-      await db.into(db.chatMembers).insertOnConflictUpdate(
-        ChatMembersCompanion.insert(
-          chatId: chatId,
-          userId: member['user_id'] as String,
-          role: Value(member['role'] as String? ?? 'member'),
-          lastReadSeq: Value(member['last_read_seq'] as int? ?? 0),
-        ),
-      );
+      await db
+          .into(db.chatMembers)
+          .insertOnConflictUpdate(
+            ChatMembersCompanion.insert(
+              chatId: chatId,
+              userId: member['user_id'] as String,
+              role: Value(member['role'] as String? ?? 'member'),
+              lastReadSeq: Value(member['last_read_seq'] as int? ?? 0),
+            ),
+          );
     }
 
     final last = summary['last_message'] as Map<String, dynamic>?;
@@ -405,16 +427,18 @@ class MessageRepository {
   }
 
   Future<void> _upsertUser(Map<String, dynamic> raw) async {
-    await db.into(db.users).insertOnConflictUpdate(
-      UsersCompanion.insert(
-        id: raw['id'] as String,
-        displayName: Value(raw['display_name'] as String? ?? ''),
-        username: Value(raw['username'] as String?),
-        avatarUrl: Value(raw['avatar_url'] as String?),
-        phone: Value(raw['phone'] as String?),
-        lastSeenAt: Value(_date(raw['last_seen_at'])),
-      ),
-    );
+    await db
+        .into(db.users)
+        .insertOnConflictUpdate(
+          UsersCompanion.insert(
+            id: raw['id'] as String,
+            displayName: Value(raw['display_name'] as String? ?? ''),
+            username: Value(raw['username'] as String?),
+            avatarUrl: Value(raw['avatar_url'] as String?),
+            phone: Value(raw['phone'] as String?),
+            lastSeenAt: Value(_date(raw['last_seen_at'])),
+          ),
+        );
   }
 
   static DateTime? _date(Object? raw) =>

@@ -2,6 +2,8 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
 
+import 'icons.dart';
+
 /// Пустой экран, загрузка и ошибка — одним языком.
 ///
 /// Раньше на этих местах стояли `CircularProgressIndicator` посреди пустоты и
@@ -35,7 +37,7 @@ class StateView extends StatelessWidget {
   }) {
     developer.log('ошибка на экране', error: error, name: 'mayak.ui');
     return StateView(
-      icon: Icons.cloud_off_outlined,
+      icon: MayakIcons.offline,
       title: title,
       description: 'Проверьте соединение и попробуйте ещё раз.',
       actionLabel: onRetry == null ? null : 'Повторить',
@@ -73,15 +75,19 @@ class StateView extends StatelessWidget {
           children: [
             Icon(icon, size: 56, color: theme.colorScheme.outline),
             const SizedBox(height: 18),
-            Text(title,
-                textAlign: TextAlign.center, style: theme.textTheme.titleMedium),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium,
+            ),
             if (description != null) ...[
               const SizedBox(height: 8),
               Text(
                 description!,
                 textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
             if (actionLabel != null) ...[

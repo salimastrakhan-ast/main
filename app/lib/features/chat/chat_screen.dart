@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/providers.dart';
 import '../../data/db/database.dart';
+import '../../ui/icons.dart';
 import '../../ui/glass.dart';
 import '../../ui/state_view.dart';
 import '../../ui/theme.dart';
@@ -130,7 +131,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 });
                 if (list.isEmpty) {
                   return const StateView(
-                    icon: Icons.chat_bubble_outline,
+                    icon: MayakIcons.chat,
                     title: 'Здесь пока ничего нет',
                     description: 'Напишите первым — сообщение уйдёт сразу.',
                   );
@@ -330,10 +331,10 @@ class _StateIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return switch (state) {
-      SendState.pending => Icon(Icons.schedule, size: 13, color: color),
-      SendState.sent => Icon(Icons.done, size: 13, color: color),
+      SendState.pending => Icon(MayakIcons.pending, size: 13, color: color),
+      SendState.sent => Icon(MayakIcons.sent, size: 13, color: color),
       SendState.failed => Icon(
-        Icons.error_outline,
+        MayakIcons.failed,
         size: 13,
         color: Theme.of(context).colorScheme.error,
       ),
@@ -364,7 +365,7 @@ class _Attachment extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(Icons.description_outlined, size: 20),
+        const Icon(MayakIcons.file, size: 20),
         const SizedBox(width: 8),
         Flexible(
           child: Text(
@@ -383,7 +384,7 @@ class _AttachmentStub extends StatelessWidget {
   @override
   Widget build(BuildContext context) => const SizedBox(
     height: 120,
-    child: Center(child: Icon(Icons.broken_image_outlined)),
+    child: Center(child: Icon(MayakIcons.brokenImage)),
   );
 }
 
@@ -468,7 +469,7 @@ class _SendButtonState extends State<_SendButton> {
             borderRadius: BorderRadius.circular(14),
           ),
           // Здесь терракоту и место: одна кнопка действия на экран.
-          child: Icon(Icons.arrow_upward_rounded, size: 22, color: scheme.onPrimary),
+          child: Icon(MayakIcons.send, size: 22, color: scheme.onPrimary),
         ),
       ),
     );

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/providers.dart';
 import '../../data/db/database.dart';
 import '../../data/ws/ws_client.dart';
+import '../../ui/icons.dart';
 import '../../ui/glass.dart';
 import '../../ui/state_view.dart';
 import '../../ui/theme.dart';
@@ -31,7 +32,7 @@ class ChatsScreen extends ConsumerWidget {
         bottom: const _ConnectionBanner(),
         actions: [
           IconButton(
-            icon: const Icon(Icons.account_circle_outlined),
+            icon: const Icon(MayakIcons.profile),
             tooltip: 'Профиль',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const ProfileScreen()),
@@ -186,7 +187,7 @@ class _EmptyChats extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const StateView(
-      icon: Icons.forum_outlined,
+      icon: MayakIcons.chats,
       title: 'Пока пусто',
       description:
           'Диалог появится здесь, как только вам напишут или вы напишете первым.',

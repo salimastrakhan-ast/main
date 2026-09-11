@@ -104,7 +104,11 @@ class ApiClient {
 
   Future<Map<String, dynamic>> me() => _get('/v1/users/me');
 
-  Future<List<dynamic>> history(String chatId, {int? beforeSeq, int limit = 50}) async {
+  Future<List<dynamic>> history(
+    String chatId, {
+    int? beforeSeq,
+    int limit = 50,
+  }) async {
     final query = {
       'limit': '$limit',
       if (beforeSeq != null && beforeSeq > 0) 'before_seq': '$beforeSeq',
@@ -135,16 +139,19 @@ class ApiClient {
     int? height,
   }) async {
     final token = await freshAccessToken();
-    final request = http.MultipartRequest(
-      'POST',
-      Uri.parse('${AppConfig.apiBase}/v1/media/upload'),
-    )
-      ..headers['Authorization'] = 'Bearer $token'
-      ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: fileName))
-      ..fields.addAll({
-        if (width != null) 'width': '$width',
-        if (height != null) 'height': '$height',
-      });
+    final request =
+        http.MultipartRequest(
+            'POST',
+            Uri.parse('${AppConfig.apiBase}/v1/media/upload'),
+          )
+          ..headers['Authorization'] = 'Bearer $token'
+          ..files.add(
+            http.MultipartFile.fromBytes('file', bytes, filename: fileName),
+          )
+          ..fields.addAll({
+            if (width != null) 'width': '$width',
+            if (height != null) 'height': '$height',
+          });
 
     final response = await http.Response.fromStream(await request.send());
     final json = _parse(response);
@@ -155,8 +162,9 @@ class ApiClient {
     String path, {
     Map<String, String>? query,
   }) async {
-    final uri = Uri.parse('${AppConfig.apiBase}$path')
-        .replace(queryParameters: query);
+    final uri = Uri.parse(
+      '${AppConfig.apiBase}$path',
+    ).replace(queryParameters: query);
     final response = await _http.get(uri, headers: await _headers(true));
     return _parse(response);
   }
@@ -186,9 +194,14 @@ class ApiClient {
   Map<String, dynamic> _parse(http.Response response) {
     final Map<String, dynamic> json;
     try {
-      json = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      json =
+          jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
     } catch (_) {
-      throw ApiException(response.statusCode, 'bad_response', 'Сервер ответил неожиданно');
+      throw ApiException(
+        response.statusCode,
+        'bad_response',
+        'Сервер ответил неожиданно',
+      );
     }
 
     if (response.statusCode >= 400) {

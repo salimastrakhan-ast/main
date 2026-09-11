@@ -111,10 +111,12 @@ class WsClient implements MessageTransport {
       final completer = _pending.remove(id)!;
       if (envelope.type == Ev.error) {
         final data = envelope.data ?? const {};
-        completer.completeError(ProtocolException(
-          data['code'] as String? ?? 'unknown',
-          data['message'] as String? ?? 'Неизвестная ошибка',
-        ));
+        completer.completeError(
+          ProtocolException(
+            data['code'] as String? ?? 'unknown',
+            data['message'] as String? ?? 'Неизвестная ошибка',
+          ),
+        );
       } else {
         completer.complete(envelope.data ?? const {});
       }
@@ -137,13 +139,16 @@ class WsClient implements MessageTransport {
 
     _sendRaw(Envelope(type: type, id: id, data: data));
 
-    return completer.future.timeout(_callTimeout, onTimeout: () {
-      _pending.remove(id);
-      // Ответ не пришёл — соединение, скорее всего, уже мертво, просто мы
-      // об этом ещё не знаем.
-      _scheduleReconnect();
-      throw const ProtocolException('timeout', 'Сервер не ответил');
-    });
+    return completer.future.timeout(
+      _callTimeout,
+      onTimeout: () {
+        _pending.remove(id);
+        // Ответ не пришёл — соединение, скорее всего, уже мертво, просто мы
+        // об этом ещё не знаем.
+        _scheduleReconnect();
+        throw const ProtocolException('timeout', 'Сервер не ответил');
+      },
+    );
   }
 
   /// Отправляет команду, не дожидаясь ответа. Для «печатает», у которого

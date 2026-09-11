@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../data/ws/ws_client.dart';
+import '../../ui/icons.dart';
 import '../../ui/glass.dart';
 import '../../ui/theme.dart';
 
@@ -55,8 +56,8 @@ class ProfileScreen extends ConsumerWidget {
           ListTile(
             leading: Icon(
               connection == WsStatus.online
-                  ? Icons.cloud_done_outlined
-                  : Icons.cloud_off_outlined,
+                  ? MayakIcons.online
+                  : MayakIcons.offline,
             ),
             title: const Text('Соединение'),
             subtitle: Text(switch (connection) {
@@ -67,7 +68,7 @@ class ProfileScreen extends ConsumerWidget {
           ),
           const Divider(),
           ListTile(
-            leading: Icon(Icons.logout_outlined, color: theme.colorScheme.error),
+            leading: Icon(MayakIcons.logout, color: theme.colorScheme.error),
             title: Text(
               'Выйти',
               style: TextStyle(color: theme.colorScheme.error),

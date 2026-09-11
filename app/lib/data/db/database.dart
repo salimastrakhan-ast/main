@@ -143,8 +143,9 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Stream<List<Chat>> watchChats() {
-    return (select(chats)..orderBy([(t) => OrderingTerm.desc(t.lastSeq)]))
-        .watch();
+    return (select(
+      chats,
+    )..orderBy([(t) => OrderingTerm.desc(t.lastSeq)])).watch();
   }
 
   /// Лента чата. Неотправленные (seq == 0) идут в конце: их место в ленте
@@ -162,8 +163,9 @@ class AppDatabase extends _$AppDatabase {
   Stream<List<User>> watchUsers() => select(users).watch();
 
   Future<List<OutboxData>> pendingOutbox() {
-    return (select(outbox)..orderBy([(t) => OrderingTerm(expression: t.createdAt)]))
-        .get();
+    return (select(
+      outbox,
+    )..orderBy([(t) => OrderingTerm(expression: t.createdAt)])).get();
   }
 
   Future<void> clearAll() async {

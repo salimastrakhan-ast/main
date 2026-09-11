@@ -192,7 +192,10 @@ abstract final class MayakTheme {
           color: scheme.onSurface,
         ),
         iconTheme: IconThemeData(color: scheme.onSurface, size: 22),
-        actionsIconTheme: IconThemeData(color: scheme.onSurfaceVariant, size: 22),
+        actionsIconTheme: IconThemeData(
+          color: scheme.onSurfaceVariant,
+          size: 22,
+        ),
         shape: Border(bottom: BorderSide(color: scheme.outlineVariant)),
       ),
 
@@ -211,14 +214,19 @@ abstract final class MayakTheme {
         focusedBorder: _inputBorder(scheme.primary, width: 1.5),
         errorBorder: _inputBorder(scheme.error),
         focusedErrorBorder: _inputBorder(scheme.error, width: 1.5),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 15,
+        ),
         // Иконки в поле тише текста: они подсказка, а не содержание.
         prefixIconColor: scheme.onSurfaceVariant,
         suffixIconColor: scheme.onSurfaceVariant,
       ),
 
       filledButtonTheme: FilledButtonThemeData(style: _primaryButton(scheme)),
-      outlinedButtonTheme: OutlinedButtonThemeData(style: _secondaryButton(scheme)),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: _secondaryButton(scheme),
+      ),
       textButtonTheme: TextButtonThemeData(style: _ghostButton(scheme)),
       iconButtonTheme: IconButtonThemeData(
         style: ButtonStyle(
@@ -287,7 +295,10 @@ abstract final class MayakTheme {
 
       snackBarTheme: SnackBarThemeData(
         backgroundColor: scheme.inverseSurface,
-        contentTextStyle: TextStyle(color: scheme.onInverseSurface, fontSize: 14),
+        contentTextStyle: TextStyle(
+          color: scheme.onInverseSurface,
+          fontSize: 14,
+        ),
         behavior: SnackBarBehavior.floating,
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -302,7 +313,6 @@ abstract final class MayakTheme {
       splashFactory: NoSplash.splashFactory,
     );
   }
-
 
   // --- Кнопки ---
   //
@@ -361,11 +371,17 @@ abstract final class MayakTheme {
         return scheme.primary;
       }),
       foregroundColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.disabled)) return scheme.onSurfaceVariant;
+        if (states.contains(WidgetState.disabled)) {
+          return scheme.onSurfaceVariant;
+        }
         return scheme.onPrimary;
       }),
       overlayColor: _overlay(scheme.onPrimary),
-      side: _focusRing(scheme, focus: scheme.onPrimary, rest: Colors.transparent),
+      side: _focusRing(
+        scheme,
+        focus: scheme.onPrimary,
+        rest: Colors.transparent,
+      ),
       elevation: const WidgetStatePropertyAll(0),
       minimumSize: const WidgetStatePropertyAll(Size.fromHeight(52)),
       textStyle: const WidgetStatePropertyAll(_buttonText),
@@ -378,7 +394,9 @@ abstract final class MayakTheme {
   static ButtonStyle _secondaryButton(ColorScheme scheme) {
     return ButtonStyle(
       foregroundColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.disabled)) return scheme.onSurfaceVariant;
+        if (states.contains(WidgetState.disabled)) {
+          return scheme.onSurfaceVariant;
+        }
         return scheme.onSurface;
       }),
       overlayColor: _overlay(scheme.onSurface),
@@ -394,7 +412,9 @@ abstract final class MayakTheme {
   static ButtonStyle _ghostButton(ColorScheme scheme) {
     return ButtonStyle(
       foregroundColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.disabled)) return scheme.onSurfaceVariant;
+        if (states.contains(WidgetState.disabled)) {
+          return scheme.onSurfaceVariant;
+        }
         return scheme.onSurface;
       }),
       overlayColor: _overlay(scheme.onSurface),
@@ -420,23 +440,45 @@ abstract final class MayakTheme {
   /// таблица работает в обеих темах.
   static const _textTheme = TextTheme(
     headlineLarge: TextStyle(
-      fontFamily: _display, fontFamilyFallback: _fallback,
-      fontSize: 30, fontWeight: FontWeight.w700, letterSpacing: -0.5),
+      fontFamily: _display,
+      fontFamilyFallback: _fallback,
+      fontSize: 30,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.5,
+    ),
     headlineMedium: TextStyle(
-      fontFamily: _display, fontFamilyFallback: _fallback,
-      fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: -0.4),
+      fontFamily: _display,
+      fontFamilyFallback: _fallback,
+      fontSize: 26,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.4,
+    ),
     headlineSmall: TextStyle(
-      fontFamily: _display, fontFamilyFallback: _fallback,
-      fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: -0.3),
+      fontFamily: _display,
+      fontFamilyFallback: _fallback,
+      fontSize: 22,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.3,
+    ),
     titleLarge: TextStyle(
-      fontFamily: _display, fontFamilyFallback: _fallback,
-      fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: -0.2),
+      fontFamily: _display,
+      fontFamilyFallback: _fallback,
+      fontSize: 20,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.2,
+    ),
     titleMedium: TextStyle(
-      fontFamily: _display, fontFamilyFallback: _fallback,
-      fontSize: 16, fontWeight: FontWeight.w700),
+      fontFamily: _display,
+      fontFamilyFallback: _fallback,
+      fontSize: 16,
+      fontWeight: FontWeight.w700,
+    ),
     titleSmall: TextStyle(
-      fontFamily: _display, fontFamilyFallback: _fallback,
-      fontSize: 14, fontWeight: FontWeight.w700),
+      fontFamily: _display,
+      fontFamilyFallback: _fallback,
+      fontSize: 14,
+      fontWeight: FontWeight.w700,
+    ),
     bodyLarge: TextStyle(fontSize: 16, height: 1.4),
     bodyMedium: TextStyle(fontSize: 14, height: 1.4),
     bodySmall: TextStyle(fontSize: 13, height: 1.35),
@@ -444,8 +486,12 @@ abstract final class MayakTheme {
     labelMedium: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
     // Время, счётчики, статусы.
     labelSmall: TextStyle(
-      fontFamily: _mono, fontFamilyFallback: _fallback,
-      fontSize: 11, fontWeight: FontWeight.w400, letterSpacing: 0),
+      fontFamily: _mono,
+      fontFamilyFallback: _fallback,
+      fontSize: 11,
+      fontWeight: FontWeight.w400,
+      letterSpacing: 0,
+    ),
   );
 
   // --- Готовые куски для экранов ---
@@ -462,14 +508,14 @@ abstract final class MayakTheme {
   /// полотна, чужой едва заметнее.
   static Color ownBubble(ColorScheme scheme) =>
       scheme.brightness == Brightness.light
-          ? const Color(0xFFE8E6DC)
-          : const Color(0xFF2E2D2B);
+      ? const Color(0xFFE8E6DC)
+      : const Color(0xFF2E2D2B);
 
   /// Цвет чужого пузыря.
   static Color otherBubble(ColorScheme scheme) =>
       scheme.brightness == Brightness.light
-          ? const Color(0xFFFFFFFF)
-          : const Color(0xFF1C1C1A);
+      ? const Color(0xFFFFFFFF)
+      : const Color(0xFF1C1C1A);
 
   /// Текст в пузыре — обычный, потому что оба пузыря нейтральные.
   static Color onOwnBubble(ColorScheme scheme) => scheme.onSurface;

@@ -42,7 +42,9 @@ class _CodeScreenState extends ConsumerState<CodeScreen> {
       _error = null;
     });
     try {
-      await ref.read(apiProvider).verifyCode(
+      await ref
+          .read(apiProvider)
+          .verifyCode(
             phone: widget.phone,
             code: _controller.text.trim(),
             platform: Theme.of(context).platform.name,
@@ -73,14 +75,19 @@ class _CodeScreenState extends ConsumerState<CodeScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('Код из SMS',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.headlineSmall),
+                  Text(
+                    'Код из SMS',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineSmall,
+                  ),
                   const SizedBox(height: 8),
-                  Text('Отправили на +${widget.phone}',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant)),
+                  Text(
+                    'Отправили на +${widget.phone}',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                   const SizedBox(height: 32),
                   TextField(
                     controller: _controller,
@@ -106,19 +113,23 @@ class _CodeScreenState extends ConsumerState<CodeScreen> {
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 12),
-                    Text(_error!,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: theme.colorScheme.error)),
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: theme.colorScheme.error),
+                    ),
                   ],
                   const SizedBox(height: 24),
                   FilledButton(
-                    onPressed:
-                        _busy || _controller.text.length < 6 ? null : _submit,
+                    onPressed: _busy || _controller.text.length < 6
+                        ? null
+                        : _submit,
                     child: _busy
                         ? const SizedBox(
                             height: 20,
                             width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2))
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : const Text('Войти'),
                   ),
                 ],

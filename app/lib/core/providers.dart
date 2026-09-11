@@ -58,8 +58,10 @@ final chatsProvider = StreamProvider<List<Chat>>((ref) {
   return repo?.watchChats() ?? const Stream.empty();
 });
 
-final messagesProvider =
-    StreamProvider.family<List<Message>, String>((ref, chatId) {
+final messagesProvider = StreamProvider.family<List<Message>, String>((
+  ref,
+  chatId,
+) {
   final repo = ref.watch(repositoryProvider);
   return repo?.watchMessages(chatId) ?? const Stream.empty();
 });
@@ -74,8 +76,8 @@ final usersProvider = StreamProvider<Map<String, User>>((ref) {
 /// Кто печатает в каком чате. Живёт в памяти: событие протухает за секунды.
 final typingProvider =
     StateNotifierProvider<TypingNotifier, Map<String, Set<String>>>(
-  (ref) => TypingNotifier(ref),
-);
+      (ref) => TypingNotifier(ref),
+    );
 
 class TypingNotifier extends StateNotifier<Map<String, Set<String>>> {
   TypingNotifier(this._ref) : super(const {}) {
@@ -105,9 +107,8 @@ final typingEventsProvider = StreamProvider<void>((ref) {
     if (envelope.type != 'typing') return;
     final data = envelope.data;
     if (data == null) return;
-    ref.read(typingProvider.notifier).add(
-      data['chat_id'] as String,
-      data['user_id'] as String,
-    );
+    ref
+        .read(typingProvider.notifier)
+        .add(data['chat_id'] as String, data['user_id'] as String);
   });
 });

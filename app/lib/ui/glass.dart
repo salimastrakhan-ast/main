@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import 'icons.dart';
 import 'theme.dart';
 
 /// Матовое стекло: размытая полупрозрачная поверхность.
@@ -109,7 +110,9 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
               child: AppBar(
                 title: title,
                 actions: actions,
-                leading: leading,
+                // Своя стрелка вместо материаловской: иначе в шапке окажется
+                // иконка из чужого набора.
+                leading: leading ?? const _BackButton(),
                 backgroundColor: Colors.transparent,
                 surfaceTintColor: Colors.transparent,
                 elevation: 0,
@@ -122,6 +125,26 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Кнопка «назад» из нашего набора.
+///
+/// Показывается только если есть куда возвращаться — на корневом экране
+/// Flutter сам не рисует стрелку, и мы не должны.
+class _BackButton extends StatelessWidget {
+  const _BackButton();
+
+  @override
+  Widget build(BuildContext context) {
+    if (!(ModalRoute.of(context)?.impliesAppBarDismissal ?? false)) {
+      return const SizedBox.shrink();
+    }
+    return IconButton(
+      icon: const Icon(MayakIcons.back),
+      tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+      onPressed: () => Navigator.maybePop(context),
     );
   }
 }
