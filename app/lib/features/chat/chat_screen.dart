@@ -89,6 +89,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget build(BuildContext context) {
     final messages = ref.watch(messagesProvider(widget.chatId));
     final users = ref.watch(usersProvider).value ?? const {};
+    // Имя над пузырём нужно только в группе: в личной переписке собеседник
+    // один и уже назван в шапке, а подпись над каждым его словом — шум.
+    final isGroup = ref.watch(chatProvider(widget.chatId)).value?.type == 'group';
     final myUserId = ref.watch(sessionProvider).value?.userId ?? '';
     final typing = ref.watch(typingProvider)[widget.chatId] ?? const {};
 
@@ -150,7 +153,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       key: ValueKey(message.id),
                       message: message,
                       isMine: message.senderId == myUserId,
-                      senderName: users[message.senderId]?.displayName ?? '',
+                      senderName: isGroup
+                          ? users[message.senderId]?.displayName ?? ''
+                          : '',
                       showSender: !_isSameSenderAsPrevious(list, index),
                     );
                   },

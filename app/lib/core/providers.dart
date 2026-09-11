@@ -73,6 +73,18 @@ final usersProvider = StreamProvider<Map<String, User>>((ref) {
   return stream.map((list) => {for (final u in list) u.id: u});
 });
 
+/// Один чат по идентификатору: экрану переписки нужен его тип.
+final chatProvider = StreamProvider.family<Chat?, String>((ref, chatId) {
+  final repo = ref.watch(repositoryProvider);
+  final stream = repo?.watchChats() ?? const Stream<List<Chat>>.empty();
+  return stream.map((list) {
+    for (final chat in list) {
+      if (chat.id == chatId) return chat;
+    }
+    return null;
+  });
+});
+
 /// Собеседник в каждом личном чате: по нему подписана строка списка.
 final chatPeersProvider = StreamProvider<Map<String, User>>((ref) {
   final repo = ref.watch(repositoryProvider);
