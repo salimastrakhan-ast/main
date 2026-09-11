@@ -80,7 +80,7 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: theme.colorScheme.primary,
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(18),
                       ),
                       child: Text('М',
                           style: theme.textTheme.headlineMedium?.copyWith(
@@ -107,7 +107,7 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                     ],
                     decoration: const InputDecoration(
                       hintText: '+7 999 123-45-67',
-                      prefixIcon: Icon(Icons.phone_outlined),
+                      prefixIcon: Icon(Icons.call_outlined, size: 20),
                     ),
                     onChanged: (_) => setState(() {}),
                     onSubmitted: (_) => _looksComplete ? _submit() : null,

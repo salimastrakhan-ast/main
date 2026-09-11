@@ -31,7 +31,7 @@ class ChatsScreen extends ConsumerWidget {
         bottom: const _ConnectionBanner(),
         actions: [
           IconButton(
-            icon: const Icon(Icons.person_outline),
+            icon: const Icon(Icons.account_circle_outlined),
             tooltip: 'Профиль',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const ProfileScreen()),
@@ -122,7 +122,7 @@ class _ChatTile extends StatelessWidget {
             color: MayakTheme.onAccent,
             fontFamily: 'Manrope',
             fontWeight: FontWeight.w700,
-            fontSize: 19,
+            fontSize: 18,
           ),
         ),
       ),

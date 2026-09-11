@@ -67,7 +67,7 @@ class ProfileScreen extends ConsumerWidget {
           ),
           const Divider(),
           ListTile(
-            leading: Icon(Icons.logout, color: theme.colorScheme.error),
+            leading: Icon(Icons.logout_outlined, color: theme.colorScheme.error),
             title: Text(
               'Выйти',
               style: TextStyle(color: theme.colorScheme.error),

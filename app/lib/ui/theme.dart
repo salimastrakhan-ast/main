@@ -46,6 +46,23 @@ abstract final class MayakTheme {
   static const _inkHairline = Color(0xFF33322F);
   static const _inkOutline = Color(0xFF55534D);
 
+  /// Мягкие заливки аватаров.
+  ///
+  /// Насыщенные акценты на каждом аватаре превращали список в пёстрое
+  /// полотно. Здесь те же три цвета, разбавленные кремовым: узнавание
+  /// остаётся, шум уходит. Тёмный текст поверх даёт больше 10:1.
+  static const _washCoral = Color(0xFFEBBEAE);
+  static const _washBlue = Color(0xFFB9CFE3);
+  static const _washGreen = Color(0xFFC0C8B1);
+
+  /// Тёмные варианты акцентов — для имён отправителей.
+  ///
+  /// Насыщенные как текст не проходят: коралл на кремовом даёт 3.1:1.
+  /// Эти дают не меньше 4.5:1 и на кремовом, и на белом пузыре.
+  static const _textCoral = Color(0xFFC0502B);
+  static const _textBlue = Color(0xFF3C76B0);
+  static const _textGreen = Color(0xFF677850);
+
   static const _errorLight = Color(0xFFA33A2A);
   static const _errorDark = Color(0xFFE9A08F);
 
@@ -164,26 +181,40 @@ abstract final class MayakTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
+        // Заголовок спокойнее прежнего: шапка обрамляет содержимое, а не
+        // соревнуется с ним.
         titleTextStyle: TextStyle(
           fontFamily: _display,
           fontFamilyFallback: _fallback,
-          fontSize: 18,
+          fontSize: 17,
           fontWeight: FontWeight.w700,
+          letterSpacing: -0.2,
           color: scheme.onSurface,
         ),
+        iconTheme: IconThemeData(color: scheme.onSurface, size: 22),
+        actionsIconTheme: IconThemeData(color: scheme.onSurfaceVariant, size: 22),
         shape: Border(bottom: BorderSide(color: scheme.outlineVariant)),
       ),
 
+      // Иконки тонкие и не чернее текста: в спокойном интерфейсе они
+      // подсказка, а не акцент.
+      iconTheme: IconThemeData(color: scheme.onSurfaceVariant, size: 22),
+
+      // Поле ввода светлее полотна и очерчено волосяной линией: так оно
+      // читается как отдельная поверхность, а не как вдавленная плашка.
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: scheme.surfaceContainerLow,
-        hintStyle: TextStyle(color: scheme.onSurfaceVariant),
+        fillColor: scheme.surfaceContainerLowest,
+        hintStyle: TextStyle(color: scheme.onSurfaceVariant, fontSize: 15),
         border: _inputBorder(scheme.outlineVariant),
         enabledBorder: _inputBorder(scheme.outlineVariant),
         focusedBorder: _inputBorder(scheme.primary, width: 1.5),
         errorBorder: _inputBorder(scheme.error),
         focusedErrorBorder: _inputBorder(scheme.error, width: 1.5),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+        // Иконки в поле тише текста: они подсказка, а не содержание.
+        prefixIconColor: scheme.onSurfaceVariant,
+        suffixIconColor: scheme.onSurfaceVariant,
       ),
 
       filledButtonTheme: FilledButtonThemeData(style: _primaryButton(scheme)),
@@ -226,9 +257,40 @@ abstract final class MayakTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           side: BorderSide(color: scheme.outlineVariant),
         ),
+        titleTextStyle: TextStyle(
+          fontFamily: _display,
+          fontFamilyFallback: _fallback,
+          fontSize: 19,
+          fontWeight: FontWeight.w700,
+          color: scheme.onSurface,
+        ),
+        contentTextStyle: TextStyle(
+          fontFamily: _body,
+          fontSize: 14,
+          height: 1.4,
+          color: scheme.onSurfaceVariant,
+        ),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+      ),
+
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: scheme.surfaceContainerLowest,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+      ),
+
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: scheme.inverseSurface,
+        contentTextStyle: TextStyle(color: scheme.onInverseSurface, fontSize: 14),
+        behavior: SnackBarBehavior.floating,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
 
       progressIndicatorTheme: ProgressIndicatorThemeData(
@@ -347,7 +409,7 @@ abstract final class MayakTheme {
 
   static OutlineInputBorder _inputBorder(Color color, {double width = 1}) {
     return OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       borderSide: BorderSide(color: color, width: width),
     );
   }
@@ -389,32 +451,51 @@ abstract final class MayakTheme {
   // --- Готовые куски для экранов ---
 
   /// Цвет своего пузыря.
-  static Color ownBubble(ColorScheme scheme) => scheme.primary;
+  ///
+  /// Тёплый серый, а не коралл. Стена коралловых пузырей перетягивала на
+  /// себя всё внимание; терракот теперь работает как редкий акцент —
+  /// кнопка отправки, счётчик непрочитанного, знак приложения.
+  ///
+  /// Цвета заданы явно, а не через ступени поверхностей Material: в тёмной
+  /// теме ступени идут в обратную сторону, и чужой пузырь оказался бы
+  /// темнее полотна. Правило одно в обеих темах — свой пузырь плотнее
+  /// полотна, чужой едва заметнее.
+  static Color ownBubble(ColorScheme scheme) =>
+      scheme.brightness == Brightness.light
+          ? const Color(0xFFE8E6DC)
+          : const Color(0xFF2E2D2B);
 
   /// Цвет чужого пузыря.
   static Color otherBubble(ColorScheme scheme) =>
-      scheme.surfaceContainerHighest;
+      scheme.brightness == Brightness.light
+          ? const Color(0xFFFFFFFF)
+          : const Color(0xFF1C1C1A);
 
-  /// Текст в своём пузыре. Тёмный на коралле — 5.9:1.
-  static Color onOwnBubble(ColorScheme scheme) => scheme.onPrimary;
+  /// Текст в пузыре — обычный, потому что оба пузыря нейтральные.
+  static Color onOwnBubble(ColorScheme scheme) => scheme.onSurface;
 
-  /// Три фирменных акцента для аватаров.
-  static const _accents = [_coral, _blue, _green];
+  /// Мягкие заливки аватаров и тёмные акценты для имён — по одному индексу.
+  static const _washes = [_washCoral, _washBlue, _washGreen];
+  static const _textAccents = [_textCoral, _textBlue, _textGreen];
 
   /// Стабильный цвет аватара по идентификатору.
   ///
   /// Один и тот же человек всегда одного цвета: цвет работает как опознавание
   /// в списке, и меняться между запусками он не должен.
-  static Color accentFor(String id) {
+  static Color accentFor(String id) => _washes[_slot(id)];
+
+  /// Цвет имени отправителя — тёмный вариант того же акцента, что у аватара.
+  static Color textAccentFor(String id) => _textAccents[_slot(id)];
+
+  static int _slot(String id) {
     var hash = 0;
     for (var i = 0; i < id.length; i++) {
       hash = (hash * 31 + id.codeUnitAt(i)) & 0x7FFFFFFF;
     }
-    return _accents[hash % _accents.length];
+    return hash % _washes.length;
   }
 
-  /// Текст поверх акцента. На всех трёх белый не проходит по контрасту,
-  /// тёмный проходит везде — поэтому он один для всех.
+  /// Текст поверх заливки аватара.
   static const onAccent = _ink;
 
   /// Шрифт для цифр и меток, когда нужен явно.

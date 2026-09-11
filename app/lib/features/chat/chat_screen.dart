@@ -204,13 +204,8 @@ class _Bubble extends StatelessWidget {
     final theme = Theme.of(context);
     final deleted = message.deletedAt != null;
     final attachments = _attachments();
-    // На коралле тёмный текст: белый даёт 3.1:1 и не проходит по контрасту.
-    final onBubble = isMine
-        ? MayakTheme.onOwnBubble(theme.colorScheme)
-        : theme.colorScheme.onSurface;
-    final subdued = isMine
-        ? MayakTheme.onOwnBubble(theme.colorScheme).withValues(alpha: 0.65)
-        : theme.colorScheme.onSurfaceVariant;
+    final onBubble = theme.colorScheme.onSurface;
+    final subdued = theme.colorScheme.onSurfaceVariant;
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
@@ -262,7 +257,7 @@ class _Bubble extends StatelessWidget {
                     senderName,
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontSize: 13,
-                      color: MayakTheme.accentFor(message.senderId),
+                      color: MayakTheme.textAccentFor(message.senderId),
                     ),
                   ),
                 ),
@@ -369,7 +364,7 @@ class _Attachment extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(Icons.insert_drive_file_outlined, size: 20),
+        const Icon(Icons.description_outlined, size: 20),
         const SizedBox(width: 8),
         Flexible(
           child: Text(
@@ -472,7 +467,8 @@ class _SendButtonState extends State<_SendButton> {
             color: scheme.primary,
             borderRadius: BorderRadius.circular(14),
           ),
-          child: Icon(Icons.arrow_upward, size: 22, color: scheme.onPrimary),
+          // Здесь терракоту и место: одна кнопка действия на экран.
+          child: Icon(Icons.arrow_upward_rounded, size: 22, color: scheme.onPrimary),
         ),
       ),
     );
