@@ -64,6 +64,8 @@ export type Message = {
   createdAt: number;
   status: MessageStatus;
   replyToId?: string;
+  /// Когда сообщение правили. Пусто — не правили ни разу.
+  editedAt?: number;
   attachments?: Attachment[];
   translations?: Partial<Record<TargetLang, { text: string; from: string }>>;
 

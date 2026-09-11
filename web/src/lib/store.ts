@@ -68,6 +68,7 @@ type ServerMessage = {
   client_msg_id: string;
   created_at: string;
   reply_to_id?: string;
+  edited_at?: string;
   deleted_at?: string;
   attachments?: ServerAttachment[];
 };
@@ -128,6 +129,7 @@ function toMessage(raw: ServerMessage): Message {
     createdAt: new Date(raw.created_at).getTime(),
     status: "sent",
     replyToId: raw.reply_to_id,
+    editedAt: raw.edited_at ? new Date(raw.edited_at).getTime() : undefined,
     attachments: raw.attachments?.map(toAttachment),
     seq: raw.seq,
     clientMsgId: raw.client_msg_id,
@@ -182,6 +184,10 @@ type State = {
   search: string;
   sidebarView: SidebarView;
   replyToId: string | null;
+  /// Какое сообщение сейчас правится. Отдельно от ответа: это разные
+  /// состояния поля ввода, и перепутать их — значит отправить правку
+  /// новым сообщением.
+  editingId: string | null;
   typingChatId: string | null;
   translatingChatId: string | null;
   draftBusy: boolean;
@@ -218,6 +224,9 @@ type Actions = {
   ) => Promise<void>;
   sendFiles: (chatId: string, files: File[]) => Promise<void>;
   sendTyping: (chatId: string) => void;
+  editMessage: (chatId: string, messageId: string, text: string) => Promise<void>;
+  deleteMessage: (chatId: string, messageId: string) => Promise<void>;
+  setEditing: (messageId: string | null) => void;
   toggleTranslate: (chatId: string) => Promise<void>;
   translateMessage: (messageId: string) => Promise<void>;
   ensureLiveTranslation: (chatId: string) => Promise<void>;
@@ -287,6 +296,7 @@ export const useMessenger = create<MessengerStore>()(
       search: "",
       sidebarView: "chats",
       replyToId: null,
+      editingId: null,
       typingChatId: null,
       translatingChatId: null,
       draftBusy: false,
@@ -542,6 +552,35 @@ export const useMessenger = create<MessengerStore>()(
         } finally {
           set({ draftBusy: false });
         }
+      },
+
+      setEditing: (editingId) => set({ editingId, replyToId: null }),
+
+      /// Правит отправленное сообщение.
+      ///
+      /// Ответ сервера приходит той же командой и заменяет строку в ленте:
+      /// свой оптимистичный текст не подставляем — правку могут отвергнуть,
+      /// например если чат уже удалён.
+      editMessage: async (chatId, messageId, text) => {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        const result = await ws.call(Cmd.messageEdit, {
+          chat_id: chatId,
+          message_id: messageId,
+          text: trimmed,
+        });
+        const raw = result.message as ServerMessage | undefined;
+        if (raw) mergeMessage(raw);
+        set({ editingId: null });
+      },
+
+      deleteMessage: async (chatId, messageId) => {
+        const result = await ws.call(Cmd.messageDelete, {
+          chat_id: chatId,
+          message_id: messageId,
+        });
+        const raw = result.message as ServerMessage | undefined;
+        if (raw) mergeMessage(raw);
       },
 
       sendTyping: (chatId) => {

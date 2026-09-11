@@ -1,4 +1,4 @@
-import { Languages, Loader2, Paperclip, Send, Sparkles, WandSparkles, X } from "lucide-react";
+import { Check, Languages, Loader2, Paperclip, Pencil, Send, Sparkles, WandSparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,9 @@ export function Composer({ chatId }: Props) {
   const setReplyTo = useMessenger((s) => s.setReplyTo);
   const sendMessage = useMessenger((s) => s.sendMessage);
   const sendFiles = useMessenger((s) => s.sendFiles);
+  const editingId = useMessenger((s) => s.editingId);
+  const setEditing = useMessenger((s) => s.setEditing);
+  const editMessage = useMessenger((s) => s.editMessage);
   const runDraftTool = useMessenger((s) => s.runDraftTool);
   const draftBusy = useMessenger((s) => s.draftBusy);
   const contacts = useMessenger((s) => s.contacts);
@@ -42,6 +45,7 @@ export function Composer({ chatId }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const reply = replyToId ? messages.find((m) => m.id === replyToId) : undefined;
+  const editing = editingId ? messages.find((m) => m.id === editingId) : undefined;
 
   useEffect(() => {
     const el = areaRef.current;
@@ -55,9 +59,25 @@ export function Composer({ chatId }: Props) {
     areaRef.current?.focus();
   }, [chatId]);
 
+  // Взялись править — в поле встаёт прежний текст. Отменили — поле
+  // очищается: дописывать в него начатую правку было бы неожиданно.
+  useEffect(() => {
+    setValue(editing?.text ?? "");
+    areaRef.current?.focus();
+  }, [editingId, editing?.text]);
+
   function submit() {
     const text = value.trim();
     if (!text || draftBusy) return;
+
+    if (editingId) {
+      void editMessage(chatId, editingId, text).catch(() =>
+        toast(t(uiLang, "editFailed")),
+      );
+      setValue("");
+      return;
+    }
+
     void sendMessage(chatId, text);
     setValue("");
   }
@@ -93,6 +113,26 @@ export function Composer({ chatId }: Props) {
 
   return (
     <div className="border-t border-border bg-sidebar px-2 py-2 safe-bottom">
+      {editing ? (
+        <div className="mb-2 flex items-start gap-2 rounded-md bg-elevated px-3 py-2">
+          <Pencil className="mt-0.5 size-3.5 shrink-0 text-accent" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs font-medium text-accent">
+              {t(uiLang, "editing")}
+            </span>
+            <span className="block truncate text-xs text-muted">{editing.text}</span>
+          </span>
+          <Button
+            variant="icon"
+            size="iconSm"
+            aria-label={t(uiLang, "cancelEdit")}
+            onClick={() => setEditing(null)}
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
+      ) : null}
+
       {reply ? (
         <div className="mb-2 flex items-start gap-2 rounded-md bg-elevated px-3 py-2">
           <span className="min-w-0 flex-1">
@@ -196,10 +236,12 @@ export function Composer({ chatId }: Props) {
           size="icon"
           className={cn("shrink-0 rounded-full", !value.trim() && "opacity-40")}
           disabled={!value.trim() || draftBusy}
-          aria-label={t(uiLang, "send")}
+          // Подпись меняется вместе со значком: «отправить» на кнопке,
+          // которая сохраняет правку, сбивает с толку и голосовой доступ.
+          aria-label={editingId ? t(uiLang, "save") : t(uiLang, "send")}
           onClick={submit}
         >
-          <Send className="size-4" />
+          {editingId ? <Check className="size-4" /> : <Send className="size-4" />}
         </Button>
       </div>
     </div>

@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
@@ -99,6 +101,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Timer? _typingThrottle;
   int _lastReadSeq = 0;
 
+  /// Правящееся сообщение. Пока оно выбрано, поле ввода сохраняет правку, а
+  /// не отправляет новое: перепутать эти два состояния — значит отправить
+  /// исправленный текст второй строкой.
+  Message? _editing;
+
   /// Высота поля ввода. Лента уходит под него, и на этот отступ снизу она
   /// сдвигается, иначе последнее сообщение окажется под полем. Значение
   /// измеряется, а не задаётся: поле растёт до пяти строк.
@@ -107,8 +114,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// Чат этого экрана. Пока переписки не было, он null — и это нормальное
   /// состояние, а не ошибка.
   String? get _chatId =>
-      widget.chatId ??
-      ref.watch(privateChatWithProvider(widget.peerId!)).value;
+      widget.chatId ?? ref.watch(privateChatWithProvider(widget.peerId!)).value;
 
   void _measureComposer() {
     final box = _composerKey.currentContext?.findRenderObject() as RenderBox?;
@@ -125,43 +131,130 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     super.dispose();
   }
 
+  /// Берётся править: прежний текст встаёт в поле.
+  void _startEditing(Message message) {
+    setState(() => _editing = message);
+    _input.text = message.body;
+    _input.selection = TextSelection.collapsed(offset: message.body.length);
+  }
+
+  void _cancelEditing() {
+    setState(() => _editing = null);
+    _input.clear();
+  }
+
   Future<void> _send() async {
     final text = _input.text.trim();
     if (text.isEmpty) return;
 
+    final editing = _editing;
+    if (editing != null) {
+      _cancelEditing();
+      try {
+        await ref
+            .read(repositoryProvider)
+            ?.edit(editing.chatId, editing.id, text);
+      } on ProtocolException catch (error) {
+        if (mounted) showMessage(context, error.message);
+      }
+      return;
+    }
+
     _input.clear();
-    await ref.read(repositoryProvider)?.send(
-      chatId: _chatId,
-      peerId: _chatId == null ? widget.peerId : null,
-      text: text,
-    );
+    await ref
+        .read(repositoryProvider)
+        ?.send(
+          chatId: _chatId,
+          peerId: _chatId == null ? widget.peerId : null,
+          text: text,
+        );
     // Скроллим после того, как база разбудит подписчиков и лента вырастет.
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }
 
-  /// Картинка из галереи: сначала уходит файл, потом сообщение со ссылкой
-  /// на него. Порядок важен — сообщение без загруженного вложения сервер
-  /// отвергнет, и оно осело бы в очереди навсегда.
+  /// Спрашивает, что прикрепить.
+  ///
+  /// Раньше скрепка молча открывала галерею, и отправить документ с
+  /// телефона было нельзя вовсе — притом что из браузера отправлялось что
+  /// угодно. Теперь выбор: фотография ищется в галерее, остальное — в
+  /// файлах.
   Future<void> _attach() async {
-    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (picked == null || !mounted) return;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(TitoIcons.image),
+              title: const Text('Фото или видео'),
+              onTap: () => Navigator.pop(context, 'gallery'),
+            ),
+            ListTile(
+              leading: const Icon(TitoIcons.file),
+              title: const Text('Файл'),
+              onTap: () => Navigator.pop(context, 'file'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
 
+    final file = choice == 'gallery'
+        ? await _fromGallery()
+        : await _fromFiles();
+    if (file == null || !mounted) return;
+    await _sendFile(file);
+  }
+
+  Future<_PickedFile?> _fromGallery() async {
+    final picked = await ImagePicker().pickMedia();
+    if (picked == null) return null;
+    return _PickedFile(
+      name: picked.name,
+      bytes: await picked.readAsBytes(),
+      mime: picked.mimeType ?? _mimeByName(picked.name),
+    );
+  }
+
+  Future<_PickedFile?> _fromFiles() async {
+    // withData: на вебе файла на диске нет вовсе, а нам нужны байты.
+    final result = await FilePicker.platform.pickFiles(withData: true);
+    // Без `singleOrNull`: он приходит расширением из чужого пакета, и
+    // держаться за транзитивный экспорт — способ однажды не собраться.
+    final files = result?.files ?? const [];
+    if (files.isEmpty) return null;
+    final picked = files.first;
+
+    final bytes = picked.bytes;
+    if (bytes == null) return null;
+    return _PickedFile(
+      name: picked.name,
+      bytes: bytes,
+      mime: _mimeByName(picked.name),
+    );
+  }
+
+  /// Отправка: сначала уходит файл, потом сообщение со ссылкой на него.
+  /// Порядок важен — сообщение без загруженного вложения сервер отвергнет,
+  /// и оно осело бы в очереди навсегда.
+  Future<void> _sendFile(_PickedFile file) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final bytes = await picked.readAsBytes();
-      final attachment = await ref.read(apiProvider).upload(
-        fileName: picked.name,
-        bytes: bytes,
-        mime: picked.mimeType ?? 'application/octet-stream',
-      );
+      final attachment = await ref
+          .read(apiProvider)
+          .upload(fileName: file.name, bytes: file.bytes, mime: file.mime);
       final text = _input.text.trim();
       _input.clear();
-      await ref.read(repositoryProvider)?.send(
-        chatId: _chatId,
-        peerId: _chatId == null ? widget.peerId : null,
-        text: text,
-        attachmentIds: [attachment['id'] as String],
-      );
+      await ref
+          .read(repositoryProvider)
+          ?.send(
+            chatId: _chatId,
+            peerId: _chatId == null ? widget.peerId : null,
+            text: text,
+            attachmentIds: [attachment['id'] as String],
+          );
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
     } catch (_) {
       // Показываем отказ здесь, а не через очередь: файл не загрузился, и
@@ -205,9 +298,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget build(BuildContext context) {
     final chatId = _chatId;
     final users = ref.watch(usersProvider).value ?? const {};
-    final chat = chatId == null
-        ? null
-        : ref.watch(chatProvider(chatId)).value;
+    final chat = chatId == null ? null : ref.watch(chatProvider(chatId)).value;
     final isGroup = chat?.type == 'group';
     final myUserId = ref.watch(sessionProvider).value?.userId ?? '';
     final typing = chatId == null
@@ -220,7 +311,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     // «Избранное» — личный чат без собеседника: участник в нём один.
     final isSaved = !isGroup && chat != null && peer == null;
-    final title = widget.title ??
+    final title =
+        widget.title ??
         (isGroup
             ? (chat?.title.isNotEmpty ?? false ? chat!.title : 'Группа')
             : isSaved
@@ -285,6 +377,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       _markRead(chatId, list);
                       _measureComposer();
                     },
+                    onEdit: _startEditing,
                   ),
           ),
           Positioned(
@@ -297,6 +390,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               onSend: _send,
               onChanged: _onTyping,
               onAttach: _attach,
+              editing: _editing,
+              onCancelEdit: _cancelEditing,
             ),
           ),
         ],
@@ -364,9 +459,7 @@ class _ChatTitle extends StatelessWidget {
                 ),
                 Text(
                   status.$1,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: status.$2,
-                  ),
+                  style: theme.textTheme.labelSmall?.copyWith(color: status.$2),
                 ),
               ],
             ),
@@ -473,6 +566,56 @@ class _MenuRow extends StatelessWidget {
   }
 }
 
+/// Выбранный файл: то немногое, что нужно для отправки.
+///
+/// Своя запись вместо типов обоих сборщиков: у галереи и у файлового
+/// выбора они разные, и тащить оба через половину экрана значит писать
+/// одну и ту же ветку дважды.
+class _PickedFile {
+  const _PickedFile({
+    required this.name,
+    required this.bytes,
+    required this.mime,
+  });
+
+  final String name;
+  final List<int> bytes;
+  final String mime;
+}
+
+/// Тип содержимого по расширению имени.
+///
+/// Файловый выбор его не сообщает, а сервер по нему решает, картинка это,
+/// звук или документ — то есть как клиент нарисует вложение. Ошибиться
+/// здесь значит показать фотографию строкой «файл».
+String _mimeByName(String name) {
+  final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
+  return switch (ext) {
+    'jpg' || 'jpeg' => 'image/jpeg',
+    'png' => 'image/png',
+    'gif' => 'image/gif',
+    'webp' => 'image/webp',
+    'heic' => 'image/heic',
+    'mp4' => 'video/mp4',
+    'mov' => 'video/quicktime',
+    'webm' => 'video/webm',
+    'mp3' => 'audio/mpeg',
+    'ogg' || 'oga' => 'audio/ogg',
+    'm4a' => 'audio/mp4',
+    'wav' => 'audio/wav',
+    'pdf' => 'application/pdf',
+    'doc' => 'application/msword',
+    'docx' =>
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xls' => 'application/vnd.ms-excel',
+    'xlsx' =>
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'zip' => 'application/zip',
+    'txt' => 'text/plain',
+    _ => 'application/octet-stream',
+  };
+}
+
 /// Полотно переписки.
 ///
 /// В образце это `.chat-canvas`: подсвет акцентом из левого верхнего угла и
@@ -542,6 +685,7 @@ class _Feed extends ConsumerWidget {
     required this.topPadding,
     required this.bottomPadding,
     required this.onRendered,
+    required this.onEdit,
   });
 
   final String chatId;
@@ -552,6 +696,7 @@ class _Feed extends ConsumerWidget {
   final double topPadding;
   final double bottomPadding;
   final ValueChanged<List<Message>> onRendered;
+  final ValueChanged<Message> onEdit;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -559,7 +704,8 @@ class _Feed extends ConsumerWidget {
 
     return messages.when(
       loading: () => const StateView.loading(),
-      error: (e, _) => StateView.error(e, title: 'Не удалось открыть переписку'),
+      error: (e, _) =>
+          StateView.error(e, title: 'Не удалось открыть переписку'),
       data: (list) {
         WidgetsBinding.instance.addPostFrameCallback((_) => onRendered(list));
         if (list.isEmpty) return const _FirstMessage();
@@ -583,6 +729,7 @@ class _Feed extends ConsumerWidget {
                   ? users[message.senderId]?.displayName ?? ''
                   : '',
               showSender: row.startsBlock,
+              onEdit: onEdit,
             );
           },
         );
@@ -619,7 +766,8 @@ class _Feed extends ConsumerWidget {
 
 /// Строка ленты — либо сообщение, либо дата.
 class _Row {
-  const _Row.message(this.message, {required this.startsBlock}) : divider = null;
+  const _Row.message(this.message, {required this.startsBlock})
+    : divider = null;
   const _Row.divider(DateTime date)
     : divider = date,
       message = null,
@@ -699,12 +847,13 @@ class _FirstMessage extends StatelessWidget {
 /// Появляется с коротким проявлением и сдвигом снизу. Не AnimatedList:
 /// список приходит потоком из базы и перестраивается целиком, а AnimatedList
 /// требует ручного учёта вставок — с потоком это источник рассинхронов.
-class _Bubble extends StatelessWidget {
+class _Bubble extends ConsumerWidget {
   const _Bubble({
     required this.message,
     required this.isMine,
     required this.senderName,
     required this.showSender,
+    this.onEdit,
     super.key,
   });
 
@@ -713,8 +862,71 @@ class _Bubble extends StatelessWidget {
   final String senderName;
   final bool showSender;
 
+  /// Взяться править: экран подставит текст в поле ввода.
+  final ValueChanged<Message>? onEdit;
+
+  /// Меню сообщения по долгому нажатию.
+  ///
+  /// Править и удалять можно только своё — так же решает и сервер; здесь мы
+  /// лишь не показываем заведомый отказ.
+  Future<void> _menu(BuildContext context, WidgetRef ref) async {
+    final deleted = message.deletedAt != null;
+    if (deleted) return;
+
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(TitoIcons.copy),
+              title: const Text('Копировать'),
+              onTap: () => Navigator.pop(context, 'copy'),
+            ),
+            if (isMine) ...[
+              ListTile(
+                leading: const Icon(TitoIcons.edit),
+                title: const Text('Изменить'),
+                onTap: () => Navigator.pop(context, 'edit'),
+              ),
+              ListTile(
+                leading: Icon(
+                  TitoIcons.delete,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                title: Text(
+                  'Удалить у всех',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+                onTap: () => Navigator.pop(context, 'delete'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !context.mounted) return;
+
+    switch (choice) {
+      case 'copy':
+        await Clipboard.setData(ClipboardData(text: message.body));
+        if (context.mounted) showMessage(context, 'Скопировано');
+      case 'edit':
+        onEdit?.call(message);
+      case 'delete':
+        try {
+          await ref
+              .read(repositoryProvider)
+              ?.delete(message.chatId, message.id);
+        } on ProtocolException catch (error) {
+          if (context.mounted) showMessage(context, error.message);
+        }
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final deleted = message.deletedAt != null;
     final attachments = _attachments();
@@ -734,90 +946,107 @@ class _Bubble extends StatelessWidget {
       ),
       child: Align(
         alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-        child: Container(
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.sizeOf(context).width * 0.78,
-          ),
-          margin: EdgeInsets.only(
-            left: isMine ? 48 : 12,
-            right: isMine ? 12 : 48,
-            top: showSender ? 8 : 2,
-            bottom: 2,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          decoration: BoxDecoration(
-            color: isMine
-                ? TitoTheme.ownBubble(theme.colorScheme)
-                : TitoTheme.otherBubble(theme.colorScheme),
-            // В образце обводки у пузырей нет — есть `--shadow-border`,
-            // волосяная белая линия в восемь сотых. Она одинакова у обоих
-            // пузырей, поэтому и здесь одна на оба.
-            boxShadow: Tokens.shadowBorder,
-            borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(16),
-              topRight: const Radius.circular(16),
-              bottomLeft: Radius.circular(isMine ? 16 : 5),
-              bottomRight: Radius.circular(isMine ? 5 : 16),
+        child: GestureDetector(
+          onLongPress: () => _menu(context, ref),
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.sizeOf(context).width * 0.78,
             ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (showSender && !isMine && senderName.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 3),
-                  child: Text(
-                    senderName,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontSize: 13,
-                      // В образце имя отправителя — акцент, один на всех.
-                      color: theme.colorScheme.primary,
+            margin: EdgeInsets.only(
+              left: isMine ? 48 : 12,
+              right: isMine ? 12 : 48,
+              top: showSender ? 8 : 2,
+              bottom: 2,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            decoration: BoxDecoration(
+              color: isMine
+                  ? TitoTheme.ownBubble(theme.colorScheme)
+                  : TitoTheme.otherBubble(theme.colorScheme),
+              // В образце обводки у пузырей нет — есть `--shadow-border`,
+              // волосяная белая линия в восемь сотых. Она одинакова у обоих
+              // пузырей, поэтому и здесь одна на оба.
+              boxShadow: Tokens.shadowBorder,
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(16),
+                topRight: const Radius.circular(16),
+                bottomLeft: Radius.circular(isMine ? 16 : 5),
+                bottomRight: Radius.circular(isMine ? 5 : 16),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (showSender && !isMine && senderName.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Text(
+                      senderName,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontSize: 13,
+                        // В образце имя отправителя — акцент, один на всех.
+                        color: theme.colorScheme.primary,
+                      ),
                     ),
                   ),
-                ),
-              for (final attachment in attachments)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: _Attachment(attachment: attachment),
-                ),
-              if (deleted)
-                Text(
-                  'Сообщение удалено',
-                  style: TextStyle(fontStyle: FontStyle.italic, color: subdued),
-                )
-              else if (message.body.isNotEmpty)
-                Text(
-                  message.body,
-                  style: TextStyle(
-                    fontSize: 15.5,
-                    height: 1.35,
-                    color: onBubble,
+                for (final attachment in attachments)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: _Attachment(attachment: attachment),
                   ),
-                ),
-              const SizedBox(height: 3),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  if (message.editedAt != null && !deleted)
+                if (deleted)
+                  Text(
+                    'Сообщение удалено',
+                    style: TextStyle(
+                      fontStyle: FontStyle.italic,
+                      color: subdued,
+                    ),
+                  )
+                else if (message.body.isNotEmpty)
+                  Text(
+                    message.body,
+                    style: TextStyle(
+                      fontSize: 15.5,
+                      height: 1.35,
+                      color: onBubble,
+                    ),
+                  ),
+                const SizedBox(height: 3),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (message.editedAt != null && !deleted)
+                      Text(
+                        'изменено · ',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: subdued,
+                        ),
+                      ),
+                    if (message.editedAt != null && !deleted) ...[
+                      Text(
+                        'изменено',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: subdued,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
                     Text(
-                      'изменено · ',
+                      DateFormat.Hm().format(message.createdAt),
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: subdued,
                       ),
                     ),
-                  Text(
-                    DateFormat.Hm().format(message.createdAt),
-                    style: theme.textTheme.labelSmall?.copyWith(color: subdued),
-                  ),
-                  if (isMine) ...[
-                    const SizedBox(width: 4),
-                    _StateIcon(state: message.sendState, color: subdued),
+                    if (isMine) ...[
+                      const SizedBox(width: 4),
+                      _StateIcon(state: message.sendState, color: subdued),
+                    ],
                   ],
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -908,6 +1137,8 @@ class _Composer extends StatelessWidget {
     required this.onSend,
     required this.onChanged,
     required this.onAttach,
+    this.editing,
+    this.onCancelEdit,
     super.key,
   });
 
@@ -916,43 +1147,90 @@ class _Composer extends StatelessWidget {
   final VoidCallback onChanged;
   final VoidCallback onAttach;
 
+  /// Правящееся сообщение — над полем показывается полоска с его текстом.
+  final Message? editing;
+  final VoidCallback? onCancelEdit;
+
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final message = editing;
 
     return GlassSurface(
       borderSide: GlassBorder.top,
       child: SafeArea(
         top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 8, 12, 10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              IconButton(
-                icon: Icon(
-                  TitoIcons.attach,
-                  size: 22,
-                  color: scheme.onSurfaceVariant,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (message != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
+                child: Row(
+                  children: [
+                    Icon(TitoIcons.edit, size: 16, color: scheme.primary),
+                    const SizedBox(width: Tokens.space2),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Правка сообщения',
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: scheme.primary,
+                            ),
+                          ),
+                          Text(
+                            message.body,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(TitoIcons.close, size: 18),
+                      tooltip: 'Отменить правку',
+                      onPressed: onCancelEdit,
+                    ),
+                  ],
                 ),
-                tooltip: 'Прикрепить',
-                onPressed: onAttach,
               ),
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  minLines: 1,
-                  maxLines: 5,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: const InputDecoration(hintText: 'Сообщение'),
-                  onChanged: (_) => onChanged(),
-                  onSubmitted: (_) => onSend(),
-                ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 12, 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      TitoIcons.attach,
+                      size: 22,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    tooltip: 'Прикрепить',
+                    onPressed: onAttach,
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: controller,
+                      minLines: 1,
+                      maxLines: 5,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(hintText: 'Сообщение'),
+                      onChanged: (_) => onChanged(),
+                      onSubmitted: (_) => onSend(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _SendButton(onPressed: onSend, editing: message != null),
+                ],
               ),
-              const SizedBox(width: 8),
-              _SendButton(onPressed: onSend),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -964,9 +1242,13 @@ class _Composer extends StatelessWidget {
 /// Отдельным виджетом ради отклика на нажатие: кнопка слегка поджимается,
 /// и палец получает подтверждение раньше, чем сообщение долетит до сервера.
 class _SendButton extends StatefulWidget {
-  const _SendButton({required this.onPressed});
+  const _SendButton({required this.onPressed, this.editing = false});
 
   final VoidCallback onPressed;
+
+  /// В режиме правки кнопка сохраняет, а не отправляет: значок другой,
+  /// иначе непонятно, что произойдёт от нажатия.
+  final bool editing;
 
   @override
   State<_SendButton> createState() => _SendButtonState();
@@ -995,8 +1277,12 @@ class _SendButtonState extends State<_SendButton> {
             color: scheme.primary,
             borderRadius: BorderRadius.circular(14),
           ),
-          // Здесь терракоту и место: одна кнопка действия на экран.
-          child: Icon(TitoIcons.send, size: 22, color: scheme.onPrimary),
+          // Здесь акценту и место: одна кнопка действия на экран.
+          child: Icon(
+            widget.editing ? TitoIcons.sent : TitoIcons.send,
+            size: 22,
+            color: scheme.onPrimary,
+          ),
         ),
       ),
     );

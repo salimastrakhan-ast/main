@@ -89,6 +89,9 @@ abstract final class TitoIcons {
   /// Удалить.
   static const delete = IconData(57742, fontFamily: 'Lucide');
 
+  /// Копировать текст сообщения.
+  static const copy = IconData(57502, fontFamily: 'Lucide');
+
   /// «Избранное» — заметки себе.
   static const saved = IconData(57440, fontFamily: 'Lucide');
 
@@ -190,6 +193,7 @@ abstract final class TitoIcons {
     star,
     logout,
     delete,
+    copy,
     saved,
     pin,
     unpin,

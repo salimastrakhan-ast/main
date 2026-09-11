@@ -213,6 +213,63 @@ check('картинка видна в ленте', (await app.page.locator('img[
 check('в списке вложение подписано родом, а не пустотой',
   (await app.page.locator('body').innerText()).includes('Вы: Фото'));
 
+// --- Правка и удаление ---
+//
+// Сервер это умел с самого начала, но нажать было негде ни в одном клиенте.
+// Проверяем со второй стороны: важно не то, что кнопка нажалась, а что
+// собеседник увидел изменение.
+const edited = new Promise((res) => {
+  sock.addEventListener('message', (e) => {
+    const env = JSON.parse(e.data);
+    if (env.t === 'message.edited') res(env.d.message.text);
+  });
+});
+const removed = new Promise((res) => {
+  sock.addEventListener('message', (e) => {
+    const env = JSON.parse(e.data);
+    if (env.t === 'message.deleted') res(true);
+  });
+});
+
+// Возвращаемся в переписку с первым собеседником: в списке его строка
+// подписана последним сообщением.
+await app.page.getByText('И тебе привет').first().click();
+await app.page.waitForTimeout(1500);
+
+// Кнопки у пузыря появляются по наведению или по нажатию на сам пузырь.
+// Наведение мышью Playwright теряет при следующем запросе, поэтому нажимаем:
+// это же делает человек на телефоне.
+const bubble = app.page.locator('main').getByText('И тебе привет').first();
+await bubble.click();
+await app.page.waitForTimeout(500);
+await app.page.locator('button[aria-label="Изменить"]:visible').first().click();
+await app.page.waitForTimeout(600);
+await app.page.locator('textarea').first().fill('Исправленный ответ');
+await app.page.keyboard.press('Enter');
+await app.page.waitForTimeout(2500);
+
+const newText = await Promise.race([edited, new Promise((r) => setTimeout(() => r(null), 8000))]);
+check('правка дошла до собеседника', newText === 'Исправленный ответ', String(newText));
+check('в ленте виден исправленный текст',
+  (await app.page.locator('body').innerText()).includes('Исправленный ответ'));
+check('правка помечена словом «изменено»',
+  (await app.page.locator('body').innerText()).includes('изменено'));
+
+// force: пометка «изменено» лежит поверх текста и перехватывает клик.
+// Обработчик висит на самом пузыре, поэтому нажатие всё равно доходит —
+// Playwright лишь страхует от промаха мимо задуманного элемента.
+await app.page
+  .locator('main')
+  .getByText('Исправленный ответ')
+  .first()
+  .click({ force: true });
+await app.page.waitForTimeout(500);
+app.page.once('dialog', (d) => d.accept());
+await app.page.locator('button[aria-label="Удалить"]:visible').first().click();
+await app.page.waitForTimeout(2500);
+const gone = await Promise.race([removed, new Promise((r) => setTimeout(() => r(false), 8000))]);
+check('удаление дошло до собеседника', gone === true);
+
 // --- Аватар ---
 //
 // Ссылка на фото подписанная и живёт шесть часов, поэтому в базе лежит ключ,

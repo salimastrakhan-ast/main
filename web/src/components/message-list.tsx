@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
-import { Check, CheckCheck, Copy, Languages, Reply } from "lucide-react";
+import { Check, CheckCheck, Copy, Languages, Pencil, Reply, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AttachmentView } from "@/components/attachment";
 import { UserAvatar } from "@/components/user-avatar";
@@ -21,6 +21,8 @@ export function MessageList({ chatId }: { chatId: string }) {
   const translatingChatId = useMessenger((s) => s.translatingChatId);
   const revealedOriginal = useMessenger((s) => s.revealedOriginal);
   const setReplyTo = useMessenger((s) => s.setReplyTo);
+  const setEditing = useMessenger((s) => s.setEditing);
+  const deleteMessage = useMessenger((s) => s.deleteMessage);
   const translateMessage = useMessenger((s) => s.translateMessage);
   const toggleOriginal = useMessenger((s) => s.toggleOriginal);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -136,6 +138,9 @@ export function MessageList({ chatId }: { chatId: string }) {
                     {live && tr && !showOriginal ? (
                       <Languages className="size-3 opacity-70" />
                     ) : null}
+                    {message.editedAt && !message.deleted ? (
+                      <span className="opacity-70">{t(uiLang, "edited")}</span>
+                    ) : null}
                     {formatBubbleTime(message.createdAt)}
                     {mine ? (
                       message.status === "read" ? (
@@ -189,6 +194,29 @@ export function MessageList({ chatId }: { chatId: string }) {
                     >
                       <Languages className="size-3.5" />
                     </IconAction>
+                  ) : null}
+                  {/* Править и удалять можно только своё — так же решает и
+                      сервер, здесь мы лишь не показываем заведомый отказ. */}
+                  {mine && !message.deleted ? (
+                    <>
+                      <IconAction
+                        label={t(uiLang, "edit")}
+                        onClick={() => setEditing(message.id)}
+                      >
+                        <Pencil className="size-3.5" />
+                      </IconAction>
+                      <IconAction
+                        label={t(uiLang, "delete")}
+                        onClick={() => {
+                          if (!window.confirm(t(uiLang, "deleteConfirm"))) return;
+                          void deleteMessage(chatId, message.id).catch(() =>
+                            toast(t(uiLang, "deleteFailed")),
+                          );
+                        }}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </IconAction>
+                    </>
                   ) : null}
                 </div>
               </div>
