@@ -13,7 +13,10 @@ const base = 9005000000 + Math.floor(Math.random() * 900000);
 const phone = (n) => `+7${base + n}`;
 
 async function open(browser) {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 820 } });
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 820 },
+    permissions: ['microphone'],
+  });
   const page = await context.newPage();
   page.on('console', (m) => m.type() === 'error' && console.log('  консоль:', m.text().slice(0, 160)));
   page.on('pageerror', (e) => console.log('  ошибка страницы:', String(e).slice(0, 160)));
@@ -68,7 +71,16 @@ function check(name, ok, detail = '') {
   else { failed++; console.log(`  ПЛОХО ${name} ${detail}`); }
 }
 
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', args: ['--no-sandbox'] });
+const browser = await chromium.launch({
+  executablePath: '/opt/pw-browsers/chromium',
+  args: [
+    '--no-sandbox',
+    // Микрофона в контейнере нет: браузер подставляет ровный тон, и этого
+    // хватает — проверяем путь записи, а не качество звука.
+    '--use-fake-device-for-media-stream',
+    '--use-fake-ui-for-media-stream',
+  ],
+});
 
 const myPhone = phone(0);
 const peerPhone = phone(1);
@@ -270,6 +282,34 @@ await app.page.waitForTimeout(2500);
 const gone = await Promise.race([removed, new Promise((r) => setTimeout(() => r(false), 8000))]);
 check('удаление дошло до собеседника', gone === true);
 
+// --- Голосовое сообщение ---
+//
+// Записи не было ни в одном клиенте. Проверяем весь путь: браузер пишет
+// звук, файл уходит на сервер вместе с длительностью, в ленте появляется
+// проигрыватель.
+const voiceArrived = new Promise((res) => {
+  sock.addEventListener('message', (e) => {
+    const env = JSON.parse(e.data);
+    const a = env.t === 'message.new' && env.d.message.attachments?.[0];
+    if (a && a.kind === 'audio') res(a);
+  });
+});
+
+await app.page.locator('textarea').first().fill('');
+await app.page.locator('button[aria-label="Записать голосовое"]:visible').first().click();
+await app.page.waitForTimeout(2200);
+check('счётчик записи идёт', (await app.page.locator('body').innerText()).includes('идёт запись'));
+await app.page.locator('button[aria-label="Отправить голосовое"]:visible').first().click();
+await app.page.waitForTimeout(4000);
+await app.page.screenshot({ path: `${OUT}/09-голосовое.png` });
+
+const voice = await Promise.race([voiceArrived, new Promise((r) => setTimeout(() => r(null), 10000))]);
+check('голосовое дошло до собеседника', Boolean(voice), JSON.stringify(voice)?.slice(0, 120));
+check('сервер опознал его звуком', voice?.kind === 'audio', String(voice?.kind));
+check('длительность записана', (voice?.duration ?? 0) >= 1, String(voice?.duration));
+check('в ленте появился проигрыватель',
+  (await app.page.locator('button[aria-label="Слушать"]').count()) > 0);
+
 // --- Аватар ---
 //
 // Ссылка на фото подписанная и живёт шесть часов, поэтому в базе лежит ключ,
@@ -288,7 +328,7 @@ await app.page.setInputFiles('input[type="file"][accept="image/*"]', {
   buffer: avatarPng,
 });
 await app.page.waitForTimeout(4000);
-await app.page.screenshot({ path: `${OUT}/09-аватар.png` });
+await app.page.screenshot({ path: `${OUT}/10-аватар.png` });
 
 const avatar = await app.page.evaluate(async () => {
   const raw = localStorage.getItem('tito-messenger');

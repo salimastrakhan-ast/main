@@ -119,6 +119,7 @@ export function MessageList({ chatId }: { chatId: string }) {
                           key={attachment.id}
                           attachment={attachment}
                           uiLang={uiLang}
+                          mine={mine}
                         />
                       ))}
                     </div>

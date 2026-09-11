@@ -253,9 +253,16 @@ export const api = {
   ///
   /// Файл уходит ДО отправки сообщения: так виден прогресс, а сообщение
   /// отправляется одним кадром со списком идентификаторов.
-  async upload(file: File): Promise<Record<string, unknown>> {
+  async upload(
+    file: File,
+    meta: { duration?: number } = {},
+  ): Promise<Record<string, unknown>> {
     const form = new FormData();
     form.append("file", file, file.name);
+    // Длительность знает только тот, кто записывал: из самого файла её
+    // достаёт не всякий проигрыватель, а в ленте она нужна до нажатия —
+    // иначе непонятно, минуту слушать или три секунды.
+    if (meta.duration) form.append("duration", String(Math.round(meta.duration)));
     const token = await freshAccessToken();
     const response = await fetch(BASE + "/v1/media/upload", {
       method: "POST",

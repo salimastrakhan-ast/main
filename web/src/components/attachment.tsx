@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { FileText, ImageOff, Music, Video } from "lucide-react";
+import { VoiceMessage } from "@/components/voice-message";
 import type { Attachment } from "@/lib/types";
 
 /// Человеческий размер файла: «2,4 МБ» вместо 2516582.
@@ -30,12 +31,19 @@ const icons = {
 export function AttachmentView({
   attachment,
   uiLang,
+  mine = false,
 }: {
   attachment: Attachment;
   uiLang: "ru" | "en";
+  mine?: boolean;
 }) {
   const [broken, setBroken] = useState(false);
   const Icon = icons[attachment.kind] ?? FileText;
+
+  // Звук — не строка со скрепкой: его слушают, не скачивают.
+  if (attachment.kind === "audio" && attachment.url) {
+    return <VoiceMessage attachment={attachment} mine={mine} />;
+  }
 
   if (attachment.kind === "image" && attachment.url && !broken) {
     return (

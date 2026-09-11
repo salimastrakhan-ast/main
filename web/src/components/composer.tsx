@@ -1,5 +1,18 @@
-import { Check, Languages, Loader2, Paperclip, Pencil, Send, Sparkles, WandSparkles, X } from "lucide-react";
+import {
+  Check,
+  Languages,
+  Loader2,
+  Mic,
+  Paperclip,
+  Pencil,
+  Send,
+  Sparkles,
+  Trash2,
+  WandSparkles,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { VoiceRecorder } from "@/lib/recorder";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,11 +25,17 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { t } from "@/lib/i18n";
 import { useMe, useMessenger } from "@/lib/store";
 import type { Message } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 type Props = {
   chatId: string;
 };
+
+/// Секунды в «м:сс».
+function formatSeconds(total: number): string {
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
 
 /// Предел размера файла.
 ///
@@ -35,6 +54,7 @@ export function Composer({ chatId }: Props) {
   const editingId = useMessenger((s) => s.editingId);
   const setEditing = useMessenger((s) => s.setEditing);
   const editMessage = useMessenger((s) => s.editMessage);
+  const sendVoice = useMessenger((s) => s.sendVoice);
   const runDraftTool = useMessenger((s) => s.runDraftTool);
   const draftBusy = useMessenger((s) => s.draftBusy);
   const contacts = useMessenger((s) => s.contacts);
@@ -43,6 +63,8 @@ export function Composer({ chatId }: Props) {
   const [value, setValue] = useState("");
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const recorder = useRef(new VoiceRecorder());
+  const [recording, setRecording] = useState<number | null>(null);
 
   const reply = replyToId ? messages.find((m) => m.id === replyToId) : undefined;
   const editing = editingId ? messages.find((m) => m.id === editingId) : undefined;
@@ -80,6 +102,40 @@ export function Composer({ chatId }: Props) {
 
     void sendMessage(chatId, text);
     setValue("");
+  }
+
+  // Запись не должна пережить уход с экрана: иначе микрофон остаётся
+  // включённым, и в браузере горит красная точка.
+  useEffect(() => {
+    const current = recorder.current;
+    return () => current.cancel();
+  }, []);
+
+  async function startRecording() {
+    try {
+      await recorder.current.start((seconds) => setRecording(seconds));
+    } catch {
+      // Отказ в доступе к микрофону — единственный частый случай, и молчать
+      // здесь нельзя: кнопка нажата, а ничего не происходит.
+      setRecording(null);
+      toast(t(uiLang, "micDenied"));
+    }
+  }
+
+  async function finishRecording() {
+    const result = await recorder.current.stop();
+    setRecording(null);
+    if (!result) return;
+    try {
+      await sendVoice(chatId, result.blob, result.seconds);
+    } catch {
+      toast(t(uiLang, "uploadFailed"));
+    }
+  }
+
+  function cancelRecording() {
+    recorder.current.cancel();
+    setRecording(null);
   }
 
   async function attach(files: FileList | null) {
@@ -152,6 +208,37 @@ export function Composer({ chatId }: Props) {
         </div>
       ) : null}
 
+      {recording !== null ? (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="icon"
+            size="icon"
+            type="button"
+            aria-label={t(uiLang, "cancelRecording")}
+            onClick={cancelRecording}
+          >
+            <Trash2 className="size-5 text-danger" />
+          </Button>
+
+          <span className="flex min-w-0 flex-1 items-center gap-2 rounded-xl bg-elevated px-3 py-2.5 shadow-[var(--shadow-border)]">
+            <span className="size-2 shrink-0 animate-pulse rounded-full bg-danger" />
+            <span className="text-sm tabular-nums">{formatSeconds(recording)}</span>
+            <span className="truncate text-xs text-muted">
+              {t(uiLang, "recording")}
+            </span>
+          </span>
+
+          <Button
+            size="icon"
+            className="shrink-0 rounded-full"
+            aria-label={t(uiLang, "sendVoice")}
+            disabled={draftBusy}
+            onClick={() => void finishRecording()}
+          >
+            <Send className="size-4" />
+          </Button>
+        </div>
+      ) : (
       <div className="flex items-end gap-1.5">
         <input
           ref={fileRef}
@@ -232,18 +319,34 @@ export function Composer({ chatId }: Props) {
           </DropdownMenu>
         </div>
 
-        <Button
-          size="icon"
-          className={cn("shrink-0 rounded-full", !value.trim() && "opacity-40")}
-          disabled={!value.trim() || draftBusy}
-          // Подпись меняется вместе со значком: «отправить» на кнопке,
-          // которая сохраняет правку, сбивает с толку и голосовой доступ.
-          aria-label={editingId ? t(uiLang, "save") : t(uiLang, "send")}
-          onClick={submit}
-        >
-          {editingId ? <Check className="size-4" /> : <Send className="size-4" />}
-        </Button>
+        {/* Пустое поле — микрофон, набранный текст — отправка. Так же
+            устроено везде, и человек не ищет, куда делась кнопка. */}
+        {value.trim() || editingId ? (
+          <Button
+            size="icon"
+            className="shrink-0 rounded-full"
+            disabled={draftBusy}
+            // Подпись меняется вместе со значком: «отправить» на кнопке,
+            // которая сохраняет правку, сбивает с толку и голосовой доступ.
+            aria-label={editingId ? t(uiLang, "save") : t(uiLang, "send")}
+            onClick={submit}
+          >
+            {editingId ? <Check className="size-4" /> : <Send className="size-4" />}
+          </Button>
+        ) : (
+          <Button
+            variant="subtle"
+            size="icon"
+            className="shrink-0 rounded-full"
+            disabled={draftBusy}
+            aria-label={t(uiLang, "recordVoice")}
+            onClick={() => void startRecording()}
+          >
+            <Mic className="size-4" />
+          </Button>
+        )}
       </div>
+      )}
     </div>
   );
 }

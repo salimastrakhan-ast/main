@@ -57,6 +57,7 @@ type ServerAttachment = {
   size: number;
   width?: number;
   height?: number;
+  duration?: number;
 };
 
 type ServerMessage = {
@@ -83,6 +84,7 @@ function toAttachment(raw: ServerAttachment): Attachment {
     size: raw.size,
     width: raw.width,
     height: raw.height,
+    duration: raw.duration,
   };
 }
 
@@ -223,6 +225,7 @@ type Actions = {
     attachments?: Attachment[],
   ) => Promise<void>;
   sendFiles: (chatId: string, files: File[]) => Promise<void>;
+  sendVoice: (chatId: string, blob: Blob, seconds: number) => Promise<void>;
   sendTyping: (chatId: string) => void;
   editMessage: (chatId: string, messageId: string, text: string) => Promise<void>;
   deleteMessage: (chatId: string, messageId: string) => Promise<void>;
@@ -581,6 +584,26 @@ export const useMessenger = create<MessengerStore>()(
         });
         const raw = result.message as ServerMessage | undefined;
         if (raw) mergeMessage(raw);
+      },
+
+      /// Отправляет голосовое.
+      ///
+      /// Отдельно от sendFiles ради длительности: её знает только тот, кто
+      /// записывал, а в ленте она нужна до нажатия — иначе непонятно,
+      /// минуту слушать или три секунды.
+      sendVoice: async (chatId, blob, seconds) => {
+        const file = new File([blob], `голосовое-${Date.now()}.webm`, {
+          type: blob.type || "audio/webm",
+        });
+        set({ draftBusy: true });
+        try {
+          const raw = (await api.upload(file, {
+            duration: seconds,
+          })) as unknown as ServerAttachment;
+          await get().sendMessage(chatId, "", [toAttachment(raw)]);
+        } finally {
+          set({ draftBusy: false });
+        }
       },
 
       sendTyping: (chatId) => {

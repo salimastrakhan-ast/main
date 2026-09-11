@@ -54,6 +54,8 @@ export type Attachment = {
   size: number;
   width?: number;
   height?: number;
+  /// Длительность звука в секундах. Её сообщает тот, кто записывал.
+  duration?: number;
 };
 
 export type Message = {
