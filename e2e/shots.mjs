@@ -294,20 +294,29 @@ async function walkWeb(browser, world) {
     await tap('назад из настроек', button('Назад'));
   }
 
+  if (await tap('новый чат', button('Новое сообщение'))) {
+    await shot(page, 'веб', '10-широкий-новый-чат');
+    if (await tap('создание группы', page.getByText('Создать группу').first())) {
+      await shot(page, 'веб', '11-широкий-новая-группа');
+    }
+    await tap('назад из нового чата', button('Назад'));
+    await tap('назад из нового чата', button('Назад'));
+  }
+
   // --- Узкий экран: панель и переписка по очереди ---
   await page.setViewportSize(NARROW);
   await pause(1000);
-  await shot(page, 'веб', '10-узкий-переписка');
+  await shot(page, 'веб', '12-узкий-переписка');
 
   if (await tap('к списку', button('Назад'))) {
-    await shot(page, 'веб', '11-узкий-список');
+    await shot(page, 'веб', '13-узкий-список');
   }
 
   const search = visible('input[placeholder="Поиск"]');
   try {
     await search.fill('аня', { timeout: 4000 });
     await pause(700);
-    await shot(page, 'веб', '12-узкий-поиск');
+    await shot(page, 'веб', '14-узкий-поиск');
     await search.fill('');
     await pause(500);
   } catch {
@@ -315,7 +324,7 @@ async function walkWeb(browser, world) {
   }
 
   if (await tap('папка «Группы»', visible('button:text-is("Группы")'))) {
-    await shot(page, 'веб', '13-узкий-папка-группы');
+    await shot(page, 'веб', '15-узкий-папка-группы');
   }
 
   await context.close();
@@ -346,8 +355,7 @@ async function walkFlutter(browser) {
   await page.evaluate(() => document.querySelector('flt-semantics-placeholder')?.click());
   await pause(1500);
 
-  /// Узлы дерева доступности с их местом на экране.
-  const nodes = () =>
+  const readNodes = () =>
     page.evaluate(() =>
       [...document.querySelectorAll('flt-semantics')].map((e) => {
         const r = e.getBoundingClientRect();
@@ -357,6 +365,23 @@ async function walkFlutter(browser) {
           x: r.x, y: r.y, w: r.width, h: r.height,
         };
       }).filter((n) => n.text && n.w > 0 && n.h > 0));
+
+  /// Узлы дерева доступности с их местом на экране.
+  ///
+  /// Пустое дерево не значит пустой экран: движок иногда сбрасывает
+  /// доступность — например, после закрытия всплывающего меню, — и тогда
+  /// его надо включить заново. Без этого дальше промахивается всё подряд, а
+  /// в логе стоит «на экране: » с пустотой.
+  const nodes = async () => {
+    let found = await readNodes();
+    if (found.length === 0) {
+      await page.evaluate(() =>
+        document.querySelector('flt-semantics-placeholder')?.click());
+      await pause(800);
+      found = await readNodes();
+    }
+    return found;
+  };
 
   /// Что сейчас на экране — словами. Нужно, чтобы промах читался в логе, а
   /// не выяснялся гаданием.
@@ -465,7 +490,18 @@ async function walkFlutter(browser) {
 
   if (await tap('Аня Соколова')) {
     await frame('05-узкий-переписка');
+    // Меню переписки: закрепить, без звука, сведения. Снимаем его открытым
+    // — закрепление иначе не показать ничем.
+    // Меню переписки снимаем открытым — закрепление иначе не показать
+    // ничем, — но нажимать по его пунктам нельзя: пока всплывающее открыто,
+    // в дереве доступности остаются только подложка и каркас, без текста.
+    // Поэтому закрываем его подложкой, а сведения открываем из шапки.
     if (await press('Ещё')) {
+      await shot(page, 'flutter', '05a-меню-чата');
+      await page.mouse.click(12, 400);
+      await pause(900);
+    }
+    if (await tap('Аня Соколова')) {
       await frame('06-сведения-о-чате');
       if (await tap('Медиа, файлы, ссылки')) {
         await frame('07-медиа-чата');
