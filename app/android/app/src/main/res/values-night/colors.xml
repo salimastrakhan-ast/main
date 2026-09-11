@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Чернильный фон бренда. -->
-    <color name="tito_background">#141413</color>
+    <color name="tito_background">#0B1117</color>
 </resources>

@@ -125,7 +125,7 @@ class ChatInfoScreen extends ConsumerWidget {
                       : 'не в сети',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: entry.user.online && entry.member.role == 'member'
-                        ? Tokens.olive
+                        ? Tokens.online
                         : theme.colorScheme.onSurfaceVariant,
                   ),
                 ),

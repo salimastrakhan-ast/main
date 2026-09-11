@@ -32,79 +32,77 @@ abstract final class TitoTheme {
 
   static const _lightScheme = ColorScheme(
     brightness: Brightness.light,
-    primary: Tokens.clay,
-    // Тёмный, а не белый: белый на clay даёт 3.1:1 и не проходит.
-    onPrimary: Tokens.gray950,
-    primaryContainer: Color(0xFFF6DDD2),
-    onPrimaryContainer: Tokens.gray950,
-    secondary: Tokens.sky,
-    onSecondary: Tokens.gray950,
-    secondaryContainer: Color(0xFFDCE7F2),
-    onSecondaryContainer: Tokens.gray950,
-    tertiary: Tokens.olive,
-    onTertiary: Tokens.gray950,
-    tertiaryContainer: Color(0xFFE0E5D5),
-    onTertiaryContainer: Tokens.gray950,
-    error: Tokens.error,
-    onError: Tokens.gray000,
-    errorContainer: Color(0xFFF5DAD4),
-    onErrorContainer: Color(0xFF4A1710),
-    surface: Tokens.gray050,
-    onSurface: Tokens.gray950,
-    surfaceDim: Tokens.gray150,
-    surfaceBright: Tokens.gray000,
-    surfaceContainerLowest: Tokens.gray000,
-    surfaceContainerLow: Tokens.gray100,
-    surfaceContainer: Tokens.gray150,
-    surfaceContainerHigh: Tokens.gray200,
-    surfaceContainerHighest: Tokens.gray250,
-    // gray-550 даёт 5.3:1 на полотне. Сам gray-400 как текст — 2.1:1,
-    // он годится только для границ.
-    onSurfaceVariant: Tokens.gray550,
-    outline: Tokens.gray350,
-    outlineVariant: Tokens.gray250,
-    shadow: Tokens.gray1000,
-    scrim: Tokens.gray1000,
-    inverseSurface: Tokens.gray950,
-    onInverseSurface: Tokens.gray050,
-    inversePrimary: Tokens.clay,
+    primary: Tokens.accent,
+    // Тёмная надпись, а не белая: белая на акценте даёт 2.3:1.
+    onPrimary: Tokens.onAccent,
+    primaryContainer: Tokens.lightBubbleOut,
+    onPrimaryContainer: Tokens.lightFg,
+    secondary: Tokens.accentInk,
+    onSecondary: Tokens.lightSidebar,
+    secondaryContainer: Tokens.lightElevated,
+    onSecondaryContainer: Tokens.lightMuted,
+    tertiary: Tokens.avatarBlue,
+    onTertiary: Tokens.lightSidebar,
+    tertiaryContainer: Tokens.lightElevated,
+    onTertiaryContainer: Tokens.lightFg,
+    error: Tokens.dangerInk,
+    onError: Tokens.lightSidebar,
+    errorContainer: Color(0xFFF7DEDE),
+    onErrorContainer: Color(0xFF4A1414),
+    surface: Tokens.lightBg,
+    onSurface: Tokens.lightFg,
+    surfaceDim: Tokens.lightElevated,
+    surfaceBright: Tokens.lightSidebar,
+    surfaceContainerLowest: Tokens.lightSidebar,
+    surfaceContainerLow: Tokens.lightSurface,
+    surfaceContainer: Tokens.lightBg,
+    surfaceContainerHigh: Tokens.lightElevated,
+    surfaceContainerHighest: Tokens.lightElevated,
+    onSurfaceVariant: Tokens.lightMuted,
+    outline: Tokens.lightSubtle,
+    outlineVariant: Tokens.lightBorder,
+    shadow: Color(0xFF000000),
+    scrim: Color(0xFF000000),
+    inverseSurface: Tokens.bg,
+    onInverseSurface: Tokens.fg,
+    inversePrimary: Tokens.accent,
   );
 
   static const _darkScheme = ColorScheme(
     brightness: Brightness.dark,
-    primary: Tokens.clay,
-    onPrimary: Tokens.gray950,
-    primaryContainer: Color(0xFF5C3226),
-    onPrimaryContainer: Color(0xFFF6DDD2),
-    secondary: Tokens.sky,
-    onSecondary: Tokens.gray950,
-    secondaryContainer: Color(0xFF2C4257),
-    onSecondaryContainer: Color(0xFFDCE7F2),
-    tertiary: Tokens.olive,
-    onTertiary: Tokens.gray950,
-    tertiaryContainer: Color(0xFF3A452B),
-    onTertiaryContainer: Color(0xFFE0E5D5),
-    error: Color(0xFFE9A08F),
-    onError: Color(0xFF3A1009),
-    errorContainer: Color(0xFF5F2318),
-    onErrorContainer: Color(0xFFF5DAD4),
-    surface: Tokens.gray950,
-    onSurface: Tokens.gray050,
-    surfaceDim: Tokens.gray1000,
-    surfaceBright: Tokens.gray800,
-    surfaceContainerLowest: Tokens.gray1000,
-    surfaceContainerLow: Tokens.gray900,
-    surfaceContainer: Tokens.gray850,
-    surfaceContainerHigh: Tokens.gray800,
-    surfaceContainerHighest: Tokens.gray750,
-    onSurfaceVariant: Tokens.gray400,
-    outline: Tokens.gray650,
-    outlineVariant: Tokens.gray750,
-    shadow: Tokens.gray1000,
-    scrim: Tokens.gray1000,
-    inverseSurface: Tokens.gray050,
-    onInverseSurface: Tokens.gray950,
-    inversePrimary: Tokens.clay,
+    primary: Tokens.accent,
+    onPrimary: Tokens.onAccent,
+    primaryContainer: Tokens.bubbleOut,
+    onPrimaryContainer: Tokens.fg,
+    secondary: Tokens.accent,
+    onSecondary: Tokens.onAccent,
+    secondaryContainer: Tokens.elevated,
+    onSecondaryContainer: Tokens.muted,
+    tertiary: Tokens.avatarBlue,
+    onTertiary: Tokens.fg,
+    tertiaryContainer: Tokens.surface,
+    onTertiaryContainer: Tokens.fg,
+    error: Tokens.danger,
+    onError: Color(0xFF3A0E0E),
+    errorContainer: Color(0xFF5A2020),
+    onErrorContainer: Color(0xFFF7DEDE),
+    surface: Tokens.bg,
+    onSurface: Tokens.fg,
+    surfaceDim: Tokens.bg,
+    surfaceBright: Tokens.elevated,
+    surfaceContainerLowest: Tokens.bg,
+    surfaceContainerLow: Tokens.sidebar,
+    surfaceContainer: Tokens.sidebar,
+    surfaceContainerHigh: Tokens.surface,
+    surfaceContainerHighest: Tokens.elevated,
+    onSurfaceVariant: Tokens.muted,
+    outline: Tokens.subtle,
+    outlineVariant: Tokens.border,
+    shadow: Color(0xFF000000),
+    scrim: Color(0xFF000000),
+    inverseSurface: Tokens.fg,
+    onInverseSurface: Tokens.bg,
+    inversePrimary: Tokens.accent,
   );
 
   static ThemeData _build(ColorScheme scheme) {
@@ -151,7 +149,7 @@ abstract final class TitoTheme {
         border: _inputBorder(scheme.outlineVariant),
         enabledBorder: _inputBorder(scheme.outlineVariant),
         // Кольцо фокуса — их цвет focus, он же clay-dark.
-        focusedBorder: _inputBorder(Tokens.clayDark, width: Tokens.borderMd),
+        focusedBorder: _inputBorder(Tokens.accentInk, width: Tokens.borderMd),
         errorBorder: _inputBorder(scheme.error),
         focusedErrorBorder: _inputBorder(scheme.error, width: Tokens.borderMd),
         contentPadding: const EdgeInsets.symmetric(
@@ -324,9 +322,9 @@ abstract final class TitoTheme {
           return scheme.surfaceContainerHigh;
         }
         // Их же значения для наведения и нажатия.
-        if (states.contains(WidgetState.pressed)) return Tokens.clayDark;
-        if (states.contains(WidgetState.hovered)) return Tokens.clayHover;
-        return Tokens.clay;
+        if (states.contains(WidgetState.pressed)) return Tokens.accentInk;
+        if (states.contains(WidgetState.hovered)) return Tokens.accentHover;
+        return Tokens.accent;
       }),
       foregroundColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.disabled)) {
@@ -362,7 +360,7 @@ abstract final class TitoTheme {
         return scheme.onSurface;
       }),
       overlayColor: _overlay(scheme.onSurface),
-      side: _focusRing(scheme, focus: Tokens.clayDark, rest: scheme.outline),
+      side: _focusRing(scheme, focus: Tokens.accentInk, rest: scheme.outline),
       minimumSize: const WidgetStatePropertyAll(Size(64, 44)),
       textStyle: const WidgetStatePropertyAll(_buttonText),
       shape: WidgetStatePropertyAll(
@@ -385,7 +383,7 @@ abstract final class TitoTheme {
       overlayColor: _overlay(scheme.onSurface),
       side: _focusRing(
         scheme,
-        focus: Tokens.clayDark,
+        focus: Tokens.accentInk,
         rest: Colors.transparent,
       ),
       minimumSize: const WidgetStatePropertyAll(Size(64, 44)),
@@ -449,37 +447,40 @@ abstract final class TitoTheme {
 
   // --- Готовые куски для экранов ---
 
-  /// Цвет своего пузыря: плотнее полотна.
+  /// Цвет своего пузыря — подкрашен акцентом, как в источнике.
   static Color ownBubble(ColorScheme scheme) =>
-      scheme.brightness == Brightness.light ? Tokens.gray200 : Tokens.gray800;
+      scheme.brightness == Brightness.light
+      ? Tokens.lightBubbleOut
+      : Tokens.bubbleOut;
 
-  /// Цвет чужого пузыря: едва заметнее полотна.
+  /// Цвет чужого пузыря: нейтральный, едва заметнее полотна.
   static Color otherBubble(ColorScheme scheme) =>
-      scheme.brightness == Brightness.light ? Tokens.gray000 : Tokens.gray850;
+      scheme.brightness == Brightness.light
+      ? Tokens.lightBubbleIn
+      : Tokens.bubbleIn;
 
-  /// Текст в пузыре — обычный, оба пузыря нейтральные.
+  /// Текст в пузыре — обычный: оба пузыря держат основной текст выше 8:1.
   static Color onOwnBubble(ColorScheme scheme) => scheme.onSurface;
 
-  /// Мягкие заливки аватаров: те же акценты, разбавленные полотном.
+  /// Заливки аватаров, закреплённые за человеком.
+  ///
+  /// Одни и те же в обеих темах: цвет должен опознавать человека, а не
+  /// тему. Все три держат букву выше 5:1 и читаются на обоих полотнах.
   static const _washes = [
-    Color(0xFFEBBEAE),
-    Color(0xFFB9CFE3),
-    Color(0xFFC0C8B1),
-  ];
-
-  /// Тёмные варианты акцентов для имён: насыщенные как текст не проходят по
-  /// контрасту, эти дают не меньше 4.5:1.
-  static const _textAccents = [
-    Color(0xFFC0502B),
-    Color(0xFF3C76B0),
-    Color(0xFF677850),
+    Tokens.avatarTeal,
+    Tokens.avatarBlue,
+    Tokens.avatarSlate,
   ];
 
   /// Цвет аватара, закреплённый за человеком.
   static Color accentFor(String id) => _washes[_slot(id)];
 
-  /// Цвет имени отправителя — тёмный вариант того же акцента.
-  static Color textAccentFor(String id) => _textAccents[_slot(id)];
+  /// Цвет имени отправителя в группе — тот же, что у его аватара.
+  ///
+  /// Раньше это был отдельный набор затемнённых акцентов: заливки были
+  /// светлыми пастелями и как текст не проходили. Теперь заливки сами
+  /// тёмные, и второй набор был бы разными цветами у одного человека.
+  static Color textAccentFor(String id) => _washes[_slot(id)];
 
   static int _slot(String id) {
     var hash = 0;
@@ -490,7 +491,7 @@ abstract final class TitoTheme {
   }
 
   /// Текст поверх заливки аватара.
-  static const onAccent = Tokens.gray950;
+  static const onAccent = Tokens.fg;
 }
 
 /// Переход между экранами: проявление со сдвигом.

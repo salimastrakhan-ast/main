@@ -84,7 +84,7 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                         borderRadius: BorderRadius.circular(18),
                       ),
                       child: Text(
-                        'М',
+                        'T',
                         style: theme.textTheme.headlineMedium?.copyWith(
                           color: theme.colorScheme.onPrimary,
                         ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tito/ui/theme.dart';
+import 'package:tito/ui/tokens.dart';
 
 /// Цвет кольца фокуса у кнопки в заданном состоянии.
 BorderSide? ringOf(ButtonStyle? style, Set<WidgetState> states) =>
@@ -55,10 +56,10 @@ void main() {
 
     test('акцент сохранён точно, без тонального пересчёта Material', () {
       // Ради этого схема собирается руками: ColorScheme.fromSeed прогнал бы
-      // коралловый через свой алгоритм и выдал похожий, но другой цвет.
-      const coral = Color(0xFFD97757);
-      expect(TitoTheme.light().colorScheme.primary, coral);
-      expect(TitoTheme.dark().colorScheme.primary, coral);
+      // бирюзовый через свой алгоритм и выдал похожий, но другой цвет — а
+      // он обязан совпадать с веб-клиентом до байта.
+      expect(TitoTheme.light().colorScheme.primary, Tokens.accent);
+      expect(TitoTheme.dark().colorScheme.primary, Tokens.accent);
     });
 
     test('цвет аватара закреплён за человеком', () {

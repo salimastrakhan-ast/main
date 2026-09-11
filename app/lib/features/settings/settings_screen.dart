@@ -55,7 +55,7 @@ class SettingsScreen extends ConsumerWidget {
               },
               style: theme.textTheme.bodySmall?.copyWith(
                 color: connection == WsStatus.online
-                    ? Tokens.olive
+                    ? Tokens.online
                     : theme.colorScheme.onSurfaceVariant,
               ),
             ),

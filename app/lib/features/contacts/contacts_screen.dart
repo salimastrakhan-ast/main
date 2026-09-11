@@ -210,7 +210,7 @@ class _PersonRow extends ConsumerWidget {
         person.online ? 'в сети' : _lastSeen(person.lastSeenAt),
         style: theme.textTheme.bodySmall?.copyWith(
           color: person.online
-              ? Tokens.olive
+              ? Tokens.online
               : theme.colorScheme.onSurfaceVariant,
         ),
       ),

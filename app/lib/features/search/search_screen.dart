@@ -172,7 +172,7 @@ class _People extends ConsumerWidget {
             person.online ? 'в сети' : 'не в сети',
             style: TextStyle(
               color: person.online
-                  ? Tokens.olive
+                  ? Tokens.online
                   : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),

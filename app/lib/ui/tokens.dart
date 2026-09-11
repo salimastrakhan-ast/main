@@ -2,74 +2,116 @@ import 'package:flutter/widgets.dart';
 
 /// Токены оформления.
 ///
-/// Значения не подобраны на глаз, а сняты с публичного CSS claude.com:
-/// шкала серых, акценты с состояниями, скругления, тени, толщины границ и
-/// длительности переходов. Поэтому здесь нет «примерно похожих» чисел —
-/// каждое либо взято оттуда, либо помечено как наше решение.
+/// Сняты с веб-клиента — `web/src/styles.css`, — чтобы два клиента были
+/// одним приложением, а не двумя похожими. Тёмная тема перенесена цвет в
+/// цвет; светлой в источнике нет вовсе, и она выведена здесь, о чём сказано
+/// на месте.
 ///
-/// Две вещи оттуда перенести нельзя, и обе отмечены на месте:
-/// шрифты (лицензионные) и стекло (его там попросту нет).
+/// Контраст не подбирался на глаз, а считался. Что из этого вышло:
+///
+///   * основной текст на полотне — 16.5:1 в тёмной и 17.1:1 в светлой;
+///   * второстепенный — 6.7:1 и 5.9:1;
+///   * приглушённый — 3.5:1 и 3.3:1. Это ниже 4.5:1 и потому отдано только
+///     подсказкам в пустых полях: текста, который надо прочесть, там нет;
+///   * тёмная надпись на акценте — 7.1:1. Белая дала бы 2.3:1, поэтому
+///     кнопки подписаны почти чёрным;
+///   * акцент как текст: на тёмном полотне 7.9:1, на светлом — 2.2:1.
+///     Отсюда второй, затемнённый акцент для ссылок в светлой теме.
 abstract final class Tokens {
-  // --- Серая шкала ---
-  //
-  // Двадцать одна ступень от белого до чёрного. Тёплая: это не серый, а
-  // обесцвеченный бежевый, отсюда общее ощущение бумаги.
+  // --- Тёмная тема: перенесена из источника ---
 
-  static const gray000 = Color(0xFFFFFFFF);
-  static const gray050 = Color(0xFFFAF9F5);
-  static const gray100 = Color(0xFFF5F4ED);
-  static const gray150 = Color(0xFFF0EEE6);
-  static const gray200 = Color(0xFFE8E6DC);
-  static const gray250 = Color(0xFFDEDCD1);
-  static const gray300 = Color(0xFFD1CFC5);
-  static const gray350 = Color(0xFFC2C0B6);
-  static const gray400 = Color(0xFFB0AEA5);
-  static const gray450 = Color(0xFF9C9A92);
-  static const gray500 = Color(0xFF87867F);
-  static const gray550 = Color(0xFF73726C);
-  static const gray600 = Color(0xFF5E5D59);
-  static const gray650 = Color(0xFF4D4C48);
-  static const gray700 = Color(0xFF3D3D3A);
-  static const gray750 = Color(0xFF30302E);
-  static const gray800 = Color(0xFF262624);
-  static const gray850 = Color(0xFF1F1E1D);
-  static const gray900 = Color(0xFF1A1918);
-  static const gray950 = Color(0xFF141413);
-  static const gray1000 = Color(0xFF000000);
+  /// Полотно приложения.
+  static const bg = Color(0xFF0B1117);
 
-  // --- Акценты ---
+  /// Боковая панель и шапки — на полтона светлее полотна.
+  static const sidebar = Color(0xFF121A22);
 
-  /// Основной акцент. В их системе называется clay.
-  static const clay = Color(0xFFD97757);
+  /// Поверхность карточек и полей.
+  static const surface = Color(0xFF1A242E);
+
+  /// Приподнятое: меню, кнопки без заливки, кружок аватара без картинки.
+  static const elevated = Color(0xFF222E3A);
+
+  static const fg = Color(0xFFE8F0F6);
+  static const muted = Color(0xFF8A9BB0);
+  static const subtle = Color(0xFF5C6B7A);
+  static const border = Color(0xFF24303C);
+
+  /// Пузырь собеседника и свой.
+  static const bubbleIn = Color(0xFF1C2732);
+  static const bubbleOut = Color(0xFF164A4E);
+
+  // --- Акцент: один и тот же в обеих темах ---
+
+  static const accent = Color(0xFF3DB8B4);
+
+  /// Надпись на акцентной заливке. Тёмная, а не белая: белая даёт 2.3:1.
+  static const onAccent = Color(0xFF06201F);
 
   /// Наведение на акцентную кнопку.
-  static const clayHover = Color(0xFFC6613F);
+  ///
+  /// В источнике это `bg-accent/90` — акцент в девять десятых поверх
+  /// полотна. Здесь он сведён к сплошному цвету: полупрозрачная заливка
+  /// поверх пузыря или меню дала бы другой оттенок, чем поверх полотна.
+  static const accentHover = Color(0xFF38A7A4);
 
-  /// Нажатие и кольцо фокуса — у них focus определён именно через него.
-  static const clayDark = Color(0xFFC46849);
+  /// Акцент как текст на светлом полотне.
+  ///
+  /// Сам accent там даёт 2.2:1 и не читается — для ссылок и активных
+  /// подписей в светлой теме нужен затемнённый.
+  static const accentInk = Color(0xFF25706E);
 
-  static const sky = Color(0xFF6A9BCC);
-  static const olive = Color(0xFF788C5D);
-  static const error = Color(0xFFBF4D43);
+  /// Присутствие. В источнике это тот же акцент, не отдельный зелёный.
+  static const online = accent;
+
+  static const danger = Color(0xFFD45B5B);
+
+  /// То же для светлого полотна: исходный даёт 3.4:1.
+  static const dangerInk = Color(0xFFB33A3A);
+
+  // --- Светлая тема: наша производная ---
+  //
+  // В источнике светлой темы нет — он тёмный целиком. Ряд выведен из той же
+  // холодной сине-серой гаммы и с тем же акцентом, чтобы переключение темы
+  // не выглядело сменой приложения.
+
+  static const lightBg = Color(0xFFF4F7F9);
+  static const lightSidebar = Color(0xFFFFFFFF);
+  static const lightSurface = Color(0xFFFFFFFF);
+  static const lightElevated = Color(0xFFE7EEF3);
+  static const lightFg = Color(0xFF0D151C);
+  static const lightMuted = Color(0xFF4E6274);
+  static const lightSubtle = Color(0xFF7A8B9B);
+  static const lightBorder = Color(0xFFDDE5EB);
+  static const lightBubbleIn = Color(0xFFFFFFFF);
+  static const lightBubbleOut = Color(0xFFCDEBE9);
+
+  // --- Заливки аватаров ---
+  //
+  // В источнике у людей фотографии, а подложка одна на всех. Пока фотографий
+  // нет, одинаковые серые кружки превращают список в частокол, поэтому три
+  // заливки из той же гаммы: по ним человек узнаётся в списке, не читая имя.
+  // Все три держат букву на 5:1 и различимы на обоих полотнах.
+
+  static const avatarTeal = Color(0xFF2A6F6D);
+  static const avatarBlue = Color(0xFF3D6491);
+  static const avatarSlate = Color(0xFF5B6473);
 
   // --- Скругления ---
   //
-  // Шкала из их CSS. В интерфейсе чаще всего встречаются 8, 12, 16 и 24.
+  // Шкала источника: xs 4, sm 8, md 12, lg 16, xl 22.
 
-  static const br2 = 2.0;
   static const br4 = 4.0;
-  static const br6 = 6.0;
   static const br8 = 8.0;
   static const br12 = 12.0;
   static const br16 = 16.0;
-  static const br24 = 24.0;
-  static const br32 = 32.0;
+  static const br22 = 22.0;
 
-  /// Радиус кнопок и панелей — у них это shell-radius.
+  /// Радиус кнопок и панелей.
   static const radiusShell = 8.0;
 
-  /// Радиус поля ввода — отдельное значение, не из общей шкалы.
-  static const radiusInput = 10.0;
+  /// Радиус поля ввода.
+  static const radiusInput = 12.0;
 
   // --- Границы ---
 
@@ -80,28 +122,30 @@ abstract final class Tokens {
 
   // --- Тени ---
   //
-  // Очень мягкие: непрозрачность 0x0a — это четыре процента. Тень здесь
-  // не отрывает элемент от фона, а лишь намекает на слой.
+  // В источнике их две: волосяная обводка вместо тени у полей и кнопок и
+  // глубокая мягкая — у всплывающего. Промежуточных нет, и добавлять их
+  // здесь значило бы придумать то, чего в системе не предусмотрено.
 
-  static const shadowSm = [
-    BoxShadow(color: Color(0x0A000000), blurRadius: 8, offset: Offset(0, 2)),
+  static const shadowBorder = [
+    BoxShadow(color: Color(0x14FFFFFF), blurRadius: 0, spreadRadius: 1),
   ];
-  static const shadowMd = [
-    BoxShadow(color: Color(0x0A000000), blurRadius: 20, offset: Offset(0, 4)),
-  ];
-  static const shadowLg = [
-    BoxShadow(color: Color(0x1A000000), blurRadius: 16, offset: Offset(0, 4)),
+  static const shadowFloat = [
+    BoxShadow(color: Color(0x59000000), blurRadius: 40, offset: Offset(0, 12)),
   ];
 
   // --- Движение ---
 
-  /// Единственная длительность в их системе: почти все переходы — 0.2s.
+  /// Длительность переходов.
   static const duration = Duration(milliseconds: 200);
+
+  /// Кривая из источника: cubic-bezier(0.22, 1, 0.36, 1) — быстрый старт и
+  /// долгое мягкое торможение.
+  static const easeOut = Cubic(0.22, 1, 0.36, 1);
 
   // --- Отступы ---
   //
-  // Кратность четырём — это уже наше решение: в их CSS отступы приходят
-  // утилитами Tailwind, а у того шаг как раз четыре пикселя.
+  // Кратность четырём: в источнике отступы приходят утилитами Tailwind, а у
+  // того шаг как раз четыре пикселя.
 
   static const space1 = 4.0;
   static const space2 = 8.0;

@@ -284,7 +284,7 @@ class _ChatTitle extends StatelessWidget {
     final status = switch (true) {
       _ when typing => ('печатает…', theme.colorScheme.primary),
       _ when isGroup => ('Группа', theme.colorScheme.onSurfaceVariant),
-      _ when peer?.online ?? false => ('в сети', Tokens.olive),
+      _ when peer?.online ?? false => ('в сети', Tokens.online),
       _ => ('не в сети', theme.colorScheme.onSurfaceVariant),
     };
 

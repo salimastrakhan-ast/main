@@ -3,26 +3,33 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tito/ui/theme.dart';
 import 'package:tito/ui/tokens.dart';
 
-/// Значения сняты с публичного CSS claude.com. Тест держит их на месте:
-/// если кто-то «поправит на глаз», это сразу видно, а не всплывёт через
-/// полгода расхождением по всему интерфейсу.
+/// Значения сняты с `web/src/styles.css` — того же файла, по которому
+/// живёт веб-клиент. Тест держит их на месте: если кто-то «поправит на
+/// глаз», два клиента разъедутся, и увидят это не здесь, а на скриншотах
+/// через полгода.
 void main() {
   group('Токены совпадают с источником', () {
     test('акценты', () {
-      expect(Tokens.clay, const Color(0xFFD97757), reason: '--color-clay');
-      expect(Tokens.clayHover, const Color(0xFFC6613F), reason: '--color-clay-hover');
-      expect(Tokens.clayDark, const Color(0xFFC46849), reason: '--color-clay-dark');
-      expect(Tokens.sky, const Color(0xFF6A9BCC), reason: '--color-sky');
-      expect(Tokens.olive, const Color(0xFF788C5D), reason: '--color-olive');
-      expect(Tokens.error, const Color(0xFFBF4D43), reason: '--color-error');
+      expect(Tokens.accent, const Color(0xFF3DB8B4), reason: '--color-accent');
+      expect(Tokens.onAccent, const Color(0xFF06201F), reason: '--color-accent-fg');
+      expect(Tokens.online, Tokens.accent, reason: '--color-online');
+      expect(Tokens.danger, const Color(0xFFD45B5B), reason: '--color-danger');
     });
 
-    test('края серой шкалы и опорные ступени', () {
-      expect(Tokens.gray050, const Color(0xFFFAF9F5), reason: 'полотно');
-      expect(Tokens.gray200, const Color(0xFFE8E6DC), reason: 'свой пузырь');
-      expect(Tokens.gray400, const Color(0xFFB0AEA5), reason: 'границы');
-      expect(Tokens.gray800, const Color(0xFF262624), reason: 'тёмная поверхность');
-      expect(Tokens.gray950, const Color(0xFF141413), reason: 'текст и тёмное полотно');
+    test('поверхности тёмной темы', () {
+      expect(Tokens.bg, const Color(0xFF0B1117), reason: '--color-bg');
+      expect(Tokens.sidebar, const Color(0xFF121A22), reason: '--color-sidebar');
+      expect(Tokens.surface, const Color(0xFF1A242E), reason: '--color-surface');
+      expect(Tokens.elevated, const Color(0xFF222E3A), reason: '--color-elevated');
+      expect(Tokens.border, const Color(0xFF24303C), reason: '--color-border');
+    });
+
+    test('текст и пузыри', () {
+      expect(Tokens.fg, const Color(0xFFE8F0F6), reason: '--color-fg');
+      expect(Tokens.muted, const Color(0xFF8A9BB0), reason: '--color-muted');
+      expect(Tokens.subtle, const Color(0xFF5C6B7A), reason: '--color-subtle');
+      expect(Tokens.bubbleIn, const Color(0xFF1C2732), reason: '--color-bubble-in');
+      expect(Tokens.bubbleOut, const Color(0xFF164A4E), reason: '--color-bubble-out');
     });
 
     test('границы и скругления', () {
@@ -30,8 +37,13 @@ void main() {
       expect(Tokens.borderSm, 1.0);
       expect(Tokens.borderMd, 1.5);
       expect(Tokens.borderLg, 2.0);
-      expect(Tokens.radiusShell, 8.0, reason: '--shell-radius');
-      expect(Tokens.radiusInput, 10.0, reason: '--shell-radius-input');
+      expect(Tokens.br4, 4.0, reason: '--radius-xs');
+      expect(Tokens.br8, 8.0, reason: '--radius-sm');
+      expect(Tokens.br12, 12.0, reason: '--radius-md');
+      expect(Tokens.br16, 16.0, reason: '--radius-lg');
+      expect(Tokens.br22, 22.0, reason: '--radius-xl');
+      expect(Tokens.radiusShell, Tokens.br8);
+      expect(Tokens.radiusInput, Tokens.br12);
     });
 
     test('переход — единственная длительность 200 мс', () {
@@ -40,12 +52,18 @@ void main() {
   });
 
   group('Поверхности плоские', () {
-    // У них в CSS нет ни одного backdrop-filter и ни одного blur.
-    // Поверхности разделяются границей и очень мягкой тенью.
-    test('тени едва заметны', () {
-      expect(Tokens.shadowSm.single.color.a, closeTo(0.04, 0.01),
-          reason: 'тень не должна отрывать элемент от фона');
-      expect(Tokens.shadowMd.single.color.a, closeTo(0.04, 0.01));
+    // В источнике нет ни одного backdrop-filter и ни одного blur.
+    // Поверхности разделяются границей, а не размытием.
+    test('вместо тени у полей — волосяная обводка', () {
+      expect(Tokens.shadowBorder.single.blurRadius, 0,
+          reason: '--shadow-border это обводка, а не тень');
+      expect(Tokens.shadowBorder.single.spreadRadius, 1);
+    });
+
+    test('глубокая тень — только у всплывающего', () {
+      expect(Tokens.shadowFloat.single.blurRadius, 40,
+          reason: '--shadow-float');
+      expect(Tokens.shadowFloat.single.offset.dy, 12);
     });
 
     test('окна и панели без подъёма', () {
@@ -62,12 +80,12 @@ void main() {
     test('наведение и нажатие берут их же цвета', () {
       final style = TitoTheme.light().filledButtonTheme.style!;
       final bg = style.backgroundColor!;
-      expect(bg.resolve({}), Tokens.clay);
-      expect(bg.resolve({WidgetState.hovered}), Tokens.clayHover);
-      expect(bg.resolve({WidgetState.pressed}), Tokens.clayDark);
+      expect(bg.resolve({}), Tokens.accent);
+      expect(bg.resolve({WidgetState.hovered}), Tokens.accentHover);
+      expect(bg.resolve({WidgetState.pressed}), Tokens.accentInk);
     });
 
-    test('скругление кнопок — их shell-radius', () {
+    test('скругление кнопок — радиус панелей', () {
       final shape = TitoTheme.light().filledButtonTheme.style!.shape!
           .resolve({}) as RoundedRectangleBorder;
       expect((shape.borderRadius as BorderRadius).topLeft.x, Tokens.radiusShell);
@@ -75,8 +93,9 @@ void main() {
   });
 
   group('Шрифты', () {
-    // Фирменные шрифты лицензионные. Их собственный запасной вариант —
-    // system-ui; на телефонах это родной шрифт системы.
+    // В вебе это Manrope; во Flutter-сборке лежит Roboto — он же системный
+    // шрифт Android, и тянуть второе семейство ради совпадения начертаний
+    // значит добавить мегабайт к каждой установке.
     test('одно семейство на весь интерфейс', () {
       for (final theme in [TitoTheme.light(), TitoTheme.dark()]) {
         final families = {

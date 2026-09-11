@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Отрисовка знака приложения.
 
-Тот же коралловый и тот же Manrope, что в интерфейсе: знак берёт цвет из
-lib/ui/theme.dart, а шрифт — из assets/fonts. Поэтому иконка не может
-разойтись с приложением — поменяется коралловый в теме, перерисуется и знак.
+Цвета знак берёт из lib/ui/tokens.dart, шрифт — из assets/fonts. Поэтому
+иконка не может разойтись с приложением: поменяется акцент в токенах —
+перерисуется и знак.
 
 Сначала пробовал рисовать это самим Flutter, чтобы не заводить лишний
 инструмент. Не вышло: в headless-тестах кодирование PNG недоступно, и
@@ -19,28 +19,29 @@ from PIL import Image, ImageDraw, ImageFont
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SIZE = 1024
-LETTER = 'М'
+LETTER = 'T'
+
+
+def token(name: str) -> tuple[int, int, int]:
+    """Цвет из токенов — чтобы не держать его в двух местах."""
+    tokens = (ROOT / 'lib' / 'ui' / 'tokens.dart').read_text()
+    m = re.search(rf"{name} = Color\(0xFF([0-9A-Fa-f]{{6}})\)", tokens)
+    if not m:
+        sys.exit(f'не нашёл {name} в lib/ui/tokens.dart')
+    h = m.group(1)
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 
 
 def brand_color() -> tuple[int, int, int]:
-    """Коралловый — читаем из темы, чтобы не держать его в двух местах."""
-    theme = (ROOT / 'lib' / 'ui' / 'theme.dart').read_text()
-    m = re.search(r"_coral = Color\(0xFF([0-9A-Fa-f]{6})\)", theme)
-    if not m:
-        sys.exit('не нашёл _coral в lib/ui/theme.dart')
-    h = m.group(1)
-    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return token('accent')
 
 
 def ink_color() -> tuple[int, int, int]:
-    theme = (ROOT / 'lib' / 'ui' / 'theme.dart').read_text()
-    m = re.search(r"_ink = Color\(0xFF([0-9A-Fa-f]{6})\)", theme)
-    h = m.group(1)
-    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return token('onAccent')
 
 
 def draw_mark(background: bool, letter_scale: float) -> Image.Image:
-    coral, ink = brand_color(), ink_color()
+    accent, ink = brand_color(), ink_color()
     img = Image.new('RGBA', (SIZE, SIZE), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
@@ -49,11 +50,11 @@ def draw_mark(background: bool, letter_scale: float) -> Image.Image:
         draw.rounded_rectangle(
             [(0, 0), (SIZE - 1, SIZE - 1)],
             radius=int(SIZE * 0.22),
-            fill=coral + (255,),
+            fill=accent + (255,),
         )
 
     font = ImageFont.truetype(
-        str(ROOT / 'assets' / 'fonts' / 'Manrope-Bold.ttf'),
+        str(ROOT / 'assets' / 'fonts' / 'Roboto-Bold.ttf'),
         int(SIZE * letter_scale),
     )
     box = draw.textbbox((0, 0), LETTER, font=font)
@@ -62,7 +63,7 @@ def draw_mark(background: bool, letter_scale: float) -> Image.Image:
          (SIZE - (box[3] - box[1])) / 2 - box[1]),
         LETTER,
         font=font,
-        fill=(ink if background else coral) + (255,),
+        fill=(ink if background else accent) + (255,),
     )
     return img
 

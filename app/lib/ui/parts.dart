@@ -62,7 +62,7 @@ class PersonAvatar extends StatelessWidget {
                 width: radius * 0.46,
                 height: radius * 0.46,
                 decoration: BoxDecoration(
-                  color: Tokens.olive,
+                  color: Tokens.online,
                   shape: BoxShape.circle,
                   // Кольцо цветом полотна: без него точка сливается с
                   // аватаром, когда тот светлый.
