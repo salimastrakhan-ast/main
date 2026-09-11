@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mayak/data/api/api_client.dart';
@@ -232,6 +233,43 @@ void main() {
     // Курсор обязан подтянуться: иначе после перезапуска клиент запросил бы
     // то, что уже показывает.
     expect(await db.syncCursors(), {chatId: 12});
+  });
+
+  test('новое сообщение поднимает чат наверх списка', () async {
+    // Два молчащих чата: свежий сверху. Даты нарочно разнесены — иначе
+    // проверка держалась бы на том, что часы успели тикнуть.
+    await (db.update(db.chats)..where((t) => t.id.equals(chatId))).write(
+      ChatsCompanion(updatedAt: Value(DateTime(2025, 1, 1))),
+    );
+    // Длинная переписка, но давняя: по номеру сообщения она обошла бы
+    // свежую, по времени — нет. Ради этого номер и задан заведомо больше.
+    await db.into(db.chats).insert(
+      ChatsCompanion.insert(
+        id: 'chat-2',
+        type: 'private',
+        lastSeq: const Value(99),
+        updatedAt: Value(DateTime(2025, 6, 1)),
+      ),
+    );
+    expect((await db.watchChats().first).first.id, 'chat-2');
+
+    transport.emit(Envelope(
+      type: Ev.messageNew,
+      data: serverMessage(
+        chatId: chatId,
+        clientMsgId: 'c-9',
+        senderId: 'user-other',
+        seq: 3,
+        text: 'свежее',
+      ),
+    ));
+    await settle();
+
+    expect(
+      (await db.watchChats().first).first.id,
+      chatId,
+      reason: 'чат с последним сообщением обязан быть первым',
+    );
   });
 
   test('повторное событие о том же сообщении не создаёт второе', () async {

@@ -19,7 +19,8 @@ class ChatsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final chats = ref.watch(chatsProvider);
-    final users = ref.watch(usersProvider).value ?? const {};
+    final peers = ref.watch(chatPeersProvider).value ?? const {};
+    final lastMessages = ref.watch(lastMessagesProvider).value ?? const {};
     final session = ref.watch(sessionProvider).value;
 
     return Scaffold(
@@ -54,7 +55,8 @@ class ChatsScreen extends ConsumerWidget {
             itemCount: list.length,
             itemBuilder: (context, index) => _ChatTile(
               chat: list[index],
-              users: users,
+              peer: peers[list[index].id],
+              lastMessage: lastMessages[list[index].id],
               myUserId: session?.userId ?? '',
             ),
           );
@@ -98,12 +100,14 @@ class _ConnectionBanner extends ConsumerWidget {
 class _ChatTile extends StatelessWidget {
   const _ChatTile({
     required this.chat,
-    required this.users,
+    required this.peer,
+    required this.lastMessage,
     required this.myUserId,
   });
 
   final Chat chat;
-  final Map<String, User> users;
+  final User? peer;
+  final LastMessage? lastMessage;
   final String myUserId;
 
   @override
@@ -115,8 +119,9 @@ class _ChatTile extends StatelessWidget {
       leading: CircleAvatar(
         radius: 25,
         // Цвет закреплён за собеседником: в списке он работает как
-        // опознавание, и меняться между запусками не должен.
-        backgroundColor: MayakTheme.accentFor(chat.id),
+        // опознавание, и меняться между запусками не должен. У группы
+        // человека нет — там опознаётся сам чат.
+        backgroundColor: MayakTheme.accentFor(peer?.id ?? chat.id),
         child: Text(
           title.isEmpty ? '?' : title.characters.first.toUpperCase(),
           style: const TextStyle(
@@ -133,7 +138,7 @@ class _ChatTile extends StatelessWidget {
         style: theme.textTheme.titleMedium,
       ),
       subtitle: Text(
-        chat.type == 'group' ? 'Группа' : 'Личный чат',
+        _preview(),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
@@ -173,10 +178,20 @@ class _ChatTile extends StatelessWidget {
   /// это имя собеседника.
   String _title() {
     if (chat.title.isNotEmpty) return chat.title;
-    for (final user in users.values) {
-      if (user.id != myUserId) return user.displayName;
-    }
-    return 'Чат';
+    return peer?.displayName ?? 'Чат';
+  }
+
+  /// Вторая строка: начало последнего сообщения — как в любом мессенджере.
+  ///
+  /// Пока сообщений нет, вместо пустоты пишем, что это за чат: строка без
+  /// подписи выглядит наполовину не загрузившейся.
+  String _preview() {
+    final last = lastMessage;
+    if (last == null) return chat.type == 'group' ? 'Группа' : 'Личный чат';
+    if (last.deleted) return 'Сообщение удалено';
+
+    final body = last.body.isEmpty ? 'Вложение' : last.body;
+    return last.senderId == myUserId ? 'Вы: $body' : body;
   }
 }
 

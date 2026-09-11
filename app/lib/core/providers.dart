@@ -73,6 +73,19 @@ final usersProvider = StreamProvider<Map<String, User>>((ref) {
   return stream.map((list) => {for (final u in list) u.id: u});
 });
 
+/// Собеседник в каждом личном чате: по нему подписана строка списка.
+final chatPeersProvider = StreamProvider<Map<String, User>>((ref) {
+  final repo = ref.watch(repositoryProvider);
+  return repo?.watchChatPeers() ?? const Stream.empty();
+});
+
+/// Последнее сообщение каждого чата — для второй строки в списке.
+final lastMessagesProvider = StreamProvider<Map<String, LastMessage>>((ref) {
+  final repo = ref.watch(repositoryProvider);
+  final stream = repo?.watchLastMessages() ?? const Stream<List<LastMessage>>.empty();
+  return stream.map((list) => {for (final m in list) m.chatId: m});
+});
+
 /// Кто печатает в каком чате. Живёт в памяти: событие протухает за секунды.
 final typingProvider =
     StateNotifierProvider<TypingNotifier, Map<String, Set<String>>>(

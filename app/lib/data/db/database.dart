@@ -126,6 +126,24 @@ class Outbox extends Table {
   Set<Column> get primaryKey => {clientMsgId};
 }
 
+/// Последнее сообщение чата в том виде, в каком его показывает список.
+///
+/// Отдельный тип, а не `Message`: списку нужны четыре поля из пяти
+/// десятков, и тащить полную строку ради подписи незачем.
+class LastMessage {
+  const LastMessage({
+    required this.chatId,
+    required this.body,
+    required this.senderId,
+    required this.deleted,
+  });
+
+  final String chatId;
+  final String body;
+  final String senderId;
+  final bool deleted;
+}
+
 @DriftDatabase(tables: [Chats, Messages, Users, ChatMembers, Outbox])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(openConnection());
@@ -142,10 +160,17 @@ class AppDatabase extends _$AppDatabase {
     return {for (final c in rows) c.id: c.syncedSeq};
   }
 
+  /// Список диалогов: сверху тот, где последнее движение.
+  ///
+  /// Не по lastSeq: это номер внутри чата, и между чатами он несравним —
+  /// переписка на пятьсот сообщений всегда оказывалась бы выше вчерашней
+  /// на три, даже если в ней месяц тишины.
   Stream<List<Chat>> watchChats() {
-    return (select(
-      chats,
-    )..orderBy([(t) => OrderingTerm.desc(t.lastSeq)])).watch();
+    return (select(chats)..orderBy([
+          (t) => OrderingTerm.desc(t.updatedAt),
+          (t) => OrderingTerm.desc(t.lastSeq),
+        ]))
+        .watch();
   }
 
   /// Лента чата. Неотправленные (seq == 0) идут в конце: их место в ленте
@@ -161,6 +186,54 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Stream<List<User>> watchUsers() => select(users).watch();
+
+  /// Собеседник каждого чата — по нему подписан личный диалог.
+  ///
+  /// Раньше список брал имя из общего справочника пользователей: первого,
+  /// кто не я. При одном собеседнике это совпадало с правдой, при трёх все
+  /// строки показывали одно и то же имя.
+  Stream<Map<String, User>> watchChatPeers(String myUserId) {
+    final query = select(chatMembers).join([
+      innerJoin(users, users.id.equalsExp(chatMembers.userId)),
+    ])..where(chatMembers.userId.equals(myUserId).not());
+
+    return query.watch().map((rows) {
+      final peers = <String, User>{};
+      for (final row in rows) {
+        // В группе тут окажется случайный участник, но её подписывает
+        // собственное название, а не имя собеседника.
+        peers.putIfAbsent(
+          row.readTable(chatMembers).chatId,
+          () => row.readTable(users),
+        );
+      }
+      return peers;
+    });
+  }
+
+  /// Последнее сообщение каждого чата — вторая строка в списке диалогов.
+  ///
+  /// `max(created_at)` рядом с голыми колонками — приём SQLite: значения
+  /// берутся именно из той строки, на которой достигнут максимум. Иначе
+  /// пришлось бы либо тянуть всю таблицу в память, либо делать подзапрос
+  /// на каждый чат.
+  Stream<List<LastMessage>> watchLastMessages() {
+    return customSelect(
+      'SELECT chat_id, body, sender_id, deleted_at, '
+      'max(created_at) AS created_at FROM messages GROUP BY chat_id',
+      readsFrom: {messages},
+    ).watch().map(
+      (rows) => [
+        for (final row in rows)
+          LastMessage(
+            chatId: row.read<String>('chat_id'),
+            body: row.read<String>('body'),
+            senderId: row.read<String>('sender_id'),
+            deleted: row.read<DateTime?>('deleted_at') != null,
+          ),
+      ],
+    );
+  }
 
   Future<List<OutboxData>> pendingOutbox() {
     return (select(

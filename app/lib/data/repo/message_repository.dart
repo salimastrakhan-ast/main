@@ -43,6 +43,8 @@ class MessageRepository {
   Stream<List<Message>> watchMessages(String chatId) =>
       db.watchMessages(chatId);
   Stream<List<User>> watchUsers() => db.watchUsers();
+  Stream<Map<String, User>> watchChatPeers() => db.watchChatPeers(myUserId);
+  Stream<List<LastMessage>> watchLastMessages() => db.watchLastMessages();
 
   // --- Отправка ---
 
@@ -379,10 +381,13 @@ class MessageRepository {
         );
 
     // Событие о новом сообщении двигает и курсор чата: иначе после
-    // перезапуска клиент запросил бы то, что уже показывает.
+    // перезапуска клиент запросил бы то, что уже показывает. Заодно время
+    // последней активности: по нему список и упорядочен.
+    final createdAt = DateTime.parse(raw['created_at'] as String);
     await db.customStatement(
-      'UPDATE chats SET last_seq = MAX(last_seq, ?), synced_seq = MAX(synced_seq, ?) WHERE id = ?',
-      [seq, seq, chatId],
+      'UPDATE chats SET last_seq = MAX(last_seq, ?), synced_seq = MAX(synced_seq, ?), '
+      'updated_at = MAX(updated_at, ?) WHERE id = ?',
+      [seq, seq, createdAt.millisecondsSinceEpoch ~/ 1000, chatId],
     );
   }
 

@@ -146,11 +146,13 @@ await new Promise((r) => setTimeout(r, 3000));
 
 await anya.page.screenshot({ path: `${OUT}/03-пришло-сообщение.png` });
 const withChat = await screenText(anya);
+// В строке списка видно начало последнего сообщения — по нему и проверяем,
+// и по нему же открываем чат.
 check('чат появился у Ани сам, без перезагрузки',
-  withChat.includes('Личный чат'), withChat.slice(0, 140));
+  withChat.includes('Привет!'), withChat.slice(0, 140));
 
 // --- Аня открывает чат и отвечает ---
-await tap(anya, 'Личный чат');
+await tap(anya, 'Привет!');
 await anya.page.waitForTimeout(2500);
 await anya.page.screenshot({ path: `${OUT}/04-переписка.png` });
 
