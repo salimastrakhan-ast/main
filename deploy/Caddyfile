@@ -1,0 +1,53 @@
+# Обратный прокси и раздача веб-клиента.
+#
+# Сертификаты Caddy получает и продлевает сам — отдельного certbot и крона
+# не нужно. Для этого домены обязаны указывать на эту машину ДО первого
+# запуска: иначе выпуск не пройдёт, и сайт откроется по самоподписанному.
+{
+	email {$TITO_ACME_EMAIL}
+}
+
+# --- Веб-клиент ---
+{$TITO_DOMAIN} {
+	root * /srv
+	encode zstd gzip
+
+	# Одностраничное приложение: маршрутов на сервере нет, любой путь отдаёт
+	# index.html, а дальше разбирается сам клиент.
+	try_files {path} /index.html
+	file_server
+
+	# Файлы сборки именованы по содержимому и не меняются никогда; index.html
+	# меняется каждым выпуском и кэшироваться не должен вовсе.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	header /index.html Cache-Control "no-store"
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}
+
+# --- API и сокет ---
+api.{$TITO_DOMAIN} {
+	# WebSocket Caddy проксирует сам, отдельного правила для Upgrade не надо.
+	# Долгие соединения не должны обрываться по таймауту чтения.
+	reverse_proxy api:8080 {
+		transport http {
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+	header -Server
+}
+
+# --- Файлы ---
+#
+# Ссылки на вложения подписаны на этот домен: подпись покрывает имя хоста,
+# поэтому MINIO_SERVER_URL в compose обязан совпадать с ним до буквы.
+media.{$TITO_DOMAIN} {
+	reverse_proxy minio:9000
+	header -Server
+}

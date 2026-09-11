@@ -1,0 +1,16 @@
+# В образ едет только исходный код. Всё остальное либо собирается внутри,
+# либо не нужно там вовсе — и каждый лишний мегабайт это время сборки.
+
+.git
+.github
+**/node_modules
+**/dist
+**/build
+app/
+docs/
+e2e/
+web/dist
+web/node_modules
+server/bin
+**/*.log
+**/.DS_Store

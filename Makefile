@@ -9,6 +9,7 @@ help:
 	@echo "make test    — прогнать тесты (нужен make up)"
 	@echo "make fmt     — gofmt по коду сервера"
 	@echo "make reset   — снести данные и поднять инфраструктуру заново"
+	@echo "make deploy-up — боевой контур; нужен deploy/.env, см. docs/deploy.md"
 
 up:
 	$(COMPOSE) up -d --wait
@@ -87,6 +88,28 @@ shots:
 	cd e2e && npm install --silent && node shots.mjs $(if $(ONLY),--only=$(ONLY),)
 	python3 e2e/sheet.py
 	python3 e2e/palette.py
+
+# --- Боевой контур ---
+#
+# Настройки берутся из deploy/.env — см. deploy/env.example и docs/deploy.md.
+
+.PHONY: deploy-up deploy-down deploy-logs deploy-build
+
+DEPLOY := docker compose --env-file deploy/.env -f deploy/docker-compose.prod.yml
+
+deploy-build:
+	$(DEPLOY) build
+
+deploy-up:
+	$(DEPLOY) up -d --build
+
+deploy-down:
+	$(DEPLOY) down
+
+deploy-logs:
+	$(DEPLOY) logs -f --tail=100
+
+# --- Веб-клиент ---
 
 web-dev:
 	cd web && npm install --silent && npm run dev

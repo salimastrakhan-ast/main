@@ -4,10 +4,12 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -23,10 +25,46 @@ import (
 )
 
 func main() {
+	// Проверка живости для контейнера. В образе нет ни shell, ни wget:
+	// единственный исполняемый файл там — этот. Просить его же постучаться
+	// к себе дешевле, чем тащить ради проверки половину дистрибутива.
+	if len(os.Args) > 1 && os.Args[1] == "-healthcheck" {
+		if err := healthcheck(); err != nil {
+			slog.Error("проверка живости не прошла", "err", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if err := run(); err != nil {
 		slog.Error("сервер остановлен с ошибкой", "err", err)
 		os.Exit(1)
 	}
+}
+
+// healthcheck стучится в собственный /healthz.
+//
+// Адрес берётся из той же переменной, что слушает сервер: если его
+// перевесили на другой порт, проверка переедет следом.
+func healthcheck() error {
+	addr := os.Getenv("TITO_HTTP_ADDR")
+	if addr == "" {
+		addr = ":8080"
+	}
+	if strings.HasPrefix(addr, ":") {
+		addr = "127.0.0.1" + addr
+	}
+
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("http://" + addr + "/healthz")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("сервер ответил %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func run() error {
