@@ -1,4 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Адресная книга: по ней ищутся знакомые, уже зарегистрированные в
+         Tito. Наружу уходят только номера; имена остаются на устройстве.
+         Спрашивается не при запуске, а когда человек открывает «Новый чат»:
+         разрешение, о котором просят до того, как объяснили зачем, дают
+         неохотно и потом жалеют. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
+
+    <!-- Микрофон: голосовые сообщения. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
         android:label="Tito"
         android:name="${applicationName}"

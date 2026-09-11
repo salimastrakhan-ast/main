@@ -147,7 +147,15 @@ func (s *Server) handleSearchUsers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_query", "Запрос должен быть не короче двух символов")
 		return
 	}
-	users, err := s.store.SearchUsers(r.Context(), query, 20)
+	// Если запрос похож на телефон — ищем ещё и по нему. Нормализуем тем
+	// же кодом, что и при входе: иначе «+7 939 273-11-11» из адресной
+	// книги никогда не сойдётся с «79392731111» в базе.
+	phone := ""
+	if normalized, err := auth.NormalizePhone(query); err == nil {
+		phone = normalized
+	}
+
+	users, err := s.store.SearchUsers(r.Context(), query, phone, 20)
 	if err != nil {
 		writeAppError(w, err)
 		return

@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Зачем нужны разрешения. iOS показывает эти строки человеку
+	     дословно, поэтому они объясняют пользу, а не называют функцию. -->
+	<key>NSContactsUsageDescription</key>
+	<string>Чтобы показать, кто из ваших знакомых уже в Tito. Наружу уходят только номера, имена остаются на телефоне.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Чтобы записывать голосовые сообщения.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

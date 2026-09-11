@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../api/api_client.dart';
+import '../contacts/device_contacts.dart';
 import '../db/database.dart';
 import '../ws/envelope.dart';
 import '../ws/transport.dart';
@@ -477,6 +478,44 @@ class MessageRepository {
   /// Отметку снимаем со всех и ставим заново тем, кто пришёл: иначе удалённый
   /// из книги контакт остался бы в списке навсегда. Избранное при этом не
   /// трогаем — это решение человека, а не свойство контакта.
+  /// Отдаёт серверу адресную книгу телефона и забирает тех, кто в Tito.
+  ///
+  /// Возвращает, сколько знакомых нашлось. Ноль — либо в книге никого из
+  /// зарегистрированных, либо человек не дал разрешение; для интерфейса это
+  /// одно и то же состояние.
+  Future<int> syncDeviceContacts() async {
+    final book = await DeviceContacts.read();
+    if (book.isEmpty) return 0;
+
+    final found = await api.syncContacts(book);
+    await db.transaction(() async {
+      for (final raw in found) {
+        final user = raw as Map<String, dynamic>;
+        await _upsertUser(user);
+        await (db.update(db.users)..where((t) => t.id.equals(user['id'] as String)))
+            .write(const UsersCompanion(isContact: Value(true)));
+      }
+    });
+    return found.length;
+  }
+
+  /// Ищет человека на сервере — по имени, нику или номеру целиком.
+  ///
+  /// Нужен, когда в книге его нет: например, номер продиктовали голосом.
+  /// По куску номера сервер не ищет намеренно — иначе базу можно было бы
+  /// перебрать.
+  Future<List<User>> searchPeople(String query) async {
+    final found = await api.searchUsers(query);
+    await db.transaction(() async {
+      for (final raw in found) {
+        await _upsertUser(raw as Map<String, dynamic>);
+      }
+    });
+    final ids = [for (final raw in found) (raw as Map<String, dynamic>)['id'] as String];
+    if (ids.isEmpty) return const [];
+    return (db.select(db.users)..where((t) => t.id.isIn(ids))).get();
+  }
+
   Future<void> refreshContacts() async {
     final list = await api.contacts();
     await db.transaction(() async {

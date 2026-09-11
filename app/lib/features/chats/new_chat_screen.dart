@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../data/contacts/device_contacts.dart';
 import '../../data/db/database.dart';
 import '../../ui/glass.dart';
 import '../../ui/icons.dart';
@@ -25,6 +28,12 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
   final _picked = <String>{};
   bool _group = false;
 
+  /// Найденные на сервере — те, кого нет в адресной книге.
+  List<User> _found = const [];
+  bool _searching = false;
+  bool _syncing = false;
+  Timer? _searchDebounce;
+
   @override
   void initState() {
     super.initState();
@@ -35,8 +44,67 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _query.dispose();
     super.dispose();
+  }
+
+  /// Забирает адресную книгу телефона и сверяет её с сервером.
+  ///
+  /// Спрашиваем разрешение здесь, а не при запуске: о том, что просят до
+  /// объяснения зачем, люди жалеют и отказывают.
+  Future<void> _syncBook() async {
+    setState(() => _syncing = true);
+    try {
+      final count = await ref.read(repositoryProvider)?.syncDeviceContacts();
+      if (!mounted) return;
+      showMessage(context, switch (count) {
+        null || 0 => 'Никого из вашей книги в Tito пока нет',
+        1 => 'Нашёлся один знакомый',
+        _ => 'Нашлось знакомых: $count',
+      });
+    } catch (_) {
+      if (mounted) showMessage(context, 'Не удалось прочитать контакты');
+    } finally {
+      if (mounted) setState(() => _syncing = false);
+    }
+  }
+
+  void _choose(User person) {
+    if (!_group) {
+      openChatWith(context, ref, person);
+      return;
+    }
+    setState(() {
+      if (!_picked.add(person.id)) _picked.remove(person.id);
+    });
+  }
+
+  /// Ищет на сервере, когда в книге ничего не нашлось.
+  ///
+  /// С задержкой: иначе на каждую букву уходит запрос, а по мобильной сети
+  /// это заметно и человеку, и серверу.
+  void _searchOnServer(String query) {
+    _searchDebounce?.cancel();
+    final needle = query.trim();
+    if (needle.length < 3) {
+      setState(() {
+        _found = const [];
+        _searching = false;
+      });
+      return;
+    }
+
+    setState(() => _searching = true);
+    _searchDebounce = Timer(const Duration(milliseconds: 400), () async {
+      final people =
+          await ref.read(repositoryProvider)?.searchPeople(needle) ?? const [];
+      if (!mounted) return;
+      setState(() {
+        _found = people;
+        _searching = false;
+      });
+    });
   }
 
   /// «Избранное» — личный чат с самим собой. Сервер заводит его первым
@@ -121,9 +189,12 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
             Tokens.space3,
           ),
           child: SearchField(
-            hint: 'Поиск по контактам',
+            hint: 'Имя или номер телефона',
             controller: _query,
-            onChanged: (_) => setState(() {}),
+            onChanged: (value) {
+              setState(() {});
+              _searchOnServer(value);
+            },
           ),
         ),
       ),
@@ -134,15 +205,22 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
               label: Text('Создать · ${_picked.length}'),
             )
           : null,
-      body: contacts.isEmpty
+      body: contacts.isEmpty && shown.isEmpty && _found.isEmpty
           ? StateView(
-              icon: TitoIcons.chats,
-              title: 'Начните новый чат',
-              description:
-                  'Контакты появятся, когда кто-то из ваших знакомых '
-                  'зарегистрируется в «Titoе».',
-              actionLabel: 'Создать группу',
-              onAction: () => setState(() => _group = true),
+              icon: TitoIcons.contacts,
+              title: DeviceContacts.supported
+                  ? 'Найдите знакомых'
+                  : 'Начните новый чат',
+              description: DeviceContacts.supported
+                  ? 'Посмотрим, кто из вашей адресной книги уже в Tito. '
+                        'Наружу уйдут только номера.'
+                  : 'Введите номер телефона или имя — найдём на сервере.',
+              actionLabel: DeviceContacts.supported
+                  ? (_syncing ? 'Читаю книгу…' : 'Найти в контактах')
+                  : 'Создать группу',
+              onAction: DeviceContacts.supported
+                  ? (_syncing ? null : _syncBook)
+                  : () => setState(() => _group = true),
             )
           : ListView(
               children: [
@@ -161,21 +239,62 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
                   ),
                 ],
                 const RowDivider(indent: 0),
-                for (final person in shown)
-                  _PersonRow(
-                    person: person,
-                    group: _group,
-                    picked: _picked.contains(person.id),
-                    onTap: () {
-                      if (!_group) {
-                        openChatWith(context, ref, person);
-                        return;
-                      }
-                      setState(() {
-                        if (!_picked.add(person.id)) _picked.remove(person.id);
-                      });
-                    },
+                if (shown.isNotEmpty)
+                  for (final person in shown)
+                    _PersonRow(
+                      person: person,
+                      group: _group,
+                      picked: _picked.contains(person.id),
+                      onTap: () => _choose(person),
+                    ),
+
+                // Найденные на сервере — отдельным разделом: человек должен
+                // видеть, что это не из его книги, а из общего поиска.
+                if (_searching)
+                  const Padding(
+                    padding: EdgeInsets.all(Tokens.space5),
+                    child: Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  )
+                else if (_found.isNotEmpty) ...[
+                  const SectionLabel('Найдены на сервере'),
+                  for (final person in _found)
+                    if (!contacts.any((c) => c.id == person.id))
+                      _PersonRow(
+                        person: person,
+                        group: _group,
+                        picked: _picked.contains(person.id),
+                        onTap: () => _choose(person),
+                      ),
+                ] else if (shown.isEmpty && _query.text.trim().length >= 3)
+                  Padding(
+                    padding: const EdgeInsets.all(Tokens.space5),
+                    child: Text(
+                      'Никого не нашли. Номер нужен целиком — по части '
+                      'номера поиск не работает намеренно.',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ),
+
+                if (DeviceContacts.supported) ...[
+                  const RowDivider(indent: 0),
+                  SettingsRow(
+                    icon: TitoIcons.contacts,
+                    title: 'Обновить из адресной книги',
+                    subtitle: _syncing
+                        ? 'Читаю книгу…'
+                        : 'Посмотреть, кто из знакомых уже в Tito',
+                    onTap: _syncing ? null : _syncBook,
+                  ),
+                ],
               ],
             ),
     );

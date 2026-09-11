@@ -138,13 +138,24 @@ func (s *Store) TouchUser(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (s *Store) SearchUsers(ctx context.Context, query string, limit int) ([]domain.User, error) {
+// SearchUsers ищет людей по имени, нику или номеру телефона.
+//
+// По номеру — только полное совпадение, а не подстрока. Подстрока
+// позволила бы перебрать базу по кускам номера и выяснить, кто в
+// мессенджере зарегистрирован; номер целиком человек и так знает, раз
+// вводит его. Так же устроено везде.
+//
+// Номер приходит как угодно: +7 900…, 8 900…, с пробелами и скобками.
+// Сравнивать надо с тем, что лежит в базе, а там он в виде одних цифр.
+func (s *Store) SearchUsers(ctx context.Context, query string, phone string, limit int) ([]domain.User, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT `+userColumns+`
 		FROM users
-		WHERE username ILIKE $1 OR display_name ILIKE $1
+		WHERE username ILIKE $1
+		   OR display_name ILIKE $1
+		   OR ($3 <> '' AND phone = $3)
 		ORDER BY display_name
-		LIMIT $2`, "%"+query+"%", limit)
+		LIMIT $2`, "%"+query+"%", limit, phone)
 	if err != nil {
 		return nil, fmt.Errorf("поиск пользователей: %w", err)
 	}
