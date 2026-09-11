@@ -7,7 +7,7 @@ import 'package:tito/core/providers.dart';
 import 'package:tito/data/api/session_store.dart';
 import 'package:tito/data/db/database.dart';
 import 'package:tito/data/ws/ws_client.dart';
-import 'package:tito/features/chats/chats_screen.dart';
+import 'package:tito/features/sidebar/sidebar_pane.dart';
 
 /// Из чего складывается строка в списке диалогов.
 ///
@@ -112,6 +112,9 @@ void main() {
 }
 
 /// Тот же случай, но на экране: именно там ошибка и жила.
+///
+/// Экран теперь боковая панель, а не отдельная вкладка — раскладка приведена
+/// к веб-клиенту. Проверки от этого не изменились: строка списка та же.
 void _screen() {
   const me = 'me';
 
@@ -156,7 +159,7 @@ void _screen() {
           (ref) => Stream.value(WsStatus.online),
         ),
       ],
-      child: const MaterialApp(home: ChatsScreen()),
+      child: const MaterialApp(home: Scaffold(body: SidebarPane())),
     );
   }
 

@@ -21,6 +21,38 @@ final databaseProvider = Provider((ref) {
   return db;
 });
 
+/// Что показывает боковая панель.
+enum SidebarView { chats, settings }
+
+/// Открытый чат.
+///
+/// Состояние, а не маршрут: на широком экране панель и переписка видны
+/// одновременно, и «открыть чат» не может быть переходом по стеку — иначе
+/// переписка накрыла бы панель, которая должна остаться на месте.
+final selectedChatProvider = StateProvider<String?>((ref) => null);
+
+/// Собеседник, с которым переписки ещё нет.
+///
+/// На сервере личный чат заводится первым сообщением, а показать пустую
+/// переписку надо раньше. Отдельно от `selectedChatProvider`, потому что
+/// это разные вещи: там чат, здесь человек.
+final draftPeerProvider = StateProvider<String?>((ref) => null);
+
+/// Панель показывает список или настройки — как в веб-клиенте, где
+/// настройки занимают её место, а не открываются поверх всего.
+final sidebarViewProvider = StateProvider<SidebarView>(
+  (ref) => SidebarView.chats,
+);
+
+/// Выбранная папка в панели.
+enum ChatFolder { all, personal, groups }
+
+final chatFolderProvider = StateProvider<ChatFolder>((ref) => ChatFolder.all);
+
+/// Строка поиска в панели. Фильтрует список на месте, а не открывает
+/// отдельный экран.
+final sidebarSearchProvider = StateProvider<String>((ref) => '');
+
 /// Ключи локальных настроек в одном месте: опечатка в строке иначе тихо
 /// создаёт вторую настройку вместо чтения первой.
 abstract final class PrefKeys {

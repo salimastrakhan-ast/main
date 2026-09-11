@@ -22,19 +22,52 @@ import '../chat_info/chat_info_screen.dart';
 /// сообщением, а не открытием экрана. Поэтому сюда передаётся собеседник, а
 /// экран сам подхватит чат, как только тот появится.
 void openChatWith(BuildContext context, WidgetRef ref, User person) {
-  Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      builder: (_) => ChatScreen(peerId: person.id, title: person.displayName),
-    ),
-  );
+  // Если переписка уже была, открываем её, а не заводим черновик рядом с
+  // ней: иначе получилось бы два места для одного человека.
+  final existing = ref.read(privateChatWithProvider(person.id)).value;
+  ref.read(selectedChatProvider.notifier).state = existing;
+  ref.read(draftPeerProvider.notifier).state = existing == null
+      ? person.id
+      : null;
+  // Возвращаемся к оболочке: выбранное покажет она сама.
+  Navigator.of(context).popUntil((route) => route.isFirst);
+}
+
+/// Переписка внутри оболочки: чат выбран в панели, а не открыт маршрутом.
+///
+/// Отдельное имя, потому что и ведёт себя иначе: на узком экране стрелка
+/// «назад» снимает выбор, а не закрывает маршрут, которого нет.
+class ChatPane extends ConsumerWidget {
+  const ChatPane({this.chatId, this.peerId, super.key})
+    : assert(chatId != null || peerId != null, 'нужен чат или собеседник');
+
+  final String? chatId;
+  final String? peerId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final wide = MediaQuery.sizeOf(context).width >= 768;
+    return ChatScreen(
+      chatId: chatId,
+      peerId: peerId,
+      // На широком экране назад некуда: панель и так рядом.
+      onBack: wide
+          ? null
+          : () {
+              ref.read(selectedChatProvider.notifier).state = null;
+              ref.read(draftPeerProvider.notifier).state = null;
+            },
+    );
+  }
 }
 
 /// Переписка.
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({
-    required this.title,
+    this.title,
     this.chatId,
     this.peerId,
+    this.onBack,
     super.key,
   }) : assert(
          chatId != null || peerId != null,
@@ -47,7 +80,11 @@ class ChatScreen extends ConsumerStatefulWidget {
   /// Собеседник — когда чата ещё нет.
   final String? peerId;
 
-  final String title;
+  /// Заголовок, когда он известен заранее. Иначе берётся из самого чата.
+  final String? title;
+
+  /// Чем заканчивается «назад». Пусто — обычный возврат по маршруту.
+  final VoidCallback? onBack;
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
@@ -179,15 +216,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ? users[widget.peerId]
         : (chatId == null ? null : ref.watch(chatPeersProvider).value?[chatId]);
 
+    // «Избранное» — личный чат без собеседника: участник в нём один.
+    final isSaved = !isGroup && chat != null && peer == null;
+    final title = widget.title ??
+        (isGroup
+            ? (chat?.title.isNotEmpty ?? false ? chat!.title : 'Группа')
+            : isSaved
+            ? 'Избранное'
+            : peer?.displayName ?? 'Чат');
+
     return Scaffold(
       // Лента уезжает под шапку и под поле ввода: иначе при прокрутке
       // содержимое обрывается ровно по краю панели.
       extendBodyBehindAppBar: true,
       appBar: GlassAppBar(
+        leading: widget.onBack == null
+            ? null
+            : IconButton(
+                icon: const Icon(TitoIcons.back),
+                tooltip: 'К списку',
+                onPressed: widget.onBack,
+              ),
         title: _ChatTitle(
-          id: chat?.id ?? peer?.id ?? widget.title,
-          name: widget.title,
+          id: chat?.id ?? peer?.id ?? title,
+          name: title,
           isGroup: isGroup,
+          isSaved: isSaved,
           peer: peer,
           typing: typing.isNotEmpty,
           onTap: chatId == null
@@ -265,6 +319,7 @@ class _ChatTitle extends StatelessWidget {
     required this.id,
     required this.name,
     required this.isGroup,
+    required this.isSaved,
     required this.peer,
     required this.typing,
     required this.onTap,
@@ -273,6 +328,7 @@ class _ChatTitle extends StatelessWidget {
   final String id;
   final String name;
   final bool isGroup;
+  final bool isSaved;
   final User? peer;
   final bool typing;
   final VoidCallback? onTap;
@@ -283,6 +339,7 @@ class _ChatTitle extends StatelessWidget {
 
     final status = switch (true) {
       _ when typing => ('печатает…', theme.colorScheme.primary),
+      _ when isSaved => ('Заметки себе', theme.colorScheme.onSurfaceVariant),
       _ when isGroup => ('Группа', theme.colorScheme.onSurfaceVariant),
       _ when peer?.online ?? false => ('в сети', Tokens.online),
       _ => ('не в сети', theme.colorScheme.onSurfaceVariant),
@@ -297,7 +354,11 @@ class _ChatTitle extends StatelessWidget {
             name: name,
             radius: 17,
             online: peer?.online ?? false,
-            icon: isGroup ? TitoIcons.contacts : null,
+            icon: isGroup
+                ? TitoIcons.contacts
+                : isSaved
+                ? TitoIcons.star
+                : null,
           ),
           const SizedBox(width: Tokens.space3),
           Expanded(

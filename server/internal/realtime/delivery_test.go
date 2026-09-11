@@ -259,6 +259,42 @@ func TestPrivateChatIsNotDuplicated(t *testing.T) {
 	}
 }
 
+// «Избранное» — это личный чат с самим собой: одно место, куда можно
+// отложить ссылку или заметку, и оно синхронизируется между устройствами
+// как обычная переписка.
+func TestSavedMessagesIsChatWithSelf(t *testing.T) {
+	e := newEnv(t)
+	anya, anyaToken := e.newUser("79990000001")
+
+	conn := e.connect(anyaToken)
+	defer conn.close()
+
+	first := decode[ws.MessageEventData](t, conn.call(ws.CmdMessageSend, ws.MessageSendData{
+		PeerID: anya.ID, Text: "не забыть", ClientMsgID: uuid.New(),
+	}))
+	second := decode[ws.MessageEventData](t, conn.call(ws.CmdMessageSend, ws.MessageSendData{
+		PeerID: anya.ID, Text: "и это тоже", ClientMsgID: uuid.New(),
+	}))
+
+	if first.Message.ChatID != second.Message.ChatID {
+		t.Errorf("на второе сообщение завелось второе «Избранное»: %s и %s",
+			first.Message.ChatID, second.Message.ChatID)
+	}
+	if second.Message.Seq != 2 {
+		t.Errorf("второе сообщение получило seq %d, ожидался 2", second.Message.Seq)
+	}
+
+	// Участник ровно один: вторая строка с тем же ключом упёрлась бы в
+	// первичный ключ, и создание чата упало бы.
+	members, err := e.store.MemberIDs(context.Background(), first.Message.ChatID)
+	if err != nil {
+		t.Fatalf("участники «Избранного»: %v", err)
+	}
+	if len(members) != 1 || members[0] != anya.ID {
+		t.Errorf("в «Избранном» участники %v, ожидался один — %s", members, anya.ID)
+	}
+}
+
 // В чужой чат писать нельзя, даже зная его идентификатор.
 func TestOutsiderCannotWriteToChat(t *testing.T) {
 	e := newEnv(t)

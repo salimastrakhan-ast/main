@@ -39,6 +39,17 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
     super.dispose();
   }
 
+  /// «Избранное» — личный чат с самим собой. Сервер заводит его первым
+  /// сообщением, как любой другой личный чат.
+  void _openSaved() {
+    final me = ref.read(sessionProvider).value?.userId;
+    if (me == null) return;
+    final existing = ref.read(privateChatWithProvider(me)).value;
+    ref.read(selectedChatProvider.notifier).state = existing;
+    ref.read(draftPeerProvider.notifier).state = existing == null ? me : null;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
   Future<void> _createGroup() async {
     if (_picked.isEmpty) return;
     final title = await _askTitle();
@@ -135,13 +146,20 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
             )
           : ListView(
               children: [
-                if (!_group)
+                if (!_group) ...[
+                  SettingsRow(
+                    icon: TitoIcons.star,
+                    title: 'Избранное',
+                    subtitle: 'Заметки себе: ссылки, черновики, напоминания',
+                    onTap: _openSaved,
+                  ),
                   SettingsRow(
                     icon: TitoIcons.contacts,
                     title: 'Создать группу',
                     subtitle: 'Несколько человек в одной переписке',
                     onTap: () => setState(() => _group = true),
                   ),
+                ],
                 const RowDivider(indent: 0),
                 for (final person in shown)
                   _PersonRow(

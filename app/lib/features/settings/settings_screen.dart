@@ -23,9 +23,16 @@ class SettingsScreen extends ConsumerWidget {
     final mode = ref.watch(themeModeProvider).value ?? ThemeMode.system;
 
     return Scaffold(
-      appBar: const GlassAppBar(
-        title: Text('Настройки'),
-        leading: SizedBox.shrink(),
+      appBar: GlassAppBar(
+        title: const Text('Настройки'),
+        // Панель одна: настройки занимают её место и стрелкой возвращают
+        // список, а не закрывают маршрут — маршрута здесь нет.
+        leading: IconButton(
+          icon: const Icon(TitoIcons.back),
+          tooltip: 'К диалогам',
+          onPressed: () =>
+              ref.read(sidebarViewProvider.notifier).state = SidebarView.chats,
+        ),
       ),
       body: ListView(
         children: [
@@ -154,6 +161,10 @@ class SettingsScreen extends ConsumerWidget {
     await ref.read(apiProvider).logout();
     // Локальные данные стираем: устройство может быть общим.
     await ref.read(databaseProvider).clearAll();
+    // И выбранное в оболочке: иначе после нового входа откроется чужой чат.
+    ref.read(selectedChatProvider.notifier).state = null;
+    ref.read(draftPeerProvider.notifier).state = null;
+    ref.read(sidebarViewProvider.notifier).state = SidebarView.chats;
     ref.invalidate(sessionProvider);
     if (context.mounted) {
       Navigator.of(context).popUntil((route) => route.isFirst);

@@ -39,11 +39,15 @@ func scanChat(row pgx.Row) (domain.Chat, error) {
 
 // EnsurePrivateChat возвращает личный чат двух людей, создавая его при первом
 // сообщении. Отдельной кнопки «создать диалог» в мессенджере нет.
+// EnsurePrivateChat возвращает личный чат двоих, создавая его при первом
+// сообщении.
+//
+// Чат с самим собой — это «Избранное»: то же самое, но участник один.
+// Отдельного типа чата для него не заводим: он ведёт себя как личный во
+// всём — те же номера сообщений, та же синхронизация, та же история, — и
+// отличается лишь тем, что собеседник совпадает с отправителем. Клиент
+// узнаёт его по единственному участнику.
 func (s *Store) EnsurePrivateChat(ctx context.Context, a, b uuid.UUID) (domain.Chat, error) {
-	if a == b {
-		// Чат с самим собой — это «Избранное», отдельная механика; пока нет.
-		return domain.Chat{}, fmt.Errorf("%w: нельзя создать личный чат с самим собой", ErrConflict)
-	}
 	key := privateKey(a, b)
 
 	var chat domain.Chat
@@ -65,9 +69,17 @@ func (s *Store) EnsurePrivateChat(ctx context.Context, a, b uuid.UUID) (domain.C
 			return err
 		}
 
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO chat_members (chat_id, user_id, role)
-			VALUES ($1, $2, 'member'), ($1, $3, 'member')`, c.ID, a, b); err != nil {
+		// В «Избранном» участник один: вторая строка с тем же ключом упёрлась
+		// бы в первичный ключ таблицы.
+		members := [][]any{{c.ID, a, "member"}}
+		if a != b {
+			members = append(members, []any{c.ID, b, "member"})
+		}
+		if _, err := tx.CopyFrom(ctx,
+			pgx.Identifier{"chat_members"},
+			[]string{"chat_id", "user_id", "role"},
+			pgx.CopyFromRows(members),
+		); err != nil {
 			if isForeignKeyViolation(err) {
 				return fmt.Errorf("%w: собеседник не существует", ErrNotFound)
 			}

@@ -5,7 +5,6 @@ import '../../core/providers.dart';
 import '../../ui/icons.dart';
 import '../../ui/theme.dart';
 import '../../ui/tokens.dart';
-import '../auth/phone_screen.dart';
 
 /// Первый экран при первом запуске.
 ///
@@ -14,14 +13,15 @@ import '../auth/phone_screen.dart';
 class WelcomeScreen extends ConsumerWidget {
   const WelcomeScreen({super.key});
 
-  Future<void> _continue(WidgetRef ref, BuildContext context) async {
-    await ref
-        .read(databaseProvider)
-        .setPref(PrefKeys.welcomeSeen, 'true');
-    if (!context.mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(builder: (_) => const PhoneScreen()),
-    );
+  /// Отмечает приветствие показанным — и всё.
+  ///
+  /// Никакой навигации: развилка в main.dart подписана на эту же настройку
+  /// и сама поставит на её место экран входа. Раньше здесь стоял
+  /// pushReplacement, и он подменял собой корневой маршрут — после ввода
+  /// кода приложению было некуда возвращаться, и человек оставался на
+  /// экране номера, хотя вход уже прошёл.
+  Future<void> _continue(WidgetRef ref) {
+    return ref.read(databaseProvider).setPref(PrefKeys.welcomeSeen, 'true');
   }
 
   @override
@@ -68,13 +68,13 @@ class WelcomeScreen extends ConsumerWidget {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: () => _continue(ref, context),
+                  onPressed: () => _continue(ref),
                   child: const Text('Начать'),
                 ),
               ),
               const SizedBox(height: Tokens.space3),
               TextButton(
-                onPressed: () => _continue(ref, context),
+                onPressed: () => _continue(ref),
                 child: const Text('У меня уже есть аккаунт'),
               ),
               const SizedBox(height: Tokens.space5),

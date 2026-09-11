@@ -89,25 +89,21 @@ async function tapAt(app, x, y) {
 
 /// Нажимает кнопку настоящим указателем по её месту в дереве доступности.
 ///
-/// Берётся самый маленький узел с нужным текстом. Просто «последний
-/// подходящий» не годится: дерево вложенное, и текст кнопки есть и у
-/// контейнера всего экрана — клик по его середине попадал в соседний
-/// элемент, а однажды увёл назад с экрана кода на экран номера.
+/// Узел ищется по точному совпадению текста, а не по вхождению: дерево
+/// вложенное, и подпись кнопки есть заодно у контейнера всего экрана.
+/// Раньше клик уходил в его середину и попадал в соседний элемент — а
+/// однажды увёл назад с экрана кода на экран номера.
 async function pressButton(app, label) {
-  const nodes = app.page.locator('flt-semantics', { hasText: label });
-  const count = await nodes.count();
+  const node = app.page
+    .locator('flt-semantics')
+    .filter({ hasText: new RegExp(`^\\s*${label}\\s*$`) })
+    .last();
 
-  let target = null;
-  for (let i = 0; i < count; i++) {
-    const box = await nodes.nth(i).boundingBox();
-    if (!box || box.width === 0 || box.height === 0) continue;
-    if (!target || box.width * box.height < target.width * target.height) {
-      target = box;
-    }
+  const box = await node.boundingBox();
+  if (!box || box.height < 20) {
+    throw new Error(`кнопка «${label}» не найдена или схлопнута: ${JSON.stringify(box)}`);
   }
-  if (!target) throw new Error(`не нашёл кнопку «${label}»`);
-
-  await app.page.mouse.click(target.x + target.width / 2, target.y + target.height / 2);
+  await app.page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await app.page.waitForTimeout(600);
 }
 
@@ -171,8 +167,10 @@ await login(anya, ANYA);
 await anya.page.screenshot({ path: `${OUT}/02-список-чатов.png` });
 
 const afterLogin = await screenText(anya);
-check('после входа открылся список диалогов',
-  afterLogin.includes('Профиль'), afterLogin.slice(0, 120));
+// Раскладка теперь как в веб-клиенте: панель с папками вместо вкладок.
+check('после входа открылась панель диалогов',
+  afterLogin.includes('Tito') && afterLogin.includes('Группы'),
+  afterLogin.slice(0, 120));
 
 // --- Боря пишет Ане ---
 const borya = await apiLogin(BORYA);

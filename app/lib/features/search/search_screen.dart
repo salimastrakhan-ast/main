@@ -17,7 +17,11 @@ import '../chat/chat_screen.dart';
 /// на устройстве. Отсюда мгновенный ответ и работа без сети — и отсюда же
 /// граница: то, что ещё не синхронизировалось, не найдётся.
 class SearchScreen extends ConsumerStatefulWidget {
-  const SearchScreen({super.key});
+  const SearchScreen({this.initial = '', super.key});
+
+  /// Запрос, с которым экран открыли. Панель уже что-то искала, и заставлять
+  /// набирать это второй раз незачем.
+  final String initial;
 
   @override
   ConsumerState<SearchScreen> createState() => _SearchScreenState();
@@ -29,6 +33,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _query = TextEditingController();
   int _tab = 0;
   List<Message> _messages = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initial.isNotEmpty) {
+      _query.text = widget.initial;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _onQuery(widget.initial));
+    }
+  }
 
   @override
   void dispose() {
