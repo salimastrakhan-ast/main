@@ -42,29 +42,39 @@ export function NewChatView() {
     ? book.filter((c) => c.name.toLowerCase().includes(needle))
     : book;
 
-  // Поиск на сервере — только когда в книге не нашлось: в браузере книга
-  // часто пуста вовсе, её заполняет телефон.
+  // Поиск на сервере идёт всегда, а не только когда книга пуста.
+  //
+  // Раньше он запускался, лишь если в книге не нашлось ни одного совпадения.
+  // Из-за этого человек, которого в книге нет, оставался ненайденным, стоило
+  // набранным буквам случайно совпасть с чьим-то именем: один знакомый
+  // «Сал» закрывал собой всех остальных.
   useEffect(() => {
-    if (needle.length < 2 || fromBook.length > 0) {
+    if (needle.length < 2) {
       setFound([]);
+      setSearching(false);
       return;
     }
     let live = true;
     setSearching(true);
     const timer = window.setTimeout(async () => {
-      const people = await findPeople(needle);
-      if (!live) return;
-      setFound(people);
-      setSearching(false);
+      try {
+        const people = await findPeople(needle);
+        if (live) setFound(people);
+      } finally {
+        if (live) setSearching(false);
+      }
     }, 350);
     return () => {
       live = false;
       window.clearTimeout(timer);
-      window.clearTimeout(timer);
     };
-  }, [needle, fromBook.length, findPeople]);
+  }, [needle, findPeople]);
 
-  const people = fromBook.length ? fromBook : found;
+  // Нашедшиеся на сервере показываются отдельно и без повторов: человек из
+  // книги не должен появиться в списке дважды.
+  const known = new Set(fromBook.map((c) => c.id));
+  const strangers = found.filter((c) => !known.has(c.id));
+  const people = [...fromBook, ...strangers];
   const picking = group !== null;
 
   const toggle = (id: string) =>
@@ -87,6 +97,56 @@ export function NewChatView() {
       setBusy(false);
     }
   };
+
+  // Не компоненты, а функции отрисовки: объявленный внутри компонент React
+  // считает новым типом на каждый рендер и перемонтирует список при каждом
+  // нажатии клавиши. Здесь же просто возвращается разметка.
+  const section = (label: string) => (
+    <p className="px-2 pt-3 pb-1 text-xs font-semibold text-muted">{label}</p>
+  );
+
+  const peopleList = (rows: Contact[]) => (
+    <ul>
+      {rows.map((person) => {
+        const chosen = group?.includes(person.id) ?? false;
+        return (
+          <li key={person.id}>
+            <button
+              type="button"
+              onClick={() =>
+                picking ? toggle(person.id) : startChatWith(person.id)
+              }
+              className={cn(
+                "flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors duration-150",
+                chosen ? "bg-elevated" : "hover:bg-surface",
+              )}
+            >
+              <UserAvatar
+                src={person.avatar}
+                initials={person.initials}
+                name={person.name}
+                online={person.online}
+                size="sm"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium">
+                  {person.name}
+                </span>
+                {person.about ? (
+                  <span className="block truncate text-xs text-muted">
+                    {person.about}
+                  </span>
+                ) : null}
+              </span>
+              {chosen ? (
+                <Check className="size-4 shrink-0 text-accent" />
+              ) : null}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar">
@@ -149,44 +209,18 @@ export function NewChatView() {
                 : t(uiLang, "noContacts")}
           </p>
         ) : (
-          <ul>
-            {people.map((person) => {
-              const chosen = group?.includes(person.id) ?? false;
-              return (
-                <li key={person.id}>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      picking ? toggle(person.id) : startChatWith(person.id)
-                    }
-                    className={cn(
-                      "flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors duration-150",
-                      chosen ? "bg-elevated" : "hover:bg-surface",
-                    )}
-                  >
-                    <UserAvatar
-                      src={person.avatar}
-                      initials={person.initials}
-                      name={person.name}
-                      online={person.online}
-                      size="sm"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">
-                        {person.name}
-                      </span>
-                      {person.about ? (
-                        <span className="block truncate text-xs text-muted">
-                          {person.about}
-                        </span>
-                      ) : null}
-                    </span>
-                    {chosen ? <Check className="size-4 shrink-0 text-accent" /> : null}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <>
+            {strangers.length > 0 && fromBook.length > 0
+              ? section(t(uiLang, "inBook"))
+              : null}
+            {peopleList(fromBook)}
+            {strangers.length > 0 ? (
+              <>
+                {section(t(uiLang, "onServer"))}
+                {peopleList(strangers)}
+              </>
+            ) : null}
+          </>
         )}
       </div>
 

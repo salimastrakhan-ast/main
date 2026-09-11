@@ -118,4 +118,4 @@ web-build:
 	cd web && npm install --silent && VITE_API_BASE=$(or $(API),http://localhost:8080) npm run build
 
 web-test:
-	cd web && npm install --silent && npm run typecheck
+	cd web && npm install --silent && npm run typecheck && npm test

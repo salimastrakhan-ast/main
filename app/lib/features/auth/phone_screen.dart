@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/phone.dart';
 import '../../core/providers.dart';
 import '../../ui/icons.dart';
 import '../../ui/theme.dart';
@@ -17,7 +17,9 @@ class PhoneScreen extends ConsumerStatefulWidget {
 }
 
 class _PhoneScreenState extends ConsumerState<PhoneScreen> {
-  final _controller = TextEditingController();
+  // Поле начинается с кода страны: человек в России набирает номер, а не
+  // выбирает страну, и первое, что он вводит, — своя девятка.
+  final _controller = TextEditingController(text: '+7');
   bool _busy = false;
   String? _error;
 
@@ -27,10 +29,7 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
     super.dispose();
   }
 
-  /// Сервер сам приводит номер к единому виду, поэтому здесь достаточно
-  /// проверить, что цифр набралось на российский номер.
-  bool get _looksComplete =>
-      _controller.text.replaceAll(RegExp(r'\D'), '').length >= 10;
+  bool get _looksComplete => phoneIsComplete(_controller.text);
 
   Future<void> _submit() async {
     setState(() {
@@ -38,7 +37,7 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
       _error = null;
     });
     try {
-      final phone = _controller.text;
+      final phone = phoneForServer(_controller.text);
       final result = await ref.read(apiProvider).requestCode(phone);
       if (!mounted) return;
       await Navigator.of(context).push(
@@ -113,12 +112,9 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                     controller: _controller,
                     autofocus: true,
                     keyboardType: TextInputType.phone,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[\d+\-() ]')),
-                      LengthLimitingTextInputFormatter(20),
-                    ],
+                    inputFormatters: const [RuPhoneFormatter()],
                     decoration: const InputDecoration(
-                      hintText: '+7 999 123-45-67',
+                      hintText: '+7 (999) 123-45-67',
                       prefixIcon: Icon(TitoIcons.phone, size: 20),
                     ),
                     onChanged: (_) => setState(() {}),

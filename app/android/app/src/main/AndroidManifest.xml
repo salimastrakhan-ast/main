@@ -1,4 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Доступ в сеть. Шаблон Flutter объявляет его только в debug- и
+         profile-манифестах, поэтому релизная сборка без этой строки собирается
+         молча и не открывает ни одного соединения: выглядит это как «сервер не
+         отвечает», а не как отсутствующее разрешение. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
     <!-- Адресная книга: по ней ищутся знакомые, уже зарегистрированные в
          Tito. Наружу уходят только номера; имена остаются на устройстве.
          Спрашивается не при запуске, а когда человек открывает «Новый чат»:
@@ -6,8 +13,19 @@
          неохотно и потом жалеют. -->
     <uses-permission android:name="android.permission.READ_CONTACTS"/>
 
-    <!-- Микрофон: голосовые сообщения. -->
+    <!-- Микрофон: голосовые сообщения и звонки. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+
+    <!-- Звонки. MODIFY_AUDIO_SETTINGS переключает вывод на разговорный
+         динамик, BLUETOOTH_CONNECT — на гарнитуру. Служба переднего плана
+         держит разговор живым, когда человек свернул приложение: с Android 14
+         ей требуется явный тип, иначе система убивает её посреди звонка. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+
     <application
         android:label="Tito"
         android:name="${applicationName}"

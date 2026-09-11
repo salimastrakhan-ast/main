@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/phone.dart';
 import '../../core/providers.dart';
 import '../../data/api/api_client.dart';
 import '../../ui/theme.dart';
@@ -82,7 +83,7 @@ class _CodeScreenState extends ConsumerState<CodeScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Отправили на +${widget.phone}',
+                    'Отправили на ${formatPhone(widget.phone)}',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,

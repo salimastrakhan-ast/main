@@ -1,8 +1,14 @@
 import { Loader2, MessageCircle, Phone } from "lucide-react";
-import { useState } from "react";
+import { type ChangeEvent, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, ApiError } from "@/lib/api";
+import {
+  editPhone,
+  formatPhone,
+  phoneForServer,
+  phoneIsComplete,
+} from "@/lib/phone";
 import { cn } from "@/lib/utils";
 
 /// Вход по номеру телефона.
@@ -11,7 +17,28 @@ import { cn } from "@/lib/utils";
 /// создаёт аккаунт. Меньше шагов, и нечего забывать, кроме номера.
 export function SignIn({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState<"phone" | "code">("phone");
+  // Поле начинается с кода страны: человек в России набирает номер, а не
+  // выбирает страну, и первое, что он вводит, — своя девятка.
   const [phone, setPhone] = useState("+7");
+  const phoneRef = useRef<HTMLInputElement>(null);
+
+  // Позиция курсора, которую надо восстановить после форматирования. В
+  // onChange её ставить рано: в DOM ещё старое значение, и браузер сдвинет
+  // курсор сам, как только React его перерисует.
+  const caretRef = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const input = phoneRef.current;
+    if (input && caretRef.current !== null) {
+      input.setSelectionRange(caretRef.current, caretRef.current);
+      caretRef.current = null;
+    }
+  }, [phone]);
+
+  function onPhoneChange(e: ChangeEvent<HTMLInputElement>) {
+    const edit = editPhone(phone, e.target.value, e.target.selectionStart ?? 0);
+    caretRef.current = edit.caret;
+    setPhone(edit.text);
+  }
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +48,7 @@ export function SignIn({ onDone }: { onDone: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      const result = await api.requestCode(phone);
+      const result = await api.requestCode(phoneForServer(phone));
       // На тестовом сервере код приходит в ответе: почтальона нет, а войти
       // надо. В бою поля просто не будет.
       const devCode = result.dev_code as string | undefined;
@@ -41,7 +68,7 @@ export function SignIn({ onDone }: { onDone: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      await api.verify(phone, code);
+      await api.verify(phoneForServer(phone), code);
       onDone();
     } catch (e) {
       setError(messageOf(e));
@@ -63,7 +90,7 @@ export function SignIn({ onDone }: { onDone: () => void }) {
           <p className="mt-2 text-sm text-muted">
             {step === "phone"
               ? "Введите номер телефона"
-              : `Код отправлен на ${phone}`}
+              : `Код отправлен на ${formatPhone(phone)}`}
           </p>
         </div>
 
@@ -72,12 +99,13 @@ export function SignIn({ onDone }: { onDone: () => void }) {
             <label className="relative block">
               <Phone className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-subtle" />
               <Input
+                ref={phoneRef}
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={onPhoneChange}
                 onKeyDown={(e) => e.key === "Enter" && void requestCode()}
                 inputMode="tel"
                 autoFocus
-                placeholder="+7 999 123-45-67"
+                placeholder="+7 (999) 123-45-67"
                 className="pl-9"
                 aria-label="Номер телефона"
               />
@@ -105,7 +133,10 @@ export function SignIn({ onDone }: { onDone: () => void }) {
 
           <Button
             className="w-full"
-            disabled={busy || (step === "phone" ? phone.length < 11 : code.length < 4)}
+            disabled={
+              busy ||
+              (step === "phone" ? !phoneIsComplete(phone) : code.length < 4)
+            }
             onClick={() => void (step === "phone" ? requestCode() : verify())}
           >
             <Loader2 className={cn("size-4 animate-spin", !busy && "hidden")} />
