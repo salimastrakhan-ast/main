@@ -16,7 +16,7 @@ void main() {
       expect(Tokens.danger, const Color(0xFFD45B5B), reason: '--color-danger');
     });
 
-    test('поверхности тёмной темы', () {
+    test('поверхности', () {
       expect(Tokens.bg, const Color(0xFF0B1117), reason: '--color-bg');
       expect(Tokens.sidebar, const Color(0xFF121A22), reason: '--color-sidebar');
       expect(Tokens.surface, const Color(0xFF1A242E), reason: '--color-surface');
@@ -67,50 +67,71 @@ void main() {
     });
 
     test('окна и панели без подъёма', () {
-      for (final theme in [TitoTheme.light(), TitoTheme.dark()]) {
-        expect(theme.dialogTheme.elevation, 0);
-        expect(theme.bottomSheetTheme.elevation, 0);
-        expect(theme.appBarTheme.elevation, 0);
-        expect(theme.appBarTheme.scrolledUnderElevation, 0);
-      }
+      final theme = TitoTheme.dark();
+      expect(theme.dialogTheme.elevation, 0);
+      expect(theme.bottomSheetTheme.elevation, 0);
+      expect(theme.appBarTheme.elevation, 0);
+      expect(theme.appBarTheme.scrolledUnderElevation, 0);
+    });
+
+    test('волосяная линия — белая в восемь сотых', () {
+      // `--shadow-border: 0 0 0 1px rgb(255 255 255 / 0.08)`. Раньше пузыри
+      // обводились цветом границы — это другой, более тёмный оттенок.
+      expect(Tokens.hairline, const Color(0x14FFFFFF));
+      expect(Tokens.shadowBorder.single.color, Tokens.hairline);
     });
   });
 
   group('Кнопки', () {
     test('наведение и нажатие берут их же цвета', () {
-      final style = TitoTheme.light().filledButtonTheme.style!;
+      // В источнике и то и другое — `bg-accent/90`.
+      final style = TitoTheme.dark().filledButtonTheme.style!;
       final bg = style.backgroundColor!;
       expect(bg.resolve({}), Tokens.accent);
       expect(bg.resolve({WidgetState.hovered}), Tokens.accentHover);
-      expect(bg.resolve({WidgetState.pressed}), Tokens.accentInk);
+      expect(bg.resolve({WidgetState.pressed}), Tokens.accentHover);
     });
 
     test('скругление кнопок — радиус панелей', () {
-      final shape = TitoTheme.light().filledButtonTheme.style!.shape!
+      final shape = TitoTheme.dark().filledButtonTheme.style!.shape!
           .resolve({}) as RoundedRectangleBorder;
       expect((shape.borderRadius as BorderRadius).topLeft.x, Tokens.radiusShell);
     });
   });
 
   group('Шрифты', () {
-    // В вебе это Manrope; во Flutter-сборке лежит Roboto — он же системный
-    // шрифт Android, и тянуть второе семейство ради совпадения начертаний
-    // значит добавить мегабайт к каждой установке.
-    test('одно семейство на весь интерфейс', () {
-      for (final theme in [TitoTheme.light(), TitoTheme.dark()]) {
-        final families = {
-          theme.textTheme.headlineMedium?.fontFamily,
-          theme.textTheme.bodyMedium?.fontFamily,
-          theme.textTheme.labelSmall?.fontFamily,
-        }..remove(null);
-        expect(families.length, lessThanOrEqualTo(1),
-            reason: 'в теме больше одного шрифта: $families');
-      }
+    test('текст интерфейса — тот же Manrope, что в вебе', () {
+      expect(TitoTheme.dark().textTheme.bodyMedium?.fontFamily, 'Manrope');
+    });
+
+    test('одно семейство на весь текст интерфейса', () {
+      final theme = TitoTheme.dark();
+      final families = {
+        theme.textTheme.headlineMedium?.fontFamily,
+        theme.textTheme.bodyMedium?.fontFamily,
+        theme.textTheme.labelSmall?.fontFamily,
+      }..remove(null);
+      expect(families.length, lessThanOrEqualTo(1),
+          reason: 'в теме больше одного шрифта: $families');
+    });
+
+    test('название приложения набирается вторым, как `--font-display`', () {
+      expect(TitoTheme.display, 'Unbounded');
     });
 
     test('цифры одной ширины у меток', () {
-      expect(TitoTheme.light().textTheme.labelSmall?.fontFeatures,
+      expect(TitoTheme.dark().textTheme.labelSmall?.fontFeatures,
           TitoTheme.tabularFigures);
+    });
+  });
+
+  group('Полотно переписки', () {
+    // `.chat-canvas` в источнике: подсвет акцентом и точечная сетка.
+    test('доли подсвета и сетки взяты из источника', () {
+      expect(Tokens.canvasGlow, 0.05);
+      expect(Tokens.canvasGlowRadius, 0.38);
+      expect(Tokens.canvasDot, 0.05);
+      expect(Tokens.canvasDotStep, 24.0);
     });
   });
 }

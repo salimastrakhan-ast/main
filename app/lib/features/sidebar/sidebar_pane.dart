@@ -8,6 +8,7 @@ import '../../data/ws/ws_client.dart';
 import '../../ui/icons.dart';
 import '../../ui/parts.dart';
 import '../../ui/state_view.dart';
+import '../../ui/theme.dart';
 import '../../ui/tokens.dart';
 import '../chats/new_chat_screen.dart';
 import '../search/search_screen.dart';
@@ -214,7 +215,14 @@ class _Header extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: Tokens.space2),
-                Text('Tito', style: theme.textTheme.titleMedium),
+                Text(
+                  'Tito',
+                  // Название — вторым шрифтом, как `font-display` в
+                  // источнике: везде Manrope, здесь Unbounded.
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontFamily: TitoTheme.display,
+                  ),
+                ),
               ],
             ),
           ),
@@ -335,6 +343,7 @@ class _ChatTile extends ConsumerWidget {
         id: peer?.id ?? chat.id,
         name: title,
         online: peer?.online ?? false,
+        saved: _isSaved,
         icon: _isGroup ? TitoIcons.contacts : null,
       ),
       title: Text(

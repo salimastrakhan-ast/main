@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../ui/icons.dart';
-import '../../ui/theme.dart';
 import '../../ui/tokens.dart';
 
 /// Первый экран при первом запуске.
@@ -42,10 +41,10 @@ class WelcomeScreen extends ConsumerWidget {
                   color: theme.colorScheme.primary,
                   borderRadius: BorderRadius.circular(30),
                 ),
-                child: const Icon(
+                child: Icon(
                   TitoIcons.chat,
                   size: 48,
-                  color: TitoTheme.onAccent,
+                  color: theme.colorScheme.onPrimary,
                 ),
               ),
               const SizedBox(height: Tokens.space8),

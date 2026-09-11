@@ -16,58 +16,79 @@ void main() {
     // клавиатурой перестаёт понимать, где находится. Проверяем, что цвета
     // кольца и заливки различаются.
     test('на главной кнопке отличается от её заливки', () {
-      for (final theme in [TitoTheme.light(), TitoTheme.dark()]) {
-        final style = theme.filledButtonTheme.style;
-        final focused = ringOf(style, {WidgetState.focused});
-        final fill = fillOf(style, {});
+      final style = TitoTheme.dark().filledButtonTheme.style;
+      final focused = ringOf(style, {WidgetState.focused});
+      final fill = fillOf(style, {});
 
-        expect(focused, isNotNull, reason: 'кольцо фокуса не задано');
-        expect(focused!.width, greaterThanOrEqualTo(2),
-            reason: 'тонкое кольцо незаметно');
-        expect(focused.color, isNot(equals(fill)),
-            reason: 'кольцо сливается с заливкой кнопки');
-      }
+      expect(focused, isNotNull, reason: 'кольцо фокуса не задано');
+      expect(focused!.width, greaterThanOrEqualTo(2),
+          reason: 'тонкое кольцо незаметно');
+      expect(focused.color, isNot(equals(fill)),
+          reason: 'кольцо сливается с заливкой кнопки');
     });
 
     test('на вторичной кнопке заметнее обычного контура', () {
-      for (final theme in [TitoTheme.light(), TitoTheme.dark()]) {
-        final style = theme.outlinedButtonTheme.style;
-        final rest = ringOf(style, {});
-        final focused = ringOf(style, {WidgetState.focused});
+      final style = TitoTheme.dark().outlinedButtonTheme.style;
+      final rest = ringOf(style, {});
+      final focused = ringOf(style, {WidgetState.focused});
 
-        expect(focused!.color, isNot(equals(rest!.color)),
-            reason: 'фокус не отличается от покоя');
-        expect(focused.width, greaterThan(rest.width));
-      }
+      expect(focused!.color, isNot(equals(rest!.color)),
+          reason: 'фокус не отличается от покоя');
+      expect(focused.width, greaterThan(rest.width));
+    });
+
+    test('цвет кольца — тот же, что у источника', () {
+      // `--color-ring` в styles.css это сам акцент, а не затемнённый: тот
+      // был выведен ради светлой темы, которой в источнике нет.
+      final border = TitoTheme.dark()
+          .inputDecorationTheme
+          .focusedBorder as OutlineInputBorder;
+      expect(border.borderSide.color, Tokens.ring);
+      expect(Tokens.ring, Tokens.accent);
     });
 
     test('заблокированная кнопка выглядит иначе активной', () {
-      final theme = TitoTheme.light();
-      final style = theme.filledButtonTheme.style;
-      expect(fillOf(style, {WidgetState.disabled}), isNot(equals(fillOf(style, {}))));
+      final style = TitoTheme.dark().filledButtonTheme.style;
+      expect(fillOf(style, {WidgetState.disabled}),
+          isNot(equals(fillOf(style, {}))));
     });
   });
 
   group('Палитра', () {
-    test('светлая и тёмная схемы не совпадают', () {
-      expect(TitoTheme.light().colorScheme.surface,
-          isNot(equals(TitoTheme.dark().colorScheme.surface)));
+    test('тема одна: светлой в источнике нет', () {
+      // Светлая была нашей выдумкой, и на светлом устройстве приложение
+      // открывалось в палитре, которой в образце не существует. Проверка
+      // ловит попытку завести её обратно «по мотивам».
+      expect(TitoTheme.dark().brightness, Brightness.dark);
+      expect(TitoTheme.dark().colorScheme.brightness, Brightness.dark);
     });
 
     test('акцент сохранён точно, без тонального пересчёта Material', () {
       // Ради этого схема собирается руками: ColorScheme.fromSeed прогнал бы
       // бирюзовый через свой алгоритм и выдал похожий, но другой цвет — а
       // он обязан совпадать с веб-клиентом до байта.
-      expect(TitoTheme.light().colorScheme.primary, Tokens.accent);
       expect(TitoTheme.dark().colorScheme.primary, Tokens.accent);
     });
 
-    test('цвет аватара закреплён за человеком', () {
-      final first = TitoTheme.accentFor('user-42');
-      expect(TitoTheme.accentFor('user-42'), first,
-          reason: 'цвет обязан быть одинаковым между запусками');
-      expect(TitoTheme.accentFor('user-43'), isNot(equals(first)),
-          reason: 'разные люди не должны сливаться в один цвет');
+    test('роли поверхностей разложены по источнику', () {
+      final scheme = TitoTheme.dark().colorScheme;
+      expect(scheme.surface, Tokens.bg, reason: 'полотно');
+      expect(scheme.surfaceContainer, Tokens.sidebar, reason: 'панель и шапки');
+      expect(scheme.surfaceContainerHigh, Tokens.surface, reason: 'карточки');
+      expect(scheme.surfaceContainerHighest, Tokens.elevated,
+          reason: 'поля, меню, аватары');
+    });
+
+    test('поле ввода залито цветом полей, а не полотна', () {
+      // Было `surfaceContainerLowest` — цвет полотна: поле сливалось с
+      // фоном и читалось как вырез, а не как поле.
+      expect(TitoTheme.dark().inputDecorationTheme.fillColor, Tokens.elevated);
+    });
+
+    test('пузыри взяты из источника', () {
+      final scheme = TitoTheme.dark().colorScheme;
+      expect(TitoTheme.ownBubble(scheme), Tokens.bubbleOut);
+      expect(TitoTheme.otherBubble(scheme), Tokens.bubbleIn);
     });
   });
 }

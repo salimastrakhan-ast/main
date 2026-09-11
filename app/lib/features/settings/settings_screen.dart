@@ -8,7 +8,6 @@ import '../../ui/icons.dart';
 import '../../ui/parts.dart';
 import '../../ui/tokens.dart';
 import 'account_screen.dart';
-import 'appearance_screen.dart';
 
 /// Настройки.
 class SettingsScreen extends ConsumerWidget {
@@ -20,7 +19,6 @@ class SettingsScreen extends ConsumerWidget {
     final session = ref.watch(sessionProvider).value;
     final me = ref.watch(usersProvider).value?[session?.userId];
     final connection = ref.watch(connectionStateProvider).value;
-    final mode = ref.watch(themeModeProvider).value ?? ThemeMode.system;
 
     return Scaffold(
       appBar: GlassAppBar(
@@ -93,18 +91,6 @@ class SettingsScreen extends ConsumerWidget {
             title: 'Данные и хранилище',
             subtitle: 'Использование сети, автозагрузка',
             onTap: () => showNotReady(context, 'Управление хранилищем'),
-          ),
-          SettingsRow(
-            icon: TitoIcons.appearance,
-            title: 'Внешний вид',
-            subtitle: switch (mode) {
-              ThemeMode.light => 'Светлая тема',
-              ThemeMode.dark => 'Тёмная тема',
-              ThemeMode.system => 'Как в системе',
-            },
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const AppearanceScreen()),
-            ),
           ),
           SettingsRow(
             icon: TitoIcons.language,

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../ui/icons.dart';
+import '../../ui/theme.dart';
 import '../../data/api/api_client.dart';
 import 'code_screen.dart';
 
@@ -72,7 +73,7 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Знак приложения: коралловый круг с первой буквой.
+                  // Знак приложения: акцентный круг с первой буквой.
                   // Проще стандартной иконки и сразу узнаётся в тёмной теме.
                   Center(
                     child: Container(
@@ -95,7 +96,9 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                   Text(
                     'Tito',
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineMedium,
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      fontFamily: TitoTheme.display,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(

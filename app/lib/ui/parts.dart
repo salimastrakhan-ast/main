@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import 'icons.dart';
-import 'theme.dart';
 import 'tokens.dart';
 
 /// Кружок с буквой и точкой присутствия.
@@ -9,6 +8,10 @@ import 'tokens.dart';
 /// Один виджет на все экраны: в списке диалогов, в контактах, в шапке
 /// переписки и в сведениях о чате он обязан выглядеть одинаково, иначе
 /// одного и того же человека узнаёшь заново на каждом экране.
+///
+/// Заливка одна на всех — `elevated`, как в источнике. Раньше их было три,
+/// закреплённых за человеком; в источнике такого нет, и держать своё
+/// значило держать два разных приложения.
 class PersonAvatar extends StatelessWidget {
   const PersonAvatar({
     required this.id,
@@ -16,6 +19,7 @@ class PersonAvatar extends StatelessWidget {
     this.radius = 24,
     this.online = false,
     this.icon,
+    this.saved = false,
     super.key,
   });
 
@@ -26,6 +30,10 @@ class PersonAvatar extends StatelessWidget {
 
   /// Значок вместо буквы — для групп.
   final IconData? icon;
+
+  /// «Избранное» — заметки себе. В источнике это единственный кружок с
+  /// акцентной заливкой и закладкой вместо буквы.
+  final bool saved;
 
   @override
   Widget build(BuildContext context) {
@@ -38,19 +46,23 @@ class PersonAvatar extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: radius,
-            backgroundColor: TitoTheme.accentFor(id),
-            child: icon != null
+            backgroundColor: saved
+                ? scheme.primary
+                : scheme.surfaceContainerHighest,
+            child: saved
                 ? Icon(
-                    icon,
-                    size: radius * 0.9,
-                    color: TitoTheme.onAccent,
+                    TitoIcons.saved,
+                    size: radius,
+                    color: scheme.onPrimary,
                   )
+                : icon != null
+                ? Icon(icon, size: radius * 0.9, color: scheme.onSurface)
                 : Text(
                     name.isEmpty ? '?' : name.characters.first.toUpperCase(),
                     style: TextStyle(
-                      color: TitoTheme.onAccent,
-                      fontWeight: FontWeight.w700,
-                      fontSize: radius * 0.72,
+                      color: scheme.onSurface,
+                      fontWeight: FontWeight.w500,
+                      fontSize: radius * 0.62,
                     ),
                   ),
           ),
@@ -64,9 +76,9 @@ class PersonAvatar extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Tokens.online,
                   shape: BoxShape.circle,
-                  // Кольцо цветом полотна: без него точка сливается с
-                  // аватаром, когда тот светлый.
-                  border: Border.all(color: scheme.surface, width: 2),
+                  // Кольцо цветом панели, а не полотна: точка стоит на
+                  // строке списка, и в источнике это `ring-sidebar`.
+                  border: Border.all(color: scheme.surfaceContainer, width: 2),
                 ),
               ),
             ),

@@ -24,8 +24,10 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 --------------------------------------------------------------------------
-Roboto, Manrope, JetBrains Mono — шрифты
+Manrope, Unbounded — шрифты
 app/assets/fonts/
+web/public/fonts/
 
-Распространяются на условиях SIL Open Font License 1.1.
+Manrope — Mikhail Sharanda; Unbounded — Nadya Dzhaman, Kateryna Korolevtseva.
+Оба распространяются на условиях SIL Open Font License 1.1.
 https://openfontlicense.org

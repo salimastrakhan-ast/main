@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/api/api_client.dart';
@@ -56,25 +55,7 @@ final sidebarSearchProvider = StateProvider<String>((ref) => '');
 /// Ключи локальных настроек в одном месте: опечатка в строке иначе тихо
 /// создаёт вторую настройку вместо чтения первой.
 abstract final class PrefKeys {
-  static const theme = 'theme';
   static const welcomeSeen = 'welcome.seen';
-}
-
-/// Выбранное оформление. Пока человек не выбрал сам — как в системе.
-final themeModeProvider = StreamProvider<ThemeMode>((ref) {
-  return ref.watch(databaseProvider).watchPref(PrefKeys.theme).map(
-    (value) => switch (value) {
-      'light' => ThemeMode.light,
-      'dark' => ThemeMode.dark,
-      _ => ThemeMode.system,
-    },
-  );
-});
-
-/// Меняет оформление. Запись в базу разбудит подписчиков, экран перерисуется
-/// сам — отдельного состояния в памяти не нужно.
-Future<void> setThemeMode(WidgetRef ref, ThemeMode mode) {
-  return ref.read(databaseProvider).setPref(PrefKeys.theme, mode.name);
 }
 
 /// Видел ли человек экран приветствия. Показывается один раз: на второй

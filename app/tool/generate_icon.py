@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Отрисовка знака приложения.
 
-Цвета знак берёт из lib/ui/tokens.dart, шрифт — из assets/fonts. Поэтому
-иконка не может разойтись с приложением: поменяется акцент в токенах —
-перерисуется и знак.
+Цвета знак берёт из lib/ui/tokens.dart, шрифт — из assets/fonts: тот же
+Unbounded, которым набрано название в интерфейсе. Поэтому иконка не может
+разойтись с приложением: поменяется акцент в токенах — перерисуется и знак.
 
 Сначала пробовал рисовать это самим Flutter, чтобы не заводить лишний
 инструмент. Не вышло: в headless-тестах кодирование PNG недоступно, и
@@ -54,7 +54,7 @@ def draw_mark(background: bool, letter_scale: float) -> Image.Image:
         )
 
     font = ImageFont.truetype(
-        str(ROOT / 'assets' / 'fonts' / 'Roboto-Bold.ttf'),
+        str(ROOT / 'assets' / 'fonts' / 'Unbounded-SemiBold.ttf'),
         int(SIZE * letter_scale),
     )
     box = draw.textbbox((0, 0), LETTER, font=font)

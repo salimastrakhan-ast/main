@@ -49,31 +49,39 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # Шрифт лежит в сборке, а не тянется с fonts.gstatic.com.
+  # Шрифты лежат в сборке, а не тянутся с fonts.gstatic.com.
   #
   # По умолчанию Flutter в вебе качает Roboto с чужого CDN и до его ответа
   # держит первый кадр. Если CDN недоступен — а для приложения, рассчитанного
   # на Россию, это рабочее предположение, — человек пятнадцать секунд смотрит
   # на белый экран. Проверено: именно так и происходит.
   fonts:
-    # Один шрифт на весь интерфейс.
+    # Текст интерфейса. Тот же Manrope, что в веб-клиенте: два клиента
+    # должны быть набраны одинаково, иначе одно и то же приложение читается
+    # по-разному на телефоне и в браузере.
     #
-    # Фирменные шрифты Claude лицензионные, поставлять их нельзя. Их
-    # собственный запасной вариант — system-ui, им и пользуемся: на
-    # телефонах это родной шрифт системы. В сборку Roboto попадает потому,
-    # что движок в вебе иначе идёт за ним на чужой CDN, а Roboto и есть
-    # системный шрифт Android.
+    # Кириллица в файлах проверена по таблице cmap — все 66 букв на месте.
     #
-    # Цифры одной ширины даёт сам Roboto через fontFeatures — отдельный
+    # Цифры одной ширины даёт сам Manrope через fontFeatures — отдельный
     # моноширинный шрифт не нужен.
-    - family: Roboto
+    - family: Manrope
       fonts:
-        - asset: assets/fonts/Roboto-Regular.ttf
+        - asset: assets/fonts/Manrope-Regular.ttf
           weight: 400
-        - asset: assets/fonts/Roboto-Medium.ttf
+        - asset: assets/fonts/Manrope-Medium.ttf
           weight: 500
-        - asset: assets/fonts/Roboto-Bold.ttf
+        - asset: assets/fonts/Manrope-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Manrope-Bold.ttf
           weight: 700
+
+    # Название приложения и крупные заголовки — Unbounded, как в веб-клиенте.
+    # Одно начертание: больше ему взять негде, он стоит только под словом
+    # «Tito» и парой заголовков.
+    - family: Unbounded
+      fonts:
+        - asset: assets/fonts/Unbounded-SemiBold.ttf
+          weight: 600
 
     # Иконки: шрифт из набора Lucide, объявлен одним семейством. Пакет
     # lucide_icons_flutter не подключён намеренно — он тянет в сборку шесть
@@ -82,7 +90,7 @@ flutter:
       fonts:
         - asset: assets/fonts/Lucide.ttf
 
-# Знак приложения. Исходник рисует tool/generate_icon.py — тем же кораллом
+# Знак приложения. Исходник рисует tool/generate_icon.py — тем же акцентом
 # и тем же Manrope, что в интерфейсе.
 #
 #   make app-icon   — перерисовать знак и разложить по платформам
@@ -94,8 +102,8 @@ flutter_launcher_icons:
   web:
     generate: true
     image_path: assets/icon/app_icon.png
-    background_color: "#faf9f5"
-    theme_color: "#d97757"
+    background_color: "#0b1117"
+    theme_color: "#3db8b4"
   # Адаптивная иконка Android: фон рисует лаунчер, наш слой — только буква.
-  adaptive_icon_background: "#d97757"
+  adaptive_icon_background: "#3db8b4"
   adaptive_icon_foreground: assets/icon/app_icon_foreground.png

@@ -35,7 +35,10 @@ abstract final class TitoIcons {
   static const forward = IconData(57455, fontFamily: 'Lucide');
 
   /// Меню экрана — три точки в шапке.
-  static const menu = IconData(57527, fontFamily: 'Lucide');
+  static const more = IconData(57527, fontFamily: 'Lucide');
+
+  /// Настройки в шапке боковой панели.
+  static const menu = IconData(57621, fontFamily: 'Lucide');
 
   // --- Разделы ---
 
@@ -47,9 +50,6 @@ abstract final class TitoIcons {
 
   /// Контакты.
   static const contacts = IconData(58478, fontFamily: 'Lucide');
-
-  /// Звонки.
-  static const calls = IconData(57651, fontFamily: 'Lucide');
 
   /// Настройки.
   static const settings = IconData(57684, fontFamily: 'Lucide');
@@ -89,22 +89,19 @@ abstract final class TitoIcons {
   /// Удалить.
   static const delete = IconData(57742, fontFamily: 'Lucide');
 
-  // --- Звонки ---
+  /// «Избранное» — заметки себе.
+  static const saved = IconData(57440, fontFamily: 'Lucide');
 
-  /// Позвонить.
-  static const call = IconData(57652, fontFamily: 'Lucide');
+  /// Закрепить чат и снять закрепление.
+  static const pin = IconData(57945, fontFamily: 'Lucide');
+  static const unpin = IconData(58038, fontFamily: 'Lucide');
 
-  /// Видеозвонок.
-  static const video = IconData(57765, fontFamily: 'Lucide');
+  /// Беззвучный режим и возврат звука.
+  static const mute = IconData(57434, fontFamily: 'Lucide');
+  static const unmute = IconData(57771, fontFamily: 'Lucide');
 
-  /// Входящий звонок.
-  static const callIn = IconData(57411, fontFamily: 'Lucide');
-
-  /// Исходящий звонок.
-  static const callOut = IconData(57421, fontFamily: 'Lucide');
-
-  /// Пропущенный звонок.
-  static const callMissed = IconData(57655, fontFamily: 'Lucide');
+  /// Живой перевод переписки.
+  static const translate = IconData(57598, fontFamily: 'Lucide');
 
   // --- Разделы настроек ---
 
@@ -120,20 +117,11 @@ abstract final class TitoIcons {
   /// Данные и хранилище.
   static const storage = IconData(57581, fontFamily: 'Lucide');
 
-  /// Внешний вид.
-  static const appearance = IconData(57821, fontFamily: 'Lucide');
-
   /// Язык.
   static const language = IconData(57576, fontFamily: 'Lucide');
 
   /// Помощь.
   static const help = IconData(57474, fontFamily: 'Lucide');
-
-  /// Светлая тема.
-  static const themeLight = IconData(57720, fontFamily: 'Lucide');
-
-  /// Тёмная тема.
-  static const themeDark = IconData(57630, fontFamily: 'Lucide');
 
   // --- Поля ввода ---
 
@@ -185,11 +173,11 @@ abstract final class TitoIcons {
     back,
     close,
     forward,
+    more,
     menu,
     chat,
     chats,
     contacts,
-    calls,
     settings,
     profile,
     send,
@@ -202,20 +190,18 @@ abstract final class TitoIcons {
     star,
     logout,
     delete,
-    call,
-    video,
-    callIn,
-    callOut,
-    callMissed,
+    saved,
+    pin,
+    unpin,
+    mute,
+    unmute,
+    translate,
     account,
     bell,
     privacy,
     storage,
-    appearance,
     language,
     help,
-    themeLight,
-    themeDark,
     phone,
     online,
     offline,

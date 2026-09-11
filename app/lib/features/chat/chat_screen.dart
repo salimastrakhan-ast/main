@@ -253,18 +253,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ),
         ),
         actions: [
+          // Звонков в образце нет ни в шапке, ни вообще: вместо двух трубок
+          // здесь то же, что у него, — меню.
           IconButton(
-            icon: const Icon(TitoIcons.call, size: 20),
-            tooltip: 'Позвонить',
-            onPressed: () => showNotReady(context, 'Звонки'),
-          ),
-          IconButton(
-            icon: const Icon(TitoIcons.video, size: 20),
-            tooltip: 'Видеозвонок',
-            onPressed: () => showNotReady(context, 'Видеозвонки'),
-          ),
-          IconButton(
-            icon: const Icon(TitoIcons.menu, size: 20),
+            icon: const Icon(TitoIcons.more, size: 20),
             tooltip: 'Ещё',
             onPressed: chatId == null
                 ? null
@@ -278,6 +270,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
       body: Stack(
         children: [
+          const Positioned.fill(child: ChatCanvas()),
           Positioned.fill(
             child: chatId == null
                 ? const _FirstMessage()
@@ -354,11 +347,8 @@ class _ChatTitle extends StatelessWidget {
             name: name,
             radius: 17,
             online: peer?.online ?? false,
-            icon: isGroup
-                ? TitoIcons.contacts
-                : isSaved
-                ? TitoIcons.star
-                : null,
+            saved: isSaved,
+            icon: isGroup ? TitoIcons.contacts : null,
           ),
           const SizedBox(width: Tokens.space3),
           Expanded(
@@ -388,6 +378,65 @@ class _ChatTitle extends StatelessWidget {
 }
 
 /// Лента сообщений с разделителями дат.
+/// Полотно переписки.
+///
+/// В образце это `.chat-canvas`: подсвет акцентом из левого верхнего угла и
+/// точечная сетка поверх полотна. Ровная заливка выглядела бы плоско рядом
+/// с ним, а разница в цвете фона — первое, что бросается в глаза при
+/// сравнении двух клиентов.
+class ChatCanvas extends StatelessWidget {
+  const ChatCanvas({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ColoredBox(
+      color: scheme.surface,
+      child: CustomPaint(
+        painter: _CanvasPainter(accent: scheme.primary, dot: scheme.onSurface),
+        // Красить нужно всю площадь, а не размер ребёнка: детей у полотна нет.
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+}
+
+class _CanvasPainter extends CustomPainter {
+  const _CanvasPainter({required this.accent, required this.dot});
+
+  final Color accent;
+  final Color dot;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Подсвет: круг от левого верхнего угла, сходящий на нет к 38 % ширины.
+    final radius = size.width * Tokens.canvasGlowRadius;
+    final origin = Offset(size.width * 0.16, 0);
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            accent.withValues(alpha: Tokens.canvasGlow),
+            accent.withValues(alpha: 0),
+          ],
+        ).createShader(Rect.fromCircle(center: origin, radius: radius)),
+    );
+
+    // Сетка: точка в пиксель с шагом 24, как `background-size: 24px 24px`.
+    final paint = Paint()..color = dot.withValues(alpha: Tokens.canvasDot);
+    for (var y = 1.0; y < size.height; y += Tokens.canvasDotStep) {
+      for (var x = 1.0; x < size.width; x += Tokens.canvasDotStep) {
+        canvas.drawCircle(Offset(x, y), 1, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CanvasPainter old) =>
+      old.accent != accent || old.dot != dot;
+}
+
 class _Feed extends ConsumerWidget {
   const _Feed({
     required this.chatId,
@@ -605,10 +654,10 @@ class _Bubble extends StatelessWidget {
             color: isMine
                 ? TitoTheme.ownBubble(theme.colorScheme)
                 : TitoTheme.otherBubble(theme.colorScheme),
-            // Своему пузырю граница не нужна: коралл сам себя очерчивает.
-            border: isMine
-                ? null
-                : Border.all(color: theme.colorScheme.outlineVariant),
+            // В образце обводки у пузырей нет — есть `--shadow-border`,
+            // волосяная белая линия в восемь сотых. Она одинакова у обоих
+            // пузырей, поэтому и здесь одна на оба.
+            boxShadow: Tokens.shadowBorder,
             borderRadius: BorderRadius.only(
               topLeft: const Radius.circular(16),
               topRight: const Radius.circular(16),
@@ -627,7 +676,8 @@ class _Bubble extends StatelessWidget {
                     senderName,
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontSize: 13,
-                      color: TitoTheme.textAccentFor(message.senderId),
+                      // В образце имя отправителя — акцент, один на всех.
+                      color: theme.colorScheme.primary,
                     ),
                   ),
                 ),

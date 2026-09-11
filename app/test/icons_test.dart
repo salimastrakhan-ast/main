@@ -29,7 +29,7 @@ void main() {
     });
 
     test('набор не пуст и покрывает все роли', () {
-      expect(TitoIcons.all, hasLength(46));
+      expect(TitoIcons.all, hasLength(44));
     });
   });
 }

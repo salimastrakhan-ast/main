@@ -4,69 +4,28 @@ import 'tokens.dart';
 
 /// Тема приложения.
 ///
-/// Построена на [Tokens] — значениях, снятых с публичного CSS claude.com.
-/// Плоские поверхности, волосяные границы, очень мягкие тени, один акцент.
+/// Построена на [Tokens] — значениях из `web/src/styles.css`. Плоские
+/// поверхности, волосяные границы, единственная глубокая тень у
+/// всплывающего, один акцент.
+///
+/// Тема одна: в источнике светлой нет. Подробности — в [Tokens].
 abstract final class TitoTheme {
   // --- Шрифты ---
 
-  /// Один шрифт на весь интерфейс.
-  ///
-  /// В их системе три семейства — anthropicSans, Serif и Mono, — но это
-  /// лицензионные шрифты, и поставлять их в чужом приложении нельзя. Их
-  /// собственный запасной вариант прописан там же: system-ui. Он и взят.
-  ///
-  /// На телефонах это родной шрифт системы. В вебе движок не умеет взять
-  /// системный шрифт, не сходив за Roboto на чужой CDN — замерено
-  /// пятнадцать секунд белого экрана, — поэтому Roboto лежит в сборке. Он
-  /// же и есть системный шрифт Android, так что подмена честная.
-  static const _font = 'Roboto';
+  /// Текст интерфейса — тот же Manrope, что в веб-клиенте.
+  static const _font = 'Manrope';
+
+  /// Название приложения и крупные заголовки — Unbounded, как в источнике
+  /// (`--font-display`).
+  static const display = 'Unbounded';
 
   /// Цифры одной ширины.
   ///
   /// Заменяют отдельный моноширинный шрифт: время и счётчики не прыгают при
-  /// обновлении минуты, а в сборке на два семейства меньше.
+  /// обновлении минуты, а в сборке на одно семейство меньше.
   static const tabularFigures = [FontFeature.tabularFigures()];
 
-  static ThemeData light() => _build(_lightScheme);
   static ThemeData dark() => _build(_darkScheme);
-
-  static const _lightScheme = ColorScheme(
-    brightness: Brightness.light,
-    primary: Tokens.accent,
-    // Тёмная надпись, а не белая: белая на акценте даёт 2.3:1.
-    onPrimary: Tokens.onAccent,
-    primaryContainer: Tokens.lightBubbleOut,
-    onPrimaryContainer: Tokens.lightFg,
-    secondary: Tokens.accentInk,
-    onSecondary: Tokens.lightSidebar,
-    secondaryContainer: Tokens.lightElevated,
-    onSecondaryContainer: Tokens.lightMuted,
-    tertiary: Tokens.avatarBlue,
-    onTertiary: Tokens.lightSidebar,
-    tertiaryContainer: Tokens.lightElevated,
-    onTertiaryContainer: Tokens.lightFg,
-    error: Tokens.dangerInk,
-    onError: Tokens.lightSidebar,
-    errorContainer: Color(0xFFF7DEDE),
-    onErrorContainer: Color(0xFF4A1414),
-    surface: Tokens.lightBg,
-    onSurface: Tokens.lightFg,
-    surfaceDim: Tokens.lightElevated,
-    surfaceBright: Tokens.lightSidebar,
-    surfaceContainerLowest: Tokens.lightSidebar,
-    surfaceContainerLow: Tokens.lightSurface,
-    surfaceContainer: Tokens.lightBg,
-    surfaceContainerHigh: Tokens.lightElevated,
-    surfaceContainerHighest: Tokens.lightElevated,
-    onSurfaceVariant: Tokens.lightMuted,
-    outline: Tokens.lightSubtle,
-    outlineVariant: Tokens.lightBorder,
-    shadow: Color(0xFF000000),
-    scrim: Color(0xFF000000),
-    inverseSurface: Tokens.bg,
-    onInverseSurface: Tokens.fg,
-    inversePrimary: Tokens.accent,
-  );
 
   static const _darkScheme = ColorScheme(
     brightness: Brightness.dark,
@@ -78,8 +37,8 @@ abstract final class TitoTheme {
     onSecondary: Tokens.onAccent,
     secondaryContainer: Tokens.elevated,
     onSecondaryContainer: Tokens.muted,
-    tertiary: Tokens.avatarBlue,
-    onTertiary: Tokens.fg,
+    tertiary: Tokens.accent,
+    onTertiary: Tokens.onAccent,
     tertiaryContainer: Tokens.surface,
     onTertiaryContainer: Tokens.fg,
     error: Tokens.danger,
@@ -144,12 +103,14 @@ abstract final class TitoTheme {
 
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: scheme.surfaceContainerLowest,
+        // В источнике поля залиты `elevated`: на полотне они должны быть
+        // видны как поля, а не как вырез в нём.
+        fillColor: scheme.surfaceContainerHighest,
         hintStyle: TextStyle(color: scheme.onSurfaceVariant, fontSize: 15),
         border: _inputBorder(scheme.outlineVariant),
         enabledBorder: _inputBorder(scheme.outlineVariant),
-        // Кольцо фокуса — их цвет focus, он же clay-dark.
-        focusedBorder: _inputBorder(Tokens.accentInk, width: Tokens.borderMd),
+        // Кольцо фокуса — `--color-ring`, он же акцент.
+        focusedBorder: _inputBorder(Tokens.ring, width: Tokens.borderMd),
         errorBorder: _inputBorder(scheme.error),
         focusedErrorBorder: _inputBorder(scheme.error, width: Tokens.borderMd),
         contentPadding: const EdgeInsets.symmetric(
@@ -201,15 +162,13 @@ abstract final class TitoTheme {
       ),
 
       dialogTheme: DialogThemeData(
-        backgroundColor: scheme.surfaceContainerLowest,
+        // Всплывающее в источнике — `bg-elevated` с глубокой тенью и без
+        // обводки: обводка нужна тому, что лежит на полотне, а не над ним.
+        backgroundColor: scheme.surfaceContainerHighest,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(Tokens.br16),
-          side: BorderSide(
-            color: scheme.outlineVariant,
-            width: Tokens.borderSm,
-          ),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(Tokens.br16)),
         ),
         titleTextStyle: TextStyle(
           fontFamily: _font,
@@ -231,7 +190,7 @@ abstract final class TitoTheme {
       ),
 
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: scheme.surfaceContainerLowest,
+        backgroundColor: scheme.surfaceContainerHighest,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: const RoundedRectangleBorder(
@@ -297,8 +256,8 @@ abstract final class TitoTheme {
 
   /// Кольцо фокуса с клавиатуры.
   ///
-  /// Цвет задаётся отдельно от акцента: на кнопке цвета clay кольцо того же
-  /// clay невидимо, и фокус пропадает совсем.
+  /// Цвет передаётся отдельно: на акцентной кнопке кольцо того же акцента
+  /// невидимо, и фокус пропадает совсем — там оно берёт цвет надписи.
   static WidgetStateProperty<BorderSide?> _focusRing(
     ColorScheme scheme, {
     required Color focus,
@@ -321,9 +280,12 @@ abstract final class TitoTheme {
         if (states.contains(WidgetState.disabled)) {
           return scheme.surfaceContainerHigh;
         }
-        // Их же значения для наведения и нажатия.
-        if (states.contains(WidgetState.pressed)) return Tokens.accentInk;
-        if (states.contains(WidgetState.hovered)) return Tokens.accentHover;
+        // В источнике и наведение, и нажатие — `bg-accent/90`; нажатие
+        // вдобавок сжимает кнопку, этим занимается сама кнопка.
+        if (states.contains(WidgetState.pressed) ||
+            states.contains(WidgetState.hovered)) {
+          return Tokens.accentHover;
+        }
         return Tokens.accent;
       }),
       foregroundColor: WidgetStateProperty.resolveWith((states) {
@@ -360,7 +322,7 @@ abstract final class TitoTheme {
         return scheme.onSurface;
       }),
       overlayColor: _overlay(scheme.onSurface),
-      side: _focusRing(scheme, focus: Tokens.accentInk, rest: scheme.outline),
+      side: _focusRing(scheme, focus: Tokens.ring, rest: scheme.outline),
       minimumSize: const WidgetStatePropertyAll(Size(64, 44)),
       textStyle: const WidgetStatePropertyAll(_buttonText),
       shape: WidgetStatePropertyAll(
@@ -383,7 +345,7 @@ abstract final class TitoTheme {
       overlayColor: _overlay(scheme.onSurface),
       side: _focusRing(
         scheme,
-        focus: Tokens.accentInk,
+        focus: Tokens.ring,
         rest: Colors.transparent,
       ),
       minimumSize: const WidgetStatePropertyAll(Size(64, 44)),
@@ -448,50 +410,13 @@ abstract final class TitoTheme {
   // --- Готовые куски для экранов ---
 
   /// Цвет своего пузыря — подкрашен акцентом, как в источнике.
-  static Color ownBubble(ColorScheme scheme) =>
-      scheme.brightness == Brightness.light
-      ? Tokens.lightBubbleOut
-      : Tokens.bubbleOut;
+  static Color ownBubble(ColorScheme scheme) => Tokens.bubbleOut;
 
   /// Цвет чужого пузыря: нейтральный, едва заметнее полотна.
-  static Color otherBubble(ColorScheme scheme) =>
-      scheme.brightness == Brightness.light
-      ? Tokens.lightBubbleIn
-      : Tokens.bubbleIn;
+  static Color otherBubble(ColorScheme scheme) => Tokens.bubbleIn;
 
   /// Текст в пузыре — обычный: оба пузыря держат основной текст выше 8:1.
   static Color onOwnBubble(ColorScheme scheme) => scheme.onSurface;
-
-  /// Заливки аватаров, закреплённые за человеком.
-  ///
-  /// Одни и те же в обеих темах: цвет должен опознавать человека, а не
-  /// тему. Все три держат букву выше 5:1 и читаются на обоих полотнах.
-  static const _washes = [
-    Tokens.avatarTeal,
-    Tokens.avatarBlue,
-    Tokens.avatarSlate,
-  ];
-
-  /// Цвет аватара, закреплённый за человеком.
-  static Color accentFor(String id) => _washes[_slot(id)];
-
-  /// Цвет имени отправителя в группе — тот же, что у его аватара.
-  ///
-  /// Раньше это был отдельный набор затемнённых акцентов: заливки были
-  /// светлыми пастелями и как текст не проходили. Теперь заливки сами
-  /// тёмные, и второй набор был бы разными цветами у одного человека.
-  static Color textAccentFor(String id) => _washes[_slot(id)];
-
-  static int _slot(String id) {
-    var hash = 0;
-    for (var i = 0; i < id.length; i++) {
-      hash = (hash * 31 + id.codeUnitAt(i)) & 0x7FFFFFFF;
-    }
-    return hash % _washes.length;
-  }
-
-  /// Текст поверх заливки аватара.
-  static const onAccent = Tokens.fg;
 }
 
 /// Переход между экранами: проявление со сдвигом.

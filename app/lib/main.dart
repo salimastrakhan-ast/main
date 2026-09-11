@@ -17,19 +17,16 @@ Future<void> main() async {
   runApp(const ProviderScope(child: TitoApp()));
 }
 
-class TitoApp extends ConsumerWidget {
+class TitoApp extends StatelessWidget {
   const TitoApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final mode = ref.watch(themeModeProvider).value ?? ThemeMode.system;
-
+  Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Tito',
       debugShowCheckedModeBanner: false,
-      theme: TitoTheme.light(),
-      darkTheme: TitoTheme.dark(),
-      themeMode: mode,
+      // Тема одна: в образце, по которому собран интерфейс, светлой нет.
+      theme: TitoTheme.dark(),
       locale: const Locale('ru'),
       supportedLocales: const [Locale('ru'), Locale('en')],
       localizationsDelegates: const [
