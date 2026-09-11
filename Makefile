@@ -49,7 +49,7 @@ redis:
 
 # --- Клиент ---
 
-.PHONY: app-get app-gen app-test app-analyze app-web app-icon e2e web-dev web-build web-test
+.PHONY: app-get app-gen app-test app-analyze app-web app-icon e2e e2e-web web-dev web-build web-test
 
 app-get:
 	cd app && flutter pub get
@@ -74,6 +74,9 @@ app-icon:
 # Сквозная проверка: живой клиент против живого сервера. Подробности в e2e/README.md
 e2e:
 	cd e2e && npm install --silent && node chat.mjs
+
+e2e-web:
+	cd e2e && npm install --silent && node web.mjs
 
 web-dev:
 	cd web && npm install --silent && npm run dev

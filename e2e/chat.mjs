@@ -29,6 +29,18 @@ async function open(browser, label) {
   });
   const page = await context.newPage();
   page.on('pageerror', (e) => console.log(`[${label}]`, String(e).slice(0, 200)));
+  // Отказ сервера иначе выглядит как «приложение не отвечает»: экран не
+  // меняется, и полдня уходит на поиск несуществующей ошибки в вёрстке.
+  page.on('response', (r) => {
+    if (r.url().includes('/v1/') && r.status() >= 400) {
+      console.log(`[${label}] сервер ответил ${r.status()} на ${new URL(r.url()).pathname}`);
+    }
+  });
+  page.on('requestfailed', (r) => {
+    if (r.url().includes('/v1/')) {
+      console.log(`[${label}] запрос не прошёл: ${new URL(r.url()).pathname} — ${r.failure()?.errorText}`);
+    }
+  });
   await page.goto(WEB, { waitUntil: 'load' });
   await page.waitForSelector('flutter-view', { timeout: 40000 });
   await page.waitForTimeout(1500);
@@ -75,13 +87,46 @@ async function tapAt(app, x, y) {
   await app.page.waitForTimeout(600);
 }
 
+/// Нажимает кнопку настоящим указателем по её месту в дереве доступности.
+///
+/// Берётся самый маленький узел с нужным текстом. Просто «последний
+/// подходящий» не годится: дерево вложенное, и текст кнопки есть и у
+/// контейнера всего экрана — клик по его середине попадал в соседний
+/// элемент, а однажды увёл назад с экрана кода на экран номера.
+async function pressButton(app, label) {
+  const nodes = app.page.locator('flt-semantics', { hasText: label });
+  const count = await nodes.count();
+
+  let target = null;
+  for (let i = 0; i < count; i++) {
+    const box = await nodes.nth(i).boundingBox();
+    if (!box || box.width === 0 || box.height === 0) continue;
+    if (!target || box.width * box.height < target.width * target.height) {
+      target = box;
+    }
+  }
+  if (!target) throw new Error(`не нашёл кнопку «${label}»`);
+
+  await app.page.mouse.click(target.x + target.width / 2, target.y + target.height / 2);
+  await app.page.waitForTimeout(600);
+}
+
 async function login(app, phone) {
+  // Приветствие показывается один раз при первом запуске, а контекст
+  // браузера здесь каждый раз новый — значит, оно будет всегда.
+  await tap(app, 'Начать');
+  await app.page.waitForTimeout(1500);
+  check('экран входа отрисован', (await screenText(app)).includes('Введите номер телефона'));
+
+  // Клик по полю: на автофокус сразу после перехода полагаться нельзя, он
+  // приходит кадром позже, и набор уходит в пустоту.
+  await tapAt(app, 215, 507);
   await typeInto(app, phone);
-  await tap(app, 'Получить код');
-  await app.page.waitForTimeout(3000);
-  // В разработке код уже подставлен в поле — остаётся подтвердить.
-  await tap(app, 'Войти');
+  await pressButton(app, 'Получить код');
   await app.page.waitForTimeout(4000);
+  // В разработке код уже подставлен в поле — остаётся подтвердить.
+  await pressButton(app, 'Войти');
+  await app.page.waitForTimeout(4500);
 }
 
 // --- Второй участник: клиент протокола на голом WebSocket ---
@@ -105,6 +150,13 @@ async function connect(session) {
   return sock;
 }
 
+// Номера на каждый прогон свои: у сервера между кодами на один номер стоит
+// пауза в несколько минут, и на постоянных номерах второй прогон подряд
+// упирался бы в неё, а выглядело бы это как поломка приложения.
+const base = 9005000000 + Math.floor(Math.random() * 900000);
+const ANYA = `+7${base}`;
+const BORYA = `+7${base + 1}`;
+
 const browser = await chromium.launch({
   executablePath: '/opt/pw-browsers/chromium',
   args: ['--no-sandbox'],
@@ -112,10 +164,10 @@ const browser = await chromium.launch({
 
 // --- Аня входит через приложение ---
 const anya = await open(browser, 'Аня');
-check('экран входа отрисован', (await screenText(anya)).includes('Введите номер телефона'));
+check('приветствие отрисовано', (await screenText(anya)).includes('без границ'));
 await anya.page.screenshot({ path: `${OUT}/01-вход.png` });
 
-await login(anya, '+79005550001');
+await login(anya, ANYA);
 await anya.page.screenshot({ path: `${OUT}/02-список-чатов.png` });
 
 const afterLogin = await screenText(anya);
@@ -123,7 +175,7 @@ check('после входа открылся список диалогов',
   afterLogin.includes('Профиль'), afterLogin.slice(0, 120));
 
 // --- Боря пишет Ане ---
-const borya = await apiLogin('+79005550002');
+const borya = await apiLogin(BORYA);
 const sock = await connect(borya);
 
 const found = await (await fetch(`${API}/v1/contacts/sync`, {
@@ -132,7 +184,7 @@ const found = await (await fetch(`${API}/v1/contacts/sync`, {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${borya.access_token}`,
   },
-  body: JSON.stringify({ contacts: [{ phone: '+79005550001', name: 'Аня' }] }),
+  body: JSON.stringify({ contacts: [{ phone: ANYA, name: 'Аня' }] }),
 })).json();
 
 const anyaId = found.users?.[0]?.id;
