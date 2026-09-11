@@ -135,6 +135,15 @@ function toMessage(raw: ServerMessage): Message {
   };
 }
 
+/// «Без звука навсегда» в терминах срока: столетие вперёд.
+///
+/// У сервера беззвучный режим со сроком, у обоих клиентов — тумблер.
+/// Отдельного «навсегда» в протоколе нет, и заводить его ради тумблера
+/// значило бы менять протокол под интерфейс.
+const MUTE_FOREVER = new Date(
+  Date.now() + 100 * 365 * 24 * 60 * 60 * 1000,
+).toISOString();
+
 // --- Состояние ---
 
 type Outgoing = {
@@ -361,7 +370,14 @@ export const useMessenger = create<MessengerStore>()(
         set((s) => ({
           chats: s.chats.map((c) => (c.id === chatId ? { ...c, muted } : c)),
         }));
-        ws.notify(Cmd.chatMute, { chat_id: chatId, muted });
+        // Сервер принимает срок, а не «включено/выключено»: «без звука на
+        // час» просят чаще вечной тишины. Раньше сюда уходило поле `muted`,
+        // которого в кадре нет вовсе, — сервер молча его игнорировал, и
+        // беззвучный режим включался только на этой вкладке.
+        ws.notify(Cmd.chatMute, {
+          chat_id: chatId,
+          until: muted ? MUTE_FOREVER : undefined,
+        });
       },
 
       selectChat: (id) => {

@@ -8,6 +8,8 @@ import 'package:intl/intl.dart';
 
 import '../../core/providers.dart';
 import '../../data/db/database.dart';
+import '../../data/repo/message_repository.dart';
+import '../../data/ws/envelope.dart';
 import '../../ui/icons.dart';
 import '../../ui/glass.dart';
 import '../../ui/parts.dart';
@@ -255,17 +257,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         actions: [
           // Звонков в образце нет ни в шапке, ни вообще: вместо двух трубок
           // здесь то же, что у него, — меню.
-          IconButton(
-            icon: const Icon(TitoIcons.more, size: 20),
-            tooltip: 'Ещё',
-            onPressed: chatId == null
-                ? null
-                : () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => ChatInfoScreen(chatId: chatId),
-                    ),
-                  ),
-          ),
+          if (chatId != null && chat != null)
+            _ChatMenu(chat: chat)
+          else
+            const IconButton(
+              icon: Icon(TitoIcons.more, size: 20),
+              tooltip: 'Ещё',
+              onPressed: null,
+            ),
         ],
       ),
       body: Stack(
@@ -378,6 +377,101 @@ class _ChatTitle extends StatelessWidget {
 }
 
 /// Лента сообщений с разделителями дат.
+/// Меню переписки: закрепить, выключить звук, сведения о чате.
+///
+/// Те же пункты, что в веб-клиенте. Закрепление и беззвучный режим —
+/// настройки участника, а не чата: у собеседника они свои.
+class _ChatMenu extends ConsumerWidget {
+  const _ChatMenu({required this.chat});
+
+  final Chat chat;
+
+  Future<void> _run(
+    BuildContext context,
+    WidgetRef ref,
+    Future<void> Function(MessageRepository repo) action,
+  ) async {
+    final repo = ref.read(repositoryProvider);
+    if (repo == null) return;
+    try {
+      await action(repo);
+    } on ProtocolException catch (error) {
+      if (context.mounted) showMessage(context, error.message);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return PopupMenuButton<String>(
+      icon: const Icon(TitoIcons.more, size: 20),
+      tooltip: 'Ещё',
+      onSelected: (value) async {
+        switch (value) {
+          case 'pin':
+            await _run(
+              context,
+              ref,
+              (repo) => repo.setPinned(chat.id, !chat.pinned),
+            );
+          case 'mute':
+            await _run(
+              context,
+              ref,
+              (repo) => repo.setMuted(chat.id, !chat.muted),
+            );
+          case 'info':
+            if (context.mounted) {
+              await Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ChatInfoScreen(chatId: chat.id),
+                ),
+              );
+            }
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'pin',
+          child: _MenuRow(
+            icon: chat.pinned ? TitoIcons.unpin : TitoIcons.pin,
+            label: chat.pinned ? 'Открепить' : 'Закрепить',
+          ),
+        ),
+        PopupMenuItem(
+          value: 'mute',
+          child: _MenuRow(
+            icon: chat.muted ? TitoIcons.unmute : TitoIcons.mute,
+            label: chat.muted ? 'Включить звук' : 'Без звука',
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: 'info',
+          child: _MenuRow(icon: TitoIcons.contacts, label: 'Сведения о чате'),
+        ),
+      ],
+    );
+  }
+}
+
+class _MenuRow extends StatelessWidget {
+  const _MenuRow({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 18),
+        const SizedBox(width: Tokens.space3),
+        Text(label),
+      ],
+    );
+  }
+}
+
 /// Полотно переписки.
 ///
 /// В образце это `.chat-canvas`: подсвет акцентом из левого верхнего угла и

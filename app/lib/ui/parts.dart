@@ -300,6 +300,17 @@ class RowDivider extends StatelessWidget {
   }
 }
 
+/// Короткое сообщение внизу экрана.
+///
+/// Для отказов, о которых человек должен узнать словами: «нет связи»,
+/// «сервер отказал». Молчание в таких местах читается как «нажатие не
+/// сработало», и человек жмёт ещё раз.
+void showMessage(BuildContext context, String text) {
+  ScaffoldMessenger.of(context)
+    ..clearSnackBars()
+    ..showSnackBar(SnackBar(content: Text(text)));
+}
+
 /// Сообщает, что раздел ещё не сделан.
 ///
 /// Честнее пустой кнопки, которая молча ничего не делает: человек видит, что

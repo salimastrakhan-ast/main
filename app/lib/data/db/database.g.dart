@@ -95,6 +95,32 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, Chat> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _pinnedMeta = const VerificationMeta('pinned');
+  @override
+  late final GeneratedColumn<bool> pinned = GeneratedColumn<bool>(
+    'pinned',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("pinned" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _mutedMeta = const VerificationMeta('muted');
+  @override
+  late final GeneratedColumn<bool> muted = GeneratedColumn<bool>(
+    'muted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("muted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -117,6 +143,8 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, Chat> {
     syncedSeq,
     lastReadSeq,
     unreadCount,
+    pinned,
+    muted,
     updatedAt,
   ];
   @override
@@ -186,6 +214,18 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, Chat> {
         ),
       );
     }
+    if (data.containsKey('pinned')) {
+      context.handle(
+        _pinnedMeta,
+        pinned.isAcceptableOrUnknown(data['pinned']!, _pinnedMeta),
+      );
+    }
+    if (data.containsKey('muted')) {
+      context.handle(
+        _mutedMeta,
+        muted.isAcceptableOrUnknown(data['muted']!, _mutedMeta),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -233,6 +273,14 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, Chat> {
         DriftSqlType.int,
         data['${effectivePrefix}unread_count'],
       )!,
+      pinned: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}pinned'],
+      )!,
+      muted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}muted'],
+      )!,
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -262,6 +310,13 @@ class Chat extends DataClass implements Insertable<Chat> {
   final int syncedSeq;
   final int lastReadSeq;
   final int unreadCount;
+
+  /// Закреплён ли чат и выключен ли в нём звук.
+  ///
+  /// Настройка личная, а не общая для чата: на сервере она лежит в строке
+  /// участника, и у собеседника своя.
+  final bool pinned;
+  final bool muted;
   final DateTime updatedAt;
   const Chat({
     required this.id,
@@ -272,6 +327,8 @@ class Chat extends DataClass implements Insertable<Chat> {
     required this.syncedSeq,
     required this.lastReadSeq,
     required this.unreadCount,
+    required this.pinned,
+    required this.muted,
     required this.updatedAt,
   });
   @override
@@ -287,6 +344,8 @@ class Chat extends DataClass implements Insertable<Chat> {
     map['synced_seq'] = Variable<int>(syncedSeq);
     map['last_read_seq'] = Variable<int>(lastReadSeq);
     map['unread_count'] = Variable<int>(unreadCount);
+    map['pinned'] = Variable<bool>(pinned);
+    map['muted'] = Variable<bool>(muted);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
@@ -303,6 +362,8 @@ class Chat extends DataClass implements Insertable<Chat> {
       syncedSeq: Value(syncedSeq),
       lastReadSeq: Value(lastReadSeq),
       unreadCount: Value(unreadCount),
+      pinned: Value(pinned),
+      muted: Value(muted),
       updatedAt: Value(updatedAt),
     );
   }
@@ -321,6 +382,8 @@ class Chat extends DataClass implements Insertable<Chat> {
       syncedSeq: serializer.fromJson<int>(json['syncedSeq']),
       lastReadSeq: serializer.fromJson<int>(json['lastReadSeq']),
       unreadCount: serializer.fromJson<int>(json['unreadCount']),
+      pinned: serializer.fromJson<bool>(json['pinned']),
+      muted: serializer.fromJson<bool>(json['muted']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -336,6 +399,8 @@ class Chat extends DataClass implements Insertable<Chat> {
       'syncedSeq': serializer.toJson<int>(syncedSeq),
       'lastReadSeq': serializer.toJson<int>(lastReadSeq),
       'unreadCount': serializer.toJson<int>(unreadCount),
+      'pinned': serializer.toJson<bool>(pinned),
+      'muted': serializer.toJson<bool>(muted),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -349,6 +414,8 @@ class Chat extends DataClass implements Insertable<Chat> {
     int? syncedSeq,
     int? lastReadSeq,
     int? unreadCount,
+    bool? pinned,
+    bool? muted,
     DateTime? updatedAt,
   }) => Chat(
     id: id ?? this.id,
@@ -359,6 +426,8 @@ class Chat extends DataClass implements Insertable<Chat> {
     syncedSeq: syncedSeq ?? this.syncedSeq,
     lastReadSeq: lastReadSeq ?? this.lastReadSeq,
     unreadCount: unreadCount ?? this.unreadCount,
+    pinned: pinned ?? this.pinned,
+    muted: muted ?? this.muted,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   Chat copyWithCompanion(ChatsCompanion data) {
@@ -375,6 +444,8 @@ class Chat extends DataClass implements Insertable<Chat> {
       unreadCount: data.unreadCount.present
           ? data.unreadCount.value
           : this.unreadCount,
+      pinned: data.pinned.present ? data.pinned.value : this.pinned,
+      muted: data.muted.present ? data.muted.value : this.muted,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -390,6 +461,8 @@ class Chat extends DataClass implements Insertable<Chat> {
           ..write('syncedSeq: $syncedSeq, ')
           ..write('lastReadSeq: $lastReadSeq, ')
           ..write('unreadCount: $unreadCount, ')
+          ..write('pinned: $pinned, ')
+          ..write('muted: $muted, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -405,6 +478,8 @@ class Chat extends DataClass implements Insertable<Chat> {
     syncedSeq,
     lastReadSeq,
     unreadCount,
+    pinned,
+    muted,
     updatedAt,
   );
   @override
@@ -419,6 +494,8 @@ class Chat extends DataClass implements Insertable<Chat> {
           other.syncedSeq == this.syncedSeq &&
           other.lastReadSeq == this.lastReadSeq &&
           other.unreadCount == this.unreadCount &&
+          other.pinned == this.pinned &&
+          other.muted == this.muted &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -431,6 +508,8 @@ class ChatsCompanion extends UpdateCompanion<Chat> {
   final Value<int> syncedSeq;
   final Value<int> lastReadSeq;
   final Value<int> unreadCount;
+  final Value<bool> pinned;
+  final Value<bool> muted;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const ChatsCompanion({
@@ -442,6 +521,8 @@ class ChatsCompanion extends UpdateCompanion<Chat> {
     this.syncedSeq = const Value.absent(),
     this.lastReadSeq = const Value.absent(),
     this.unreadCount = const Value.absent(),
+    this.pinned = const Value.absent(),
+    this.muted = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -454,6 +535,8 @@ class ChatsCompanion extends UpdateCompanion<Chat> {
     this.syncedSeq = const Value.absent(),
     this.lastReadSeq = const Value.absent(),
     this.unreadCount = const Value.absent(),
+    this.pinned = const Value.absent(),
+    this.muted = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -467,6 +550,8 @@ class ChatsCompanion extends UpdateCompanion<Chat> {
     Expression<int>? syncedSeq,
     Expression<int>? lastReadSeq,
     Expression<int>? unreadCount,
+    Expression<bool>? pinned,
+    Expression<bool>? muted,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -479,6 +564,8 @@ class ChatsCompanion extends UpdateCompanion<Chat> {
       if (syncedSeq != null) 'synced_seq': syncedSeq,
       if (lastReadSeq != null) 'last_read_seq': lastReadSeq,
       if (unreadCount != null) 'unread_count': unreadCount,
+      if (pinned != null) 'pinned': pinned,
+      if (muted != null) 'muted': muted,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -493,6 +580,8 @@ class ChatsCompanion extends UpdateCompanion<Chat> {
     Value<int>? syncedSeq,
     Value<int>? lastReadSeq,
     Value<int>? unreadCount,
+    Value<bool>? pinned,
+    Value<bool>? muted,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -505,6 +594,8 @@ class ChatsCompanion extends UpdateCompanion<Chat> {
       syncedSeq: syncedSeq ?? this.syncedSeq,
       lastReadSeq: lastReadSeq ?? this.lastReadSeq,
       unreadCount: unreadCount ?? this.unreadCount,
+      pinned: pinned ?? this.pinned,
+      muted: muted ?? this.muted,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -537,6 +628,12 @@ class ChatsCompanion extends UpdateCompanion<Chat> {
     if (unreadCount.present) {
       map['unread_count'] = Variable<int>(unreadCount.value);
     }
+    if (pinned.present) {
+      map['pinned'] = Variable<bool>(pinned.value);
+    }
+    if (muted.present) {
+      map['muted'] = Variable<bool>(muted.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -557,6 +654,8 @@ class ChatsCompanion extends UpdateCompanion<Chat> {
           ..write('syncedSeq: $syncedSeq, ')
           ..write('lastReadSeq: $lastReadSeq, ')
           ..write('unreadCount: $unreadCount, ')
+          ..write('pinned: $pinned, ')
+          ..write('muted: $muted, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -2991,6 +3090,8 @@ typedef $$ChatsTableCreateCompanionBuilder =
       Value<int> syncedSeq,
       Value<int> lastReadSeq,
       Value<int> unreadCount,
+      Value<bool> pinned,
+      Value<bool> muted,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
@@ -3004,6 +3105,8 @@ typedef $$ChatsTableUpdateCompanionBuilder =
       Value<int> syncedSeq,
       Value<int> lastReadSeq,
       Value<int> unreadCount,
+      Value<bool> pinned,
+      Value<bool> muted,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
@@ -3053,6 +3156,16 @@ class $$ChatsTableFilterComposer extends Composer<_$AppDatabase, $ChatsTable> {
 
   ColumnFilters<int> get unreadCount => $composableBuilder(
     column: $table.unreadCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get muted => $composableBuilder(
+    column: $table.muted,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3111,6 +3224,16 @@ class $$ChatsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get muted => $composableBuilder(
+    column: $table.muted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -3154,6 +3277,12 @@ class $$ChatsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get pinned =>
+      $composableBuilder(column: $table.pinned, builder: (column) => column);
+
+  GeneratedColumn<bool> get muted =>
+      $composableBuilder(column: $table.muted, builder: (column) => column);
+
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 }
@@ -3194,6 +3323,8 @@ class $$ChatsTableTableManager
                 Value<int> syncedSeq = const Value.absent(),
                 Value<int> lastReadSeq = const Value.absent(),
                 Value<int> unreadCount = const Value.absent(),
+                Value<bool> pinned = const Value.absent(),
+                Value<bool> muted = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ChatsCompanion(
@@ -3205,6 +3336,8 @@ class $$ChatsTableTableManager
                 syncedSeq: syncedSeq,
                 lastReadSeq: lastReadSeq,
                 unreadCount: unreadCount,
+                pinned: pinned,
+                muted: muted,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -3218,6 +3351,8 @@ class $$ChatsTableTableManager
                 Value<int> syncedSeq = const Value.absent(),
                 Value<int> lastReadSeq = const Value.absent(),
                 Value<int> unreadCount = const Value.absent(),
+                Value<bool> pinned = const Value.absent(),
+                Value<bool> muted = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ChatsCompanion.insert(
@@ -3229,6 +3364,8 @@ class $$ChatsTableTableManager
                 syncedSeq: syncedSeq,
                 lastReadSeq: lastReadSeq,
                 unreadCount: unreadCount,
+                pinned: pinned,
+                muted: muted,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),

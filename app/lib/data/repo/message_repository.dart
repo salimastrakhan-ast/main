@@ -216,6 +216,45 @@ class MessageRepository {
 
   void sendTyping(String chatId) => ws.notify(Cmd.typing, {'chat_id': chatId});
 
+  /// Закрепляет чат или снимает закрепление.
+  ///
+  /// Настройка личная: на сервере она лежит в строке участника, и у
+  /// собеседника своя. Локально пишем сразу — список должен перестроиться
+  /// от нажатия, а не от ответа сервера.
+  Future<void> setPinned(String chatId, bool pinned) async {
+    await db.setChatPinned(chatId, pinned);
+    try {
+      await ws.call(Cmd.chatPin, {'chat_id': chatId, 'pinned': pinned});
+    } on ProtocolException {
+      // Связь пропала — вернём как было, иначе список врёт о том, чего на
+      // сервере не произошло.
+      await db.setChatPinned(chatId, !pinned);
+      rethrow;
+    }
+  }
+
+  /// «Без звука навсегда» в терминах срока: столетие вперёд.
+  ///
+  /// У сервера беззвучный режим со сроком — «на час» просят чаще вечной
+  /// тишины, — а в интерфейсе тумблер. Отдельного «навсегда» в протоколе
+  /// нет, и заводить его ради тумблера значило бы менять протокол под
+  /// интерфейс.
+  static Duration get _forever => const Duration(days: 365 * 100);
+
+  Future<void> setMuted(String chatId, bool muted) async {
+    await db.setChatMuted(chatId, muted);
+    try {
+      await ws.call(Cmd.chatMute, {
+        'chat_id': chatId,
+        if (muted)
+          'until': DateTime.now().toUtc().add(_forever).toIso8601String(),
+      });
+    } on ProtocolException {
+      await db.setChatMuted(chatId, !muted);
+      rethrow;
+    }
+  }
+
   Future<String> createGroup(String title, List<String> memberIds) async {
     final result = await ws.call(Cmd.chatCreate, {
       'title': title,
@@ -406,6 +445,8 @@ class MessageRepository {
             lastSeq: Value(chat['last_seq'] as int? ?? 0),
             lastReadSeq: Value(summary['last_read_seq'] as int? ?? 0),
             unreadCount: Value(summary['unread_count'] as int? ?? 0),
+            pinned: Value(summary['pinned'] as bool? ?? false),
+            muted: Value(summary['muted'] as bool? ?? false),
             updatedAt: Value(DateTime.now()),
           ),
         );

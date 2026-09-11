@@ -43,6 +43,8 @@ abstract final class Cmd {
   static const chatCreate = 'chat.create';
   static const chatAddMember = 'chat.addMember';
   static const chatLeave = 'chat.leave';
+  static const chatPin = 'chat.pin';
+  static const chatMute = 'chat.mute';
   static const ping = 'ping';
 }
 

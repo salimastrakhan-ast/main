@@ -40,6 +40,14 @@ class Chats extends Table {
 
   IntColumn get lastReadSeq => integer().withDefault(const Constant(0))();
   IntColumn get unreadCount => integer().withDefault(const Constant(0))();
+
+  /// Закреплён ли чат и выключен ли в нём звук.
+  ///
+  /// Настройка личная, а не общая для чата: на сервере она лежит в строке
+  /// участника, и у собеседника своя.
+  BoolColumn get pinned => boolean().withDefault(const Constant(false))();
+  BoolColumn get muted => boolean().withDefault(const Constant(false))();
+
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
@@ -171,10 +179,13 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
-  /// Версия 2 добавила таблицу настроек. Пересоздавать базу нельзя: в ней
-  /// лежит вся переписка, и обновление приложения не повод её потерять.
+  /// Пересоздавать базу нельзя: в ней лежит вся переписка, и обновление
+  /// приложения не повод её потерять. Поэтому каждая версия добавляет своё.
+  ///
+  ///   2 — таблица настроек, признаки контакта и избранного;
+  ///   3 — закрепление и беззвучный режим чата.
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
@@ -183,6 +194,10 @@ class AppDatabase extends _$AppDatabase {
         await m.createTable(prefs);
         await m.addColumn(users, users.isContact);
         await m.addColumn(users, users.isFavorite);
+      }
+      if (from < 3) {
+        await m.addColumn(chats, chats.pinned);
+        await m.addColumn(chats, chats.muted);
       }
     },
   );
@@ -208,17 +223,31 @@ class AppDatabase extends _$AppDatabase {
     return {for (final c in rows) c.id: c.syncedSeq};
   }
 
-  /// Список диалогов: сверху тот, где последнее движение.
+  /// Список диалогов: сверху закреплённые, дальше тот, где последнее
+  /// движение.
   ///
   /// Не по lastSeq: это номер внутри чата, и между чатами он несравним —
   /// переписка на пятьсот сообщений всегда оказывалась бы выше вчерашней
   /// на три, даже если в ней месяц тишины.
   Stream<List<Chat>> watchChats() {
     return (select(chats)..orderBy([
+          (t) => OrderingTerm.desc(t.pinned),
           (t) => OrderingTerm.desc(t.updatedAt),
           (t) => OrderingTerm.desc(t.lastSeq),
         ]))
         .watch();
+  }
+
+  /// Закрепление и беззвучный режим. Пишутся сразу, не дожидаясь сервера:
+  /// нажатие должно отзываться мгновенно, а команда уйдёт следом.
+  Future<void> setChatPinned(String chatId, bool pinned) {
+    return (update(chats)..where((t) => t.id.equals(chatId)))
+        .write(ChatsCompanion(pinned: Value(pinned)));
+  }
+
+  Future<void> setChatMuted(String chatId, bool muted) {
+    return (update(chats)..where((t) => t.id.equals(chatId)))
+        .write(ChatsCompanion(muted: Value(muted)));
   }
 
   /// Лента чата. Неотправленные (seq == 0) идут в конце: их место в ленте

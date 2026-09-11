@@ -40,6 +40,8 @@ void main() {
     syncedSeq: 1,
     lastReadSeq: 0,
     unreadCount: 0,
+    pinned: false,
+    muted: false,
     updatedAt: DateTime(2026, 1, 1, 12),
   );
 

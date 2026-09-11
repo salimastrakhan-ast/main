@@ -366,13 +366,28 @@ class _ChatTile extends ConsumerWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(
-            _time(chat.updatedAt),
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: unread
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.onSurfaceVariant,
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Закрепление видно значком у времени, как в образце: без него
+              // непонятно, почему старый чат стоит выше свежего.
+              if (chat.pinned) ...[
+                Icon(
+                  TitoIcons.pin,
+                  size: 12,
+                  color: theme.colorScheme.outline,
+                ),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                _time(chat.updatedAt),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: unread
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 5),
           if (unread)
@@ -380,14 +395,20 @@ class _ChatTile extends ConsumerWidget {
               constraints: const BoxConstraints(minWidth: 20),
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: theme.colorScheme.primary,
+                // У беззвучного чата счётчик серый, а не акцентный: он
+                // сообщает, а не зовёт.
+                color: chat.muted
+                    ? theme.colorScheme.outline
+                    : theme.colorScheme.primary,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
                 '${chat.unreadCount}',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onPrimary,
+                  color: chat.muted
+                      ? theme.colorScheme.onSurface
+                      : theme.colorScheme.onPrimary,
                   fontWeight: FontWeight.w600,
                 ),
               ),
