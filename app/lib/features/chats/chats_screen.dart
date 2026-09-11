@@ -5,6 +5,9 @@ import 'package:intl/intl.dart';
 import '../../core/providers.dart';
 import '../../data/db/database.dart';
 import '../../data/ws/ws_client.dart';
+import '../../ui/glass.dart';
+import '../../ui/state_view.dart';
+import '../../ui/theme.dart';
 import '../chat/chat_screen.dart';
 import '../profile/profile_screen.dart';
 
@@ -19,8 +22,12 @@ class ChatsScreen extends ConsumerWidget {
     final session = ref.watch(sessionProvider).value;
 
     return Scaffold(
-      appBar: AppBar(
+      // Карточки уезжают под шапку — тогда стекло размывает содержимое,
+      // а не пустой фон.
+      extendBodyBehindAppBar: true,
+      appBar: GlassAppBar(
         title: const Text('Маяк'),
+        bottomHeight: 20,
         bottom: const _ConnectionBanner(),
         actions: [
           IconButton(
@@ -33,11 +40,16 @@ class ChatsScreen extends ConsumerWidget {
         ],
       ),
       body: chats.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Ошибка: $e')),
+        loading: () => const StateView.loading(),
+        error: (e, _) =>
+            StateView.error(e, title: 'Не удалось загрузить диалоги'),
         data: (list) {
           if (list.isEmpty) return const _EmptyChats();
           return ListView.builder(
+            padding: EdgeInsets.only(
+              top: glassAppBarHeight(context, extra: 20 + 8),
+              bottom: 16,
+            ),
             itemCount: list.length,
             itemBuilder: (context, index) => _ChatTile(
               chat: list[index],
@@ -55,11 +67,8 @@ class ChatsScreen extends ConsumerWidget {
 ///
 /// В мессенджере молчание двусмысленно: непонятно, никто не пишет или связь
 /// пропала. Полоса снимает этот вопрос.
-class _ConnectionBanner extends ConsumerWidget implements PreferredSizeWidget {
+class _ConnectionBanner extends ConsumerWidget {
   const _ConnectionBanner();
-
-  @override
-  Size get preferredSize => const Size.fromHeight(20);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -77,8 +86,9 @@ class _ConnectionBanner extends ConsumerWidget implements PreferredSizeWidget {
       alignment: Alignment.center,
       child: Text(
         connecting ? 'Соединение…' : 'Нет сети',
-        style: theme.textTheme.labelSmall
-            ?.copyWith(color: theme.colorScheme.onSecondaryContainer),
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.onSecondaryContainer,
+        ),
       ),
     );
   }
@@ -102,21 +112,26 @@ class _ChatTile extends StatelessWidget {
 
     return ListTile(
       leading: CircleAvatar(
-        radius: 26,
-        backgroundColor: theme.colorScheme.primaryContainer,
+        radius: 25,
+        // Цвет закреплён за собеседником: в списке он работает как
+        // опознавание, и меняться между запусками не должен.
+        backgroundColor: MayakTheme.accentFor(chat.id),
         child: Text(
           title.isEmpty ? '?' : title.characters.first.toUpperCase(),
-          style: TextStyle(
-            color: theme.colorScheme.onPrimaryContainer,
-            fontWeight: FontWeight.w600,
-            fontSize: 20,
+          style: const TextStyle(
+            color: MayakTheme.onAccent,
+            fontFamily: 'Manrope',
+            fontWeight: FontWeight.w700,
+            fontSize: 19,
           ),
         ),
       ),
-      title: Text(title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w600)),
+      title: Text(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.titleMedium,
+      ),
       subtitle: Text(
         chat.type == 'group' ? 'Группа' : 'Личный чат',
         maxLines: 1,
@@ -124,14 +139,27 @@ class _ChatTile extends StatelessWidget {
         style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
       ),
       trailing: chat.unreadCount > 0
-          ? Badge(
-              label: Text('${chat.unreadCount}'),
-              backgroundColor: theme.colorScheme.primary,
+          ? Container(
+              constraints: const BoxConstraints(minWidth: 22),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Text(
+                '${chat.unreadCount}',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onPrimary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             )
           : Text(
               DateFormat.Hm().format(chat.updatedAt),
-              style: theme.textTheme.labelSmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
@@ -157,29 +185,11 @@ class _EmptyChats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.forum_outlined,
-                size: 64, color: theme.colorScheme.outlineVariant),
-            const SizedBox(height: 16),
-            Text('Пока пусто',
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            Text(
-              'Диалог появится здесь, как только вам напишут\nили вы напишете первым.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-          ],
-        ),
-      ),
+    return const StateView(
+      icon: Icons.forum_outlined,
+      title: 'Пока пусто',
+      description:
+          'Диалог появится здесь, как только вам напишут или вы напишете первым.',
     );
   }
 }

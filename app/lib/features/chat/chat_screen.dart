@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 
 import '../../core/providers.dart';
 import '../../data/db/database.dart';
+import '../../ui/glass.dart';
+import '../../ui/state_view.dart';
 import '../../ui/theme.dart';
 
 /// Переписка.
@@ -23,8 +25,21 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _input = TextEditingController();
   final _scroll = ScrollController();
+  final _composerKey = GlobalKey();
   Timer? _typingThrottle;
   int _lastReadSeq = 0;
+
+  /// Высота поля ввода. Лента уходит под него, и на этот отступ снизу она
+  /// сдвигается, иначе последнее сообщение окажется под полем. Значение
+  /// измеряется, а не задаётся: поле растёт до пяти строк.
+  double _composerHeight = 76;
+
+  void _measureComposer() {
+    final box = _composerKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    if ((box.size.height - _composerHeight).abs() < 0.5) return;
+    setState(() => _composerHeight = box.size.height);
+  }
 
   @override
   void dispose() {
@@ -77,37 +92,61 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final typing = ref.watch(typingProvider)[widget.chatId] ?? const {};
 
     return Scaffold(
-      appBar: AppBar(
+      // Лента уезжает под шапку и под поле ввода — иначе размывать нечего и
+      // стекло выглядит просто матовой плашкой.
+      extendBodyBehindAppBar: true,
+      appBar: GlassAppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(widget.title, style: const TextStyle(fontSize: 17)),
+            Text(
+              widget.title,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontSize: 17),
+            ),
             if (typing.isNotEmpty)
-              Text('печатает…',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.primary)),
+              Text(
+                'печатает…',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
           ],
         ),
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
+          Positioned.fill(
             child: messages.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Ошибка: $e')),
+              loading: () => const StateView.loading(),
+              error: (e, _) =>
+                  StateView.error(e, title: 'Не удалось открыть переписку'),
               data: (list) {
-                WidgetsBinding.instance
-                    .addPostFrameCallback((_) => _markRead(list));
-                if (list.isEmpty) return const _EmptyChat();
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _markRead(list);
+                  _measureComposer();
+                });
+                if (list.isEmpty) {
+                  return const StateView(
+                    icon: Icons.chat_bubble_outline,
+                    title: 'Здесь пока ничего нет',
+                    description: 'Напишите первым — сообщение уйдёт сразу.',
+                  );
+                }
 
                 return ListView.builder(
                   controller: _scroll,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: EdgeInsets.only(
+                    top: glassAppBarHeight(context, extra: 12),
+                    bottom: _composerHeight + 12,
+                  ),
                   itemCount: list.length,
                   itemBuilder: (context, index) {
                     final message = list[index];
                     return _Bubble(
+                      key: ValueKey(message.id),
                       message: message,
                       isMine: message.senderId == myUserId,
                       senderName: users[message.senderId]?.displayName ?? '',
@@ -118,10 +157,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               },
             ),
           ),
-          _Composer(
-            controller: _input,
-            onSend: _send,
-            onChanged: _onTyping,
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: _Composer(
+              key: _composerKey,
+              controller: _input,
+              onSend: _send,
+              onChanged: _onTyping,
+            ),
           ),
         ],
       ),
@@ -135,12 +180,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 }
 
+/// Пузырь сообщения.
+///
+/// Появляется с коротким проявлением и сдвигом снизу. Не AnimatedList:
+/// список приходит потоком из базы и перестраивается целиком, а AnimatedList
+/// требует ручного учёта вставок — с потоком это источник рассинхронов.
 class _Bubble extends StatelessWidget {
   const _Bubble({
     required this.message,
     required this.isMine,
     required this.senderName,
     required this.showSender,
+    super.key,
   });
 
   final Message message;
@@ -153,77 +204,111 @@ class _Bubble extends StatelessWidget {
     final theme = Theme.of(context);
     final deleted = message.deletedAt != null;
     final attachments = _attachments();
+    // На коралле тёмный текст: белый даёт 3.1:1 и не проходит по контрасту.
+    final onBubble = isMine
+        ? MayakTheme.onOwnBubble(theme.colorScheme)
+        : theme.colorScheme.onSurface;
+    final subdued = isMine
+        ? MayakTheme.onOwnBubble(theme.colorScheme).withValues(alpha: 0.65)
+        : theme.colorScheme.onSurfaceVariant;
 
-    return Align(
-      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * 0.78,
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      builder: (context, t, child) => Opacity(
+        opacity: t,
+        child: Transform.translate(
+          offset: Offset(0, 8 * (1 - t)),
+          child: child,
         ),
-        margin: EdgeInsets.only(
-          left: isMine ? 48 : 12,
-          right: isMine ? 12 : 48,
-          top: showSender ? 8 : 2,
-          bottom: 2,
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-        decoration: BoxDecoration(
-          color: isMine
-              ? MayakTheme.ownBubble(theme.colorScheme)
-              : MayakTheme.otherBubble(theme.colorScheme),
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(isMine ? 18 : 4),
-            bottomRight: Radius.circular(isMine ? 4 : 18),
+      ),
+      child: Align(
+        alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.sizeOf(context).width * 0.78,
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (showSender && !isMine && senderName.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 3),
-                child: Text(senderName,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.primary,
-                    )),
-              ),
-            for (final attachment in attachments)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: _Attachment(attachment: attachment),
-              ),
-            if (deleted)
-              Text('Сообщение удалено',
-                  style: TextStyle(
-                    fontStyle: FontStyle.italic,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ))
-            else if (message.body.isNotEmpty)
-              Text(message.body, style: const TextStyle(fontSize: 15.5)),
-            const SizedBox(height: 3),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (message.editedAt != null && !deleted)
-                  Text('изменено · ',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant)),
-                Text(DateFormat.Hm().format(message.createdAt),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant)),
-                if (isMine) ...[
-                  const SizedBox(width: 4),
-                  _StateIcon(state: message.sendState),
-                ],
-              ],
+          margin: EdgeInsets.only(
+            left: isMine ? 48 : 12,
+            right: isMine ? 12 : 48,
+            top: showSender ? 8 : 2,
+            bottom: 2,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            color: isMine
+                ? MayakTheme.ownBubble(theme.colorScheme)
+                : MayakTheme.otherBubble(theme.colorScheme),
+            // Своему пузырю граница не нужна: коралл сам себя очерчивает.
+            border: isMine
+                ? null
+                : Border.all(color: theme.colorScheme.outlineVariant),
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(16),
+              topRight: const Radius.circular(16),
+              bottomLeft: Radius.circular(isMine ? 16 : 5),
+              bottomRight: Radius.circular(isMine ? 5 : 16),
             ),
-          ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (showSender && !isMine && senderName.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: Text(
+                    senderName,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontSize: 13,
+                      color: MayakTheme.accentFor(message.senderId),
+                    ),
+                  ),
+                ),
+              for (final attachment in attachments)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: _Attachment(attachment: attachment),
+                ),
+              if (deleted)
+                Text(
+                  'Сообщение удалено',
+                  style: TextStyle(fontStyle: FontStyle.italic, color: subdued),
+                )
+              else if (message.body.isNotEmpty)
+                Text(
+                  message.body,
+                  style: TextStyle(
+                    fontSize: 15.5,
+                    height: 1.35,
+                    color: onBubble,
+                  ),
+                ),
+              const SizedBox(height: 3),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (message.editedAt != null && !deleted)
+                    Text(
+                      'изменено · ',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: subdued,
+                      ),
+                    ),
+                  Text(
+                    DateFormat.Hm().format(message.createdAt),
+                    style: theme.textTheme.labelSmall?.copyWith(color: subdued),
+                  ),
+                  if (isMine) ...[
+                    const SizedBox(width: 4),
+                    _StateIcon(state: message.sendState, color: subdued),
+                  ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -242,20 +327,21 @@ class _Bubble extends StatelessWidget {
 
 /// Значок состояния отправки: часики, галочка или предупреждение.
 class _StateIcon extends StatelessWidget {
-  const _StateIcon({required this.state});
+  const _StateIcon({required this.state, required this.color});
 
   final SendState state;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return switch (state) {
-      SendState.pending => Icon(Icons.schedule,
-          size: 13, color: theme.colorScheme.onSurfaceVariant),
-      SendState.sent => Icon(Icons.done,
-          size: 13, color: theme.colorScheme.onSurfaceVariant),
-      SendState.failed =>
-        Icon(Icons.error_outline, size: 13, color: theme.colorScheme.error),
+      SendState.pending => Icon(Icons.schedule, size: 13, color: color),
+      SendState.sent => Icon(Icons.done, size: 13, color: color),
+      SendState.failed => Icon(
+        Icons.error_outline,
+        size: 13,
+        color: Theme.of(context).colorScheme.error,
+      ),
     };
   }
 }
@@ -301,9 +387,9 @@ class _AttachmentStub extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const SizedBox(
-        height: 120,
-        child: Center(child: Icon(Icons.broken_image_outlined)),
-      );
+    height: 120,
+    child: Center(child: Icon(Icons.broken_image_outlined)),
+  );
 }
 
 class _Composer extends StatelessWidget {
@@ -311,6 +397,7 @@ class _Composer extends StatelessWidget {
     required this.controller,
     required this.onSend,
     required this.onChanged,
+    super.key,
   });
 
   final TextEditingController controller;
@@ -319,52 +406,75 @@ class _Composer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
-              child: TextField(
-                controller: controller,
-                minLines: 1,
-                maxLines: 5,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(hintText: 'Сообщение'),
-                onChanged: (_) => onChanged(),
-                onSubmitted: (_) => onSend(),
+    return GlassSurface(
+      borderSide: GlassBorder.top,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  minLines: 1,
+                  maxLines: 5,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(hintText: 'Сообщение'),
+                  onChanged: (_) => onChanged(),
+                  onSubmitted: (_) => onSend(),
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            IconButton.filled(
-              onPressed: onSend,
-              icon: const Icon(Icons.arrow_upward),
-              style: IconButton.styleFrom(
-                backgroundColor: theme.colorScheme.primary,
-                foregroundColor: theme.colorScheme.onPrimary,
-                minimumSize: const Size(48, 48),
-              ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              _SendButton(onPressed: onSend),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _EmptyChat extends StatelessWidget {
-  const _EmptyChat();
+/// Кнопка отправки.
+///
+/// Отдельным виджетом ради отклика на нажатие: кнопка слегка поджимается,
+/// и палец получает подтверждение раньше, чем сообщение долетит до сервера.
+class _SendButton extends StatefulWidget {
+  const _SendButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  State<_SendButton> createState() => _SendButtonState();
+}
+
+class _SendButtonState extends State<_SendButton> {
+  bool _down = false;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Text('Здесь пока ничего нет',
-          style: theme.textTheme.bodyMedium
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+    final scheme = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _down = true),
+      onTapUp: (_) => setState(() => _down = false),
+      onTapCancel: () => setState(() => _down = false),
+      onTap: widget.onPressed,
+      child: AnimatedScale(
+        scale: _down ? 0.92 : 1,
+        duration: const Duration(milliseconds: 110),
+        curve: Curves.easeOut,
+        child: Container(
+          width: 48,
+          height: 48,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: scheme.primary,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(Icons.arrow_upward, size: 22, color: scheme.onPrimary),
+        ),
+      ),
     );
   }
 }

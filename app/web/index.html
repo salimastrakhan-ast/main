@@ -31,6 +31,18 @@
 
   <title>Маяк</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- Фон до первого кадра.
+       Пока движок не отрисовал интерфейс, окно красит браузер. Без этого
+       человек видит белую вспышку, а на тёмной теме — ещё и резкую. -->
+  <meta name="theme-color" content="#faf9f5" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141413" media="(prefers-color-scheme: dark)">
+  <style id="mayak-preframe">
+    html, body { margin: 0; padding: 0; background: #faf9f5; }
+    @media (prefers-color-scheme: dark) {
+      html, body { background: #141413; }
+    }
+  </style>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

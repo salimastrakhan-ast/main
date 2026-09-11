@@ -71,13 +71,26 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(Icons.chat_bubble_outline,
-                      size: 64, color: theme.colorScheme.primary),
+                  // Знак приложения: коралловый круг с первой буквой.
+                  // Проще стандартной иконки и сразу узнаётся в тёмной теме.
+                  Center(
+                    child: Container(
+                      width: 64,
+                      height: 64,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text('М',
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                              color: theme.colorScheme.onPrimary)),
+                    ),
+                  ),
                   const SizedBox(height: 24),
                   Text('Маяк',
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.headlineMedium
-                          ?.copyWith(fontWeight: FontWeight.w700)),
+                      style: theme.textTheme.headlineMedium),
                   const SizedBox(height: 8),
                   Text('Введите номер телефона',
                       textAlign: TextAlign.center,

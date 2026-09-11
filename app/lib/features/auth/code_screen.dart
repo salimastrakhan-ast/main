@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../data/api/api_client.dart';
+import '../../ui/theme.dart';
 
 /// Ввод кода из SMS.
 class CodeScreen extends ConsumerStatefulWidget {
@@ -74,8 +75,7 @@ class _CodeScreenState extends ConsumerState<CodeScreen> {
                 children: [
                   Text('Код из SMS',
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w700)),
+                      style: theme.textTheme.headlineSmall),
                   const SizedBox(height: 8),
                   Text('Отправили на +${widget.phone}',
                       textAlign: TextAlign.center,
@@ -87,7 +87,13 @@ class _CodeScreenState extends ConsumerState<CodeScreen> {
                     autofocus: true,
                     keyboardType: TextInputType.number,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 28, letterSpacing: 12),
+                    // Моноширинный: цифры не прыгают по мере ввода.
+                    style: const TextStyle(
+                      fontFamily: MayakTheme.monoFamily,
+                      fontFamilyFallback: MayakTheme.monoFallback,
+                      fontSize: 26,
+                      letterSpacing: 10,
+                    ),
                     inputFormatters: [
                       FilteringTextInputFormatter.digitsOnly,
                       LengthLimitingTextInputFormatter(6),

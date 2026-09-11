@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../data/ws/ws_client.dart';
+import '../../ui/glass.dart';
+import '../../ui/theme.dart';
 
 /// Профиль и выход.
 class ProfileScreen extends ConsumerWidget {
@@ -23,22 +25,31 @@ class ProfileScreen extends ConsumerWidget {
           Center(
             child: CircleAvatar(
               radius: 44,
-              backgroundColor: theme.colorScheme.primaryContainer,
-              child: Icon(Icons.person,
-                  size: 44, color: theme.colorScheme.onPrimaryContainer),
+              backgroundColor: MayakTheme.accentFor(session?.userId ?? ''),
+              child: Text(
+                (me?.displayName ?? '?').characters.first.toUpperCase(),
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  color: MayakTheme.onAccent,
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 12),
           Center(
-            child: Text(me?.displayName ?? 'Профиль',
-                style: theme.textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w600)),
+            child: Text(
+              me?.displayName ?? 'Профиль',
+              style: theme.textTheme.titleLarge,
+            ),
           ),
           if (me?.phone != null)
             Center(
-              child: Text('+${me!.phone}',
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              child: Text(
+                '+${me!.phone}',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontSize: 13,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
             ),
           const SizedBox(height: 24),
           ListTile(
@@ -57,7 +68,10 @@ class ProfileScreen extends ConsumerWidget {
           const Divider(),
           ListTile(
             leading: Icon(Icons.logout, color: theme.colorScheme.error),
-            title: Text('Выйти', style: TextStyle(color: theme.colorScheme.error)),
+            title: Text(
+              'Выйти',
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
             onTap: () => _confirmLogout(context, ref),
           ),
         ],
@@ -66,7 +80,7 @@ class ProfileScreen extends ConsumerWidget {
   }
 
   Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showGlassDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Выйти из аккаунта?'),
@@ -74,12 +88,15 @@ class ProfileScreen extends ConsumerWidget {
           'Переписка останется на сервере, но с этого устройства будет удалена.',
         ),
         actions: [
-          TextButton(
+          OutlinedButton(
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Отмена'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
+            // Кнопка в диалоге не должна растягиваться на всю ширину, как
+            // главная кнопка на экране входа.
+            style: FilledButton.styleFrom(minimumSize: const Size(96, 46)),
             child: const Text('Выйти'),
           ),
         ],

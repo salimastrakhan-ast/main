@@ -49,6 +49,7 @@ flutter:
   # на Россию, это рабочее предположение, — человек пятнадцать секунд смотрит
   # на белый экран. Проверено: именно так и происходит.
   fonts:
+    # Текст сообщений.
     - family: Roboto
       fonts:
         - asset: assets/fonts/Roboto-Regular.ttf
@@ -57,3 +58,21 @@ flutter:
           weight: 500
         - asset: assets/fonts/Roboto-Bold.ttf
           weight: 700
+
+    # Заголовки. Фирменный набор называет Poppins, но у него нет кириллицы —
+    # проверено по таблице символов файла, «Привет» не отрисовалось бы ни
+    # одной буквой. Manrope того же геометрического склада и с кириллицей.
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Manrope-Bold.ttf
+          weight: 700
+
+    # Цифры и метки: моноширинные цифры не прыгают по ширине при обновлении.
+    - family: JetBrainsMono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/JetBrainsMono-Medium.ttf
+          weight: 500
