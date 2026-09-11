@@ -132,6 +132,34 @@ abstract final class TitoIcons {
   /// она читалась бы как «позвонить», а не как «сюда номер».
   static const phone = IconData(57699, fontFamily: 'Lucide');
 
+  // --- Звонки ---
+
+  /// Позвонить. Трубка со значком вызова — в отличие от `phone`, которая
+  /// стоит у поля ввода номера и означает «сюда номер».
+  static const callStart = IconData(57652, fontFamily: 'Lucide');
+
+  /// Завершить или отклонить.
+  static const callEnd = IconData(57656, fontFamily: 'Lucide');
+
+  /// Микрофон выключен — в разговоре. Включённый это `voice`: там тот же
+  /// микрофон, и заводить ему второе имя значило бы держать две роли на
+  /// одну картинку.
+  static const voiceOff = IconData(57625, fontFamily: 'Lucide');
+
+  /// Громкая связь. Не тот же значок, что «включить звук чата»: там
+  /// динамик с волнами, означающий «звук вернулся», здесь — сам динамик
+  /// телефона, в который переключают разговор.
+  static const speaker = IconData(57702, fontFamily: 'Lucide');
+
+  /// Входящий звонок — в ленте переписки.
+  static const callIn = IconData(57654, fontFamily: 'Lucide');
+
+  /// Исходящий звонок.
+  static const callOut = IconData(57657, fontFamily: 'Lucide');
+
+  /// Пропущенный.
+  static const callMissed = IconData(57655, fontFamily: 'Lucide');
+
   // --- Состояние связи ---
 
   /// На связи.
@@ -211,6 +239,13 @@ abstract final class TitoIcons {
     language,
     help,
     phone,
+    callStart,
+    callEnd,
+    voiceOff,
+    speaker,
+    callIn,
+    callOut,
+    callMissed,
     online,
     offline,
     pending,

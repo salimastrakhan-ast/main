@@ -5,6 +5,7 @@ import '../../core/providers.dart';
 import '../../ui/icons.dart';
 import '../../ui/state_view.dart';
 import '../../ui/tokens.dart';
+import '../call/call_screen.dart';
 import '../chat/chat_screen.dart';
 import '../sidebar/sidebar_pane.dart';
 
@@ -25,6 +26,12 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Звонок закрывает собой всё остальное. Не маршрутом, а подменой
+    // содержимого: экран разговора не должен попадать в историю навигации,
+    // иначе «назад» после разговора вернёт в него же.
+    final call = ref.watch(currentCallProvider).value;
+    if (call != null) return CallScreen(call: call);
+
     final wide = MediaQuery.sizeOf(context).width >= twoPaneFrom;
     final selected = ref.watch(selectedChatProvider);
     final draftPeer = ref.watch(draftPeerProvider);

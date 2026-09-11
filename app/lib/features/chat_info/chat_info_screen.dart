@@ -83,6 +83,13 @@ class ChatInfoScreen extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(horizontal: Tokens.space4),
             child: Row(
               children: [
+                // Позвонить можно и отсюда: сюда приходят, чтобы посмотреть
+                // на человека, и звонок — первое, чего от такого экрана
+                // ждут. В группах его нет, как и в шапке.
+                if (!isGroup && peer != null) ...[
+                  _CallAction(peer: peer, chatId: chatId),
+                  const SizedBox(width: Tokens.space2),
+                ],
                 _Action(
                   icon: TitoIcons.search,
                   label: 'Поиск',
@@ -249,11 +256,20 @@ class _Action extends StatelessWidget {
 
   final IconData icon;
   final String label;
-  final VoidCallback onTap;
+
+  /// null — действие недоступно. Так гаснет «позвонить», пока идёт другой
+  /// звонок.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Недоступное действие обязано выглядеть недоступным. Иначе человек
+    // жмёт кнопку, ничего не происходит, и он решает, что сломалось
+    // приложение, а не что занята линия.
+    final ink = onTap == null
+        ? theme.colorScheme.outline
+        : theme.colorScheme.onSurfaceVariant;
 
     return Expanded(
       child: InkWell(
@@ -267,18 +283,49 @@ class _Action extends StatelessWidget {
           ),
           child: Column(
             children: [
-              Icon(icon, size: 20, color: theme.colorScheme.onSurfaceVariant),
+              Icon(icon, size: 20, color: ink),
               const SizedBox(height: 5),
               Text(
                 label,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+                style: theme.textTheme.labelSmall?.copyWith(color: ink),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+
+/// «Позвонить» среди действий профиля.
+class _CallAction extends ConsumerWidget {
+  const _CallAction({required this.peer, required this.chatId});
+
+  final User peer;
+  final String chatId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final busy = ref.watch(currentCallProvider).value != null;
+    return _Action(
+      icon: TitoIcons.callStart,
+      label: 'Позвонить',
+      onTap: busy
+          ? null
+          : () async {
+              try {
+                await ref.read(callServiceProvider).start(
+                  peerId: peer.id,
+                  peerName: peer.displayName,
+                  chatId: chatId,
+                );
+              } catch (_) {
+                if (context.mounted) {
+                  showMessage(context, 'Нет доступа к микрофону');
+                }
+              }
+            },
     );
   }
 }

@@ -46,6 +46,13 @@ abstract final class Cmd {
   static const chatPin = 'chat.pin';
   static const chatMute = 'chat.mute';
   static const ping = 'ping';
+
+  // Звонки. Сервер в них только посредник: он сводит две стороны и
+  // пересылает описания соединения, а разговор идёт мимо него.
+  static const callStart = 'call.start';
+  static const callAnswer = 'call.answer';
+  static const callIce = 'call.ice';
+  static const callHangup = 'call.hangup';
 }
 
 /// Ответы и события сервера.
@@ -63,6 +70,11 @@ abstract final class Ev {
   static const typing = 'typing';
   static const presence = 'presence';
   static const chatUpdate = 'chat.update';
+
+  static const callIncoming = 'call.incoming';
+  static const callAccepted = 'call.accepted';
+  static const callIce = 'call.ice';
+  static const callEnded = 'call.ended';
 }
 
 /// Ошибка, пришедшая от сервера в ответ на команду.

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/api/api_client.dart';
 import '../data/api/session_store.dart';
+import '../data/calls/call_service.dart';
 import '../data/db/database.dart';
 import '../data/repo/message_repository.dart';
 import '../data/ws/ws_client.dart';
@@ -98,6 +99,23 @@ final repositoryProvider = Provider<MessageRepository?>((ref) {
   );
   ref.onDispose(repo.dispose);
   return repo;
+});
+
+/// Звонки. Живут при любой сессии, отдельно от репозитория: разговор не
+/// касается ни базы, ни очереди сообщений.
+final callServiceProvider = Provider<CallService>((ref) {
+  final service = CallService(
+    ws: ref.watch(wsProvider),
+    api: ref.watch(apiProvider),
+  );
+  ref.onDispose(service.dispose);
+  return service;
+});
+
+/// Текущий звонок или его отсутствие. На него смотрит оболочка приложения,
+/// чтобы показать экран разговора поверх всего остального.
+final currentCallProvider = StreamProvider<CallView?>((ref) {
+  return ref.watch(callServiceProvider).calls;
 });
 
 final chatsProvider = StreamProvider<List<Chat>>((ref) {

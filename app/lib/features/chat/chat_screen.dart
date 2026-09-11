@@ -429,8 +429,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ),
         ),
         actions: [
-          // Звонков в образце нет ни в шапке, ни вообще: вместо двух трубок
-          // здесь то же, что у него, — меню.
+          // Трубки в образце нет — там в шапке только меню. Но звонок это
+          // то, ради чего люди открывают мессенджер, и прятать его в меню
+          // из трёх точек значит сделать вид, что его нет.
+          //
+          // Только в личной переписке: групповым нужен отдельный сервер
+          // сведения потоков, и кнопка, которая всегда отвечает отказом,
+          // хуже её отсутствия. В «Избранном» звонить некому.
+          if (!isGroup && !isSaved && peer != null)
+            _CallButton(peer: peer, chatId: chatId),
           if (chatId != null && chat != null)
             _ChatMenu(chat: chat)
           else
@@ -1479,6 +1486,45 @@ class _SendButtonState extends State<_SendButton> {
           ),
         ),
       ),
+    );
+  }
+}
+
+
+/// Кнопка звонка в шапке переписки.
+///
+/// Работает и до того, как переписка заведена: человека могли только что
+/// найти в поиске, и требовать сначала написать «привет» — лишний шаг.
+class _CallButton extends ConsumerWidget {
+  const _CallButton({required this.peer, this.chatId});
+
+  final User peer;
+  final String? chatId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Пока идёт другой звонок, кнопка гаснет: второй означал бы два
+    // открытых микрофона и путаницу, кому какой ответ.
+    final busy = ref.watch(currentCallProvider).value != null;
+
+    return IconButton(
+      icon: const Icon(TitoIcons.callStart, size: 20),
+      tooltip: 'Позвонить',
+      onPressed: busy
+          ? null
+          : () async {
+              try {
+                await ref.read(callServiceProvider).start(
+                  peerId: peer.id,
+                  peerName: peer.displayName,
+                  chatId: chatId,
+                );
+              } catch (_) {
+                if (context.mounted) {
+                  showMessage(context, 'Нет доступа к микрофону');
+                }
+              }
+            },
     );
   }
 }

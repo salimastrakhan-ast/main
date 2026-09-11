@@ -84,6 +84,11 @@ e2e-web:
 e2e-call:
 	cd e2e && npm install --silent && xvfb-run -a node call.mjs
 
+# Звонок из приложения в веб. Сборка Flutter для веба берёт тот же
+# CallService, что и APK, — проверяется именно код приложения.
+e2e-call-app:
+	cd e2e && npm install --silent && xvfb-run -a node call-app.mjs
+
 # Все экраны обоих клиентов одной картинкой. Нужны поднятые сервер,
 # веб-клиент на 4173 и сборка Flutter web на 8090 — см. e2e/README.md.
 #
