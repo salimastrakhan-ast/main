@@ -15,6 +15,12 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { api } from "./api";
+import {
+  CallSession,
+  RING_TIMEOUT_MS,
+  type CallEndReason,
+  type CallState,
+} from "./calls";
 import type {
   Attachment,
   AttachmentKind,
@@ -150,6 +156,22 @@ const MUTE_FOREVER = new Date(
 
 // --- Состояние ---
 
+/// Звонок глазами экрана: кто, в каком состоянии и с какого момента идёт
+/// разговор. Само соединение живёт в CallSession — сюда попадает только то,
+/// что нужно нарисовать.
+export type CallView = {
+  peerId: string;
+  chatId: string;
+  /// Мы звоним или нам звонят. Различие видно и по состоянию, но оно
+  /// переживает переход в «разговор», где состояния уже одинаковые, а
+  /// подпись в истории — разная.
+  outgoing: boolean;
+  state: CallState;
+  reason?: CallEndReason;
+  muted: boolean;
+  startedAt: number;
+};
+
 type Outgoing = {
   clientMsgId: string;
   chatId?: string;
@@ -194,6 +216,10 @@ type State = {
   translatingChatId: string | null;
   draftBusy: boolean;
   revealedOriginal: Record<string, boolean>;
+
+  /// Звонок. Один за раз: второй означал бы два открытых микрофона и
+  /// путаницу, кому какой ответ.
+  call: CallView | null;
   /// Почему перевод не сработал — показываем словами вместо молчания.
   translateError: string | null;
 };
@@ -215,6 +241,12 @@ type Actions = {
   startChatWith: (userId: string) => void;
   createGroup: (title: string, memberIds: string[]) => Promise<void>;
   findPeople: (query: string) => Promise<Contact[]>;
+  startCall: (chatId: string) => Promise<void>;
+  acceptCall: () => Promise<void>;
+  declineCall: () => void;
+  hangUp: () => void;
+  toggleCallMute: () => void;
+  dismissCall: () => void;
   setReplyTo: (id: string | null) => void;
   toggleOriginal: (id: string) => void;
   togglePin: (chatId: string) => void;
@@ -227,7 +259,11 @@ type Actions = {
   sendFiles: (chatId: string, files: File[]) => Promise<void>;
   sendVoice: (chatId: string, blob: Blob, seconds: number) => Promise<void>;
   sendTyping: (chatId: string) => void;
-  editMessage: (chatId: string, messageId: string, text: string) => Promise<void>;
+  editMessage: (
+    chatId: string,
+    messageId: string,
+    text: string,
+  ) => Promise<void>;
   deleteMessage: (chatId: string, messageId: string) => Promise<void>;
   setEditing: (messageId: string | null) => void;
   toggleTranslate: (chatId: string) => Promise<void>;
@@ -265,7 +301,9 @@ function summaryToChat(summary: ServerSummary, myId: string): Chat {
     kind: isGroup ? "group" : summary.users.length === 1 ? "saved" : "dm",
     title,
     peerId: peer?.id,
-    memberIds: summary.members.map((m) => m.user_id).filter((id) => id !== myId),
+    memberIds: summary.members
+      .map((m) => m.user_id)
+      .filter((id) => id !== myId),
     avatar: isGroup ? summary.chat.avatar_url : peer?.avatar_url,
     initials: initialsOf(title),
     pinned: summary.pinned ?? false,
@@ -305,6 +343,7 @@ export const useMessenger = create<MessengerStore>()(
       draftBusy: false,
       revealedOriginal: {},
       translateError: null,
+      call: null,
 
       // --- Подъём ---
 
@@ -372,10 +411,80 @@ export const useMessenger = create<MessengerStore>()(
       setSearch: (search) => set({ search }),
       setFolder: (folder) => set({ folder }),
       setSidebarView: (sidebarView) => set({ sidebarView }),
+      // --- Звонки ---
+
+      startCall: async (chatId) => {
+        // Переписки может ещё не быть: человека нашли в поиске и сразу
+        // звонят. Тогда идентификатор пуст, а собеседник известен из
+        // черновика — сервер заведёт чат сам.
+        const chat = get().chats.find((c) => c.id === chatId);
+        const peerId = chat?.peerId ?? get().draftPeerId;
+        if (!peerId || get().call) return;
+
+        set({
+          call: {
+            peerId,
+            chatId,
+            outgoing: true,
+            state: "connecting",
+            muted: false,
+            startedAt: 0,
+          },
+        });
+        try {
+          await session().start(chatId, peerId, await api.iceServers());
+          armRingTimeout();
+        } catch (e) {
+          // Отказ в доступе к микрофону выглядит именно так, и молчать тут
+          // нельзя: человек нажал «позвонить» и должен узнать, почему не
+          // вышло.
+          session().finish("failed");
+          throw e;
+        }
+      },
+
+      acceptCall: async () => {
+        const call = get().call;
+        if (!call || call.state !== "incoming") return;
+        clearRingTimeout();
+        try {
+          await session().accept(await api.iceServers());
+        } catch {
+          session().hangup("failed");
+        }
+      },
+
+      declineCall: () => {
+        clearRingTimeout();
+        session().hangup("declined");
+      },
+
+      hangUp: () => {
+        clearRingTimeout();
+        session().hangup("hangup");
+      },
+
+      toggleCallMute: () => {
+        const call = get().call;
+        if (!call) return;
+        const muted = !call.muted;
+        session().setMuted(muted);
+        set({ call: { ...call, muted } });
+      },
+
+      dismissCall: () => {
+        clearRingTimeout();
+        session().reset();
+        set({ call: null });
+      },
+
       setReplyTo: (replyToId) => set({ replyToId }),
       toggleOriginal: (id) =>
         set((s) => ({
-          revealedOriginal: { ...s.revealedOriginal, [id]: !s.revealedOriginal[id] },
+          revealedOriginal: {
+            ...s.revealedOriginal,
+            [id]: !s.revealedOriginal[id],
+          },
         })),
 
       togglePin: (chatId) => {
@@ -470,9 +579,27 @@ export const useMessenger = create<MessengerStore>()(
         try {
           const found = (await api.searchUsers(q)) as ServerUser[];
           const mine = get().me?.id;
-          return found
+          const people = found
             .filter((u) => u.id !== mine)
             .map((u) => toContact(u, false));
+
+          // Найденные кладутся рядом с книгой, а не только возвращаются.
+          // Иначе выбрать такого человека нельзя: панель переписки ищет
+          // собеседника среди контактов, не находит и показывает пустой
+          // экран — нажатие выглядит несработавшим. По этой же причине в
+          // окне звонка вместо имени был бы прочерк.
+          if (people.length > 0) {
+            set((s) => {
+              const contacts = { ...s.contacts };
+              for (const person of people) {
+                // Запись из книги не затирается: в ней имя, которое человек
+                // дал сам, и оно ему привычнее серверного.
+                if (!contacts[person.id]) contacts[person.id] = person;
+              }
+              return { contacts };
+            });
+          }
+          return people;
         } catch {
           return [];
         }
@@ -492,7 +619,9 @@ export const useMessenger = create<MessengerStore>()(
         const chat = get().chats.find((c) => c.id === chatId);
         // Пустой chatId — переписка, которой ещё нет: сервер заведёт её сам
         // по собеседнику в первом же сообщении.
-        const peerId = chat?.peerId ?? (chatId ? undefined : get().draftPeerId ?? undefined);
+        const peerId =
+          chat?.peerId ??
+          (chatId ? undefined : (get().draftPeerId ?? undefined));
         if (!chatId && !peerId) return;
 
         const clientMsgId = crypto.randomUUID();
@@ -529,7 +658,9 @@ export const useMessenger = create<MessengerStore>()(
             },
           ],
           chats: s.chats.map((c) =>
-            c.id === chatId ? { ...c, lastMessageAt: draft.createdAt, unread: 0 } : c,
+            c.id === chatId
+              ? { ...c, lastMessageAt: draft.createdAt, unread: 0 }
+              : c,
           ),
         }));
 
@@ -760,6 +891,98 @@ export const useMessenger = create<MessengerStore>()(
   ),
 );
 
+// --- Звонки ---
+
+/// Звук собеседника.
+///
+/// Отдельный элемент, а не React-компонент: поток приходит раньше, чем
+/// нарисуется окно разговора, и привязывать воспроизведение к жизни
+/// компонента значит терять первые секунды.
+let remoteAudio: HTMLAudioElement | null = null;
+
+function playRemote(stream: MediaStream) {
+  if (!remoteAudio) {
+    remoteAudio = new Audio();
+    remoteAudio.autoplay = true;
+    // Элемент кладётся в документ, а не остаётся сам по себе: отвязанный
+    // от дерева браузер вправе усыпить вместе с воспроизведением, и голос
+    // собеседника пропадает посреди разговора без всякой ошибки.
+    remoteAudio.hidden = true;
+    document.body.append(remoteAudio);
+  }
+  remoteAudio.srcObject = stream;
+  void remoteAudio.play().catch(() => {
+    // Браузер может отказать в автозапуске, если человек ещё ничего не
+    // нажимал на странице. К звонку это не относится: до разговора он
+    // нажал «позвонить» или «ответить».
+  });
+}
+
+function stopRemote() {
+  if (!remoteAudio) return;
+  remoteAudio.pause();
+  remoteAudio.srcObject = null;
+}
+
+let callSession: CallSession | null = null;
+
+/// Сессия заводится при первом звонке и живёт до конца вкладки.
+///
+/// Создавать её на модуле нельзя: конструктор трогает ws, а тот к моменту
+/// разбора модуля ещё не готов.
+function session(): CallSession {
+  if (!callSession) {
+    callSession = new CallSession(ws, {
+      onState: (state, reason) => {
+        set((s) => {
+          if (!s.call) return s;
+          return {
+            call: {
+              ...s.call,
+              state,
+              reason,
+              startedAt:
+                state === "active" && s.call.startedAt === 0
+                  ? Date.now()
+                  : s.call.startedAt,
+            },
+          };
+        });
+        if (state === "ended") {
+          stopRemote();
+          clearRingTimeout();
+          // Окно с исходом держится пару секунд и уходит само: «занято» и
+          // «не отвечает» человек должен успеть прочитать, но закрывать их
+          // рукой — лишнее движение после и так неудачного звонка.
+          window.setTimeout(() => {
+            if (get().call?.state === "ended") get().dismissCall();
+          }, 2500);
+        }
+      },
+      onRemoteStream: playRemote,
+    });
+  }
+  return callSession;
+}
+
+/// Сколько звонить, прежде чем считать, что не ответили.
+let ringTimer = 0;
+
+function armRingTimeout() {
+  clearRingTimeout();
+  ringTimer = window.setTimeout(() => {
+    const call = get().call;
+    if (call && (call.state === "ringing" || call.state === "incoming")) {
+      session().hangup("missed");
+    }
+  }, RING_TIMEOUT_MS);
+}
+
+function clearRingTimeout() {
+  window.clearTimeout(ringTimer);
+  ringTimer = 0;
+}
+
 // --- Работа с сервером ---
 
 const set = useMessenger.setState;
@@ -773,7 +996,9 @@ function applyOwnAvatar(avatar: string) {
     const mine = s.contacts[me.id];
     return {
       me: { ...me, avatar },
-      contacts: mine ? { ...s.contacts, [me.id]: { ...mine, avatar } } : s.contacts,
+      contacts: mine
+        ? { ...s.contacts, [me.id]: { ...mine, avatar } }
+        : s.contacts,
     };
   });
 }
@@ -824,9 +1049,7 @@ async function syncAll() {
 
     const cursors = get().cursors;
     const result = await ws.call(Cmd.sync, {
-      cursors: Object.fromEntries(
-        chats.map((c) => [c.id, cursors[c.id] ?? 0]),
-      ),
+      cursors: Object.fromEntries(chats.map((c) => [c.id, cursors[c.id] ?? 0])),
     });
     applySync(result);
   } catch {
@@ -836,7 +1059,13 @@ async function syncAll() {
 }
 
 function applySync(data: Record<string, unknown>) {
-  const deltas = (data.chats as { chat_id: string; messages: ServerMessage[]; last_seq: number; truncated?: boolean }[]) ?? [];
+  const deltas =
+    (data.chats as {
+      chat_id: string;
+      messages: ServerMessage[];
+      last_seq: number;
+      truncated?: boolean;
+    }[]) ?? [];
   for (const delta of deltas) {
     for (const raw of delta.messages ?? []) mergeMessage(raw);
     // Курсор двигаем, только если чат приехал целиком: при truncated в
@@ -879,7 +1108,10 @@ function mergeMessage(raw: ServerMessage) {
       cursors: { ...s.cursors, [message.chatId]: cursor },
       chats: s.chats.map((c) =>
         c.id === message.chatId
-          ? { ...c, lastMessageAt: Math.max(c.lastMessageAt, message.createdAt) }
+          ? {
+              ...c,
+              lastMessageAt: Math.max(c.lastMessageAt, message.createdAt),
+            }
           : c,
       ),
     };
@@ -955,7 +1187,9 @@ async function trySend(item: Outgoing): Promise<boolean> {
     if (raw && !item.chatId) {
       set((s) => ({
         messages: s.messages.map((m) =>
-          m.clientMsgId === item.clientMsgId ? { ...m, chatId: raw.chat_id } : m,
+          m.clientMsgId === item.clientMsgId
+            ? { ...m, chatId: raw.chat_id }
+            : m,
         ),
         selectedChatId: s.draftPeerId ? raw.chat_id : s.selectedChatId,
         draftPeerId: null,
@@ -1023,7 +1257,10 @@ function handleEvent(envelope: Envelope) {
         contacts: {
           ...s.contacts,
           ...Object.fromEntries(
-            summary.users.map((u) => [u.id, toContact(u, s.contacts[u.id]?.online ?? false)]),
+            summary.users.map((u) => [
+              u.id,
+              toContact(u, s.contacts[u.id]?.online ?? false),
+            ]),
           ),
         },
       }));
@@ -1038,7 +1275,10 @@ function handleEvent(envelope: Envelope) {
       if (data.user_id === me?.id) return;
       set((s) => ({
         messages: s.messages.map((m) =>
-          m.chatId === chatId && m.senderId === me?.id && m.seq > 0 && m.seq <= upTo
+          m.chatId === chatId &&
+          m.senderId === me?.id &&
+          m.seq > 0 &&
+          m.seq <= upTo
             ? { ...m, status: "read" }
             : m,
         ),
@@ -1057,6 +1297,60 @@ function handleEvent(envelope: Envelope) {
       return;
     }
 
+    case Ev.callIncoming: {
+      const callId = String(data.call_id ?? "");
+      const chatId = String(data.chat_id ?? "");
+      const from = data.from as ServerUser | undefined;
+      if (!callId || !chatId || !from) return;
+
+      // Заняты — отклоняем сразу, а не даём второму звонку перебить
+      // первый. Звонящий услышит «занято», как и ждёт.
+      if (get().call) {
+        void ws.call(Cmd.callHangup, { call_id: callId, reason: "busy" });
+        return;
+      }
+
+      // Звонящий мог не быть в контактах: чтобы окно не показало «?»,
+      // кладём его профиль рядом с остальными.
+      set((s) => ({
+        contacts: s.contacts[from.id]
+          ? s.contacts
+          : { ...s.contacts, [from.id]: toContact(from, true) },
+        call: {
+          peerId: from.id,
+          chatId,
+          outgoing: false,
+          state: "incoming",
+          muted: false,
+          startedAt: 0,
+        },
+      }));
+      session().receive(callId, chatId, from.id, String(data.sdp ?? ""));
+      armRingTimeout();
+      return;
+    }
+
+    case Ev.callAccepted: {
+      clearRingTimeout();
+      void session().accepted(String(data.sdp ?? ""));
+      return;
+    }
+
+    case Ev.callIce: {
+      void session().addCandidate({
+        candidate: String(data.candidate ?? ""),
+        sdpMid: (data.sdp_mid as string) || null,
+        sdpMLineIndex: (data.sdp_m_line_index as number) ?? null,
+      });
+      return;
+    }
+
+    case Ev.callEnded: {
+      const reason = (data.reason as CallEndReason) ?? "hangup";
+      session().finish(reason);
+      return;
+    }
+
     case Ev.presence: {
       const userId = data.user_id as string;
       const online = data.online === true;
@@ -1066,7 +1360,11 @@ function handleEvent(envelope: Envelope) {
         return {
           contacts: {
             ...s.contacts,
-            [userId]: { ...contact, online, lastSeenAt: online ? undefined : Date.now() },
+            [userId]: {
+              ...contact,
+              online,
+              lastSeenAt: online ? undefined : Date.now(),
+            },
           },
         };
       });
@@ -1098,7 +1396,8 @@ export function useMe(): Me {
 // --- Подписи ---
 
 export function chatTitle(chat: Chat, uiLang: UiLang) {
-  if (chat.kind === "saved") return uiLang === "en" ? "Saved Messages" : "Избранное";
+  if (chat.kind === "saved")
+    return uiLang === "en" ? "Saved Messages" : "Избранное";
   return chat.title;
 }
 

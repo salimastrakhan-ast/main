@@ -59,7 +59,8 @@ export const translations = {
     back: "Назад",
     close: "Закрыть",
     aiThinking: "печатает",
-    aiUnavailable: "Перевод пока не подключён — на сервере не настроен поставщик.",
+    aiUnavailable:
+      "Перевод пока не подключён — на сервере не настроен поставщик.",
     translateError: "Не получилось перевести. Повторите попытку.",
     notificationsOn: "Включены на этом устройстве",
     notificationsOff: "Выключены",
@@ -102,6 +103,21 @@ export const translations = {
     nobodyFound: "Никого не нашли",
     inBook: "В контактах",
     onServer: "Найдены на сервере",
+    call: "Позвонить",
+    calling: "Вызов…",
+    incomingCall: "Входящий звонок",
+    connecting: "Соединение…",
+    callEndedHangup: "Звонок завершён",
+    callEndedDeclined: "Звонок отклонён",
+    callEndedMissed: "Не ответили",
+    callEndedBusy: "Занято",
+    callEndedFailed: "Не удалось соединиться",
+    callEndedOffline: "Не в сети",
+    answer: "Ответить",
+    decline: "Отклонить",
+    hangUp: "Завершить",
+    micOn: "Включить микрофон",
+    micOff: "Выключить микрофон",
     noContacts: "Книга контактов пуста. Найдите человека по номеру.",
     chosen: "Выбрано",
     pickMembers: "Выберите участников",
@@ -172,7 +188,8 @@ export const translations = {
     back: "Back",
     close: "Close",
     aiThinking: "typing",
-    aiUnavailable: "Translation is not wired up yet — no provider configured on the server.",
+    aiUnavailable:
+      "Translation is not wired up yet — no provider configured on the server.",
     translateError: "Could not translate. Please retry.",
     notificationsOn: "Enabled on this device",
     notificationsOff: "Disabled",
@@ -215,6 +232,21 @@ export const translations = {
     nobodyFound: "Nobody found",
     inBook: "In contacts",
     onServer: "Found on the server",
+    call: "Call",
+    calling: "Calling…",
+    incomingCall: "Incoming call",
+    connecting: "Connecting…",
+    callEndedHangup: "Call ended",
+    callEndedDeclined: "Call declined",
+    callEndedMissed: "No answer",
+    callEndedBusy: "Busy",
+    callEndedFailed: "Could not connect",
+    callEndedOffline: "Offline",
+    answer: "Answer",
+    decline: "Decline",
+    hangUp: "Hang up",
+    micOn: "Unmute",
+    micOff: "Mute",
     noContacts: "Your contact book is empty. Find someone by number.",
     chosen: "Chosen",
     pickMembers: "Pick members",
@@ -231,7 +263,10 @@ export const translations = {
 
 export type I18nKey = keyof typeof translations.ru;
 
-export const targetLangNames: Record<TargetLang, { ru: string; en: string; native: string }> = {
+export const targetLangNames: Record<
+  TargetLang,
+  { ru: string; en: string; native: string }
+> = {
   ru: { ru: "Русский", en: "Russian", native: "Русский" },
   en: { ru: "Английский", en: "English", native: "English" },
   es: { ru: "Испанский", en: "Spanish", native: "Español" },
@@ -241,7 +276,15 @@ export const targetLangNames: Record<TargetLang, { ru: string; en: string; nativ
   ar: { ru: "Арабский", en: "Arabic", native: "العربية" },
 };
 
-export const targetLangList: TargetLang[] = ["ru", "en", "es", "de", "zh", "tr", "ar"];
+export const targetLangList: TargetLang[] = [
+  "ru",
+  "en",
+  "es",
+  "de",
+  "zh",
+  "tr",
+  "ar",
+];
 
 export function t(lang: UiLang, key: I18nKey): string {
   return translations[lang][key];

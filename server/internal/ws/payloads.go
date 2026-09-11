@@ -147,10 +147,12 @@ type ChatUpdateData struct {
 
 // CallStartData — предложение соединения от звонящего.
 //
-// Чат задаётся, а не собеседник: звонок ложится в ту же переписку, что и
-// сообщения, и по её участникам проверяется право звонить.
+// Адресат задаётся либо чатом, либо собеседником — как у message.send.
+// Второе нужно, чтобы позвонить найденному человеку, не написав ему
+// сначала: переписки с ним ещё нет, а звонить уже хочется.
 type CallStartData struct {
-	ChatID uuid.UUID `json:"chat_id"`
+	ChatID uuid.UUID `json:"chat_id,omitempty"`
+	PeerID uuid.UUID `json:"peer_id,omitempty"`
 	SDP    string    `json:"sdp"`
 	Video  bool      `json:"video,omitempty"`
 }

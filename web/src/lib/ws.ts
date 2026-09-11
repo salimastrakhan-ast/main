@@ -34,6 +34,10 @@ export const Cmd = {
   chatPin: "chat.pin",
   chatMute: "chat.mute",
   ping: "ping",
+  callStart: "call.start",
+  callAnswer: "call.answer",
+  callIce: "call.ice",
+  callHangup: "call.hangup",
 } as const;
 
 export const Ev = {
@@ -49,6 +53,10 @@ export const Ev = {
   typing: "typing",
   presence: "presence",
   chatUpdate: "chat.update",
+  callIncoming: "call.incoming",
+  callAccepted: "call.accepted",
+  callIce: "call.ice",
+  callEnded: "call.ended",
 } as const;
 
 export type WsStatus = "offline" | "connecting" | "online";

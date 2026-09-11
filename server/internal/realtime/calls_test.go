@@ -214,6 +214,47 @@ func TestОтбойСлышенОбеимСторонам(t *testing.T) {
 	}
 }
 
+func TestЗвонокНайденномуБезПерепискиЗаводитЧат(t *testing.T) {
+	// Человека нашли в поиске и сразу звонят. Переписки с ним ещё нет, и
+	// требовать сначала написать «привет» — лишний шаг ради ничего.
+	e := newEnv(t)
+	_, anyaToken := e.newUser("79001110017")
+	borya, boryaToken := e.newUser("79001110018")
+
+	anyaConn := e.connect(anyaToken)
+	defer anyaConn.close()
+	boryaConn := e.connect(boryaToken)
+	defer boryaConn.close()
+
+	reply := anyaConn.call(ws.CmdCallStart, ws.CallStartData{PeerID: borya.ID, SDP: sdp(20)})
+	if reply.T == ws.TypeError {
+		t.Fatalf("звонок по собеседнику отклонён: %s", reply.D)
+	}
+	started := decode[ws.CallStartedData](t, reply)
+	if started.Status != "ringing" {
+		t.Fatalf("статус %q вместо ringing", started.Status)
+	}
+
+	incoming := decode[ws.CallIncomingData](t,
+		boryaConn.await(ws.EventCallIncoming, 3*time.Second))
+	if incoming.ChatID == uuid.Nil {
+		t.Error("звонок пришёл без чата — его некуда будет записать")
+	}
+}
+
+func TestСебеНеПозвонить(t *testing.T) {
+	e := newEnv(t)
+	anya, anyaToken := e.newUser("79001110019")
+
+	anyaConn := e.connect(anyaToken)
+	defer anyaConn.close()
+
+	reply := anyaConn.call(ws.CmdCallStart, ws.CallStartData{PeerID: anya.ID, SDP: sdp(20)})
+	if reply.T != ws.TypeError {
+		t.Fatal("звонок самому себе прошёл")
+	}
+}
+
 func TestВГруппеЗвонковПокаНет(t *testing.T) {
 	// Групповой звонок — это не «ещё один участник», а сведение потоков на
 	// отдельном сервере. Пока его нет, отказ честнее, чем соединить двоих

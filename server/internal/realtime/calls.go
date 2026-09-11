@@ -128,7 +128,31 @@ func (c *Conn) handleCallStart(ctx context.Context, env ws.Envelope) {
 		return
 	}
 
-	chat, err := c.hub.store.ChatByID(ctx, payload.ChatID)
+	chatID := payload.ChatID
+	if chatID == uuid.Nil {
+		// Звонок по собеседнику: личный чат заводится на лету, как при
+		// отправке первого сообщения. Иначе позвонить человеку, которого
+		// только что нашли, было бы нельзя, не написав ему сначала.
+		if payload.PeerID == uuid.Nil {
+			c.replyError(env.ID, ws.ErrCodeBadRequest, "Нужен chat_id или peer_id")
+			return
+		}
+		if payload.PeerID == c.userID {
+			c.replyError(env.ID, ws.ErrCodeBadRequest, "Себе не позвонить")
+			return
+		}
+		created, err := c.hub.store.EnsurePrivateChat(ctx, c.userID, payload.PeerID)
+		if err != nil {
+			c.fail(env.ID, err)
+			return
+		}
+		chatID = created.ID
+		// О новом чате надо рассказать обоим: иначе у собеседника звонок
+		// придёт в чат, которого он у себя не видит.
+		c.announceChat(ctx, chatID)
+	}
+
+	chat, err := c.hub.store.ChatByID(ctx, chatID)
 	if err != nil {
 		c.fail(env.ID, err)
 		return
@@ -141,7 +165,7 @@ func (c *Conn) handleCallStart(ctx context.Context, env ws.Envelope) {
 		return
 	}
 
-	members, err := c.hub.store.MemberIDs(ctx, payload.ChatID)
+	members, err := c.hub.store.MemberIDs(ctx, chatID)
 	if err != nil {
 		c.fail(env.ID, err)
 		return
@@ -168,7 +192,7 @@ func (c *Conn) handleCallStart(ctx context.Context, env ws.Envelope) {
 	me = media.ResolveUser(ctx, c.hub.media, me)
 
 	callID := uuid.New()
-	rec := callRecord{Caller: c.userID, Callee: callee, ChatID: payload.ChatID}
+	rec := callRecord{Caller: c.userID, Callee: callee, ChatID: chatID}
 	if err := c.hub.saveCall(ctx, callID, rec); err != nil {
 		c.log.Error("не сохранён звонок", "err", err)
 		c.replyError(env.ID, ws.ErrCodeInternal, "Внутренняя ошибка")
@@ -190,7 +214,7 @@ func (c *Conn) handleCallStart(ctx context.Context, env ws.Envelope) {
 	c.hub.Publish(ctx, []uuid.UUID{callee}, uuid.Nil, ws.EventCallIncoming,
 		ws.CallIncomingData{
 			CallID: callID,
-			ChatID: payload.ChatID,
+			ChatID: chatID,
 			From:   me.Public(),
 			SDP:    payload.SDP,
 			Video:  payload.Video,

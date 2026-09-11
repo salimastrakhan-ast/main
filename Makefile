@@ -79,6 +79,11 @@ e2e:
 e2e-web:
 	cd e2e && npm install --silent && node web.mjs
 
+# Звонок двумя окнами. Через xvfb-run не для красоты: в headless браузер
+# отказывает в микрофоне даже с подменённым устройством.
+e2e-call:
+	cd e2e && npm install --silent && xvfb-run -a node call.mjs
+
 # Все экраны обоих клиентов одной картинкой. Нужны поднятые сервер,
 # веб-клиент на 4173 и сборка Flutter web на 8090 — см. e2e/README.md.
 #

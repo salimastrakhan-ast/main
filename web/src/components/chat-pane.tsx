@@ -3,9 +3,11 @@ import {
   BellOff,
   Languages,
   MoreVertical,
+  Phone,
   Pin,
   Volume2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Composer } from "@/components/composer";
 import { MessageList } from "@/components/message-list";
 import { AppMark } from "@/components/mark";
@@ -35,6 +37,10 @@ export function ChatPane() {
   const selectChat = useMessenger((s) => s.selectChat);
   const toggleTranslate = useMessenger((s) => s.toggleTranslate);
   const togglePin = useMessenger((s) => s.togglePin);
+  const startCall = useMessenger((s) => s.startCall);
+  // Кнопка гаснет, пока идёт другой звонок: второй означал бы два открытых
+  // микрофона и путаницу, кому какой ответ.
+  const callBusy = useMessenger((s) => s.call !== null);
   const toggleMute = useMessenger((s) => s.toggleMute);
 
   const opened = chats.find((c) => c.id === selectedChatId);
@@ -65,8 +71,12 @@ export function ChatPane() {
       <div className="chat-canvas flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
         <AppMark className="size-16" />
         <div>
-          <p className="font-display text-xl font-medium tracking-tight">{t(uiLang, "appName")}</p>
-          <p className="mt-2 max-w-sm text-sm text-muted text-pretty">{t(uiLang, "tagline")}</p>
+          <p className="font-display text-xl font-medium tracking-tight">
+            {t(uiLang, "appName")}
+          </p>
+          <p className="mt-2 max-w-sm text-sm text-muted text-pretty">
+            {t(uiLang, "tagline")}
+          </p>
           <p className="mt-4 text-sm text-subtle">{t(uiLang, "emptyChat")}</p>
         </div>
       </div>
@@ -118,7 +128,9 @@ export function ChatPane() {
 
         <label className="mr-1 hidden items-center gap-2 rounded-full bg-elevated px-3 py-1.5 sm:flex">
           <Languages className="size-3.5 text-accent" />
-          <span className="text-xs text-muted">{t(uiLang, "translateChat")}</span>
+          <span className="text-xs text-muted">
+            {t(uiLang, "translateChat")}
+          </span>
           <Switch
             checked={chat.translateOn}
             onCheckedChange={() => void toggleTranslate(chat.id)}
@@ -133,12 +145,36 @@ export function ChatPane() {
           aria-label={t(uiLang, "translateChat")}
           onClick={() => void toggleTranslate(chat.id)}
         >
-          <Languages className={cn("size-5", chat.translateOn ? "text-accent" : "")} />
+          <Languages
+            className={cn("size-5", chat.translateOn ? "text-accent" : "")}
+          />
         </Button>
+
+        {/* Звонок — только в личной переписке: групповым нужен отдельный
+            сервер сведения потоков, и кнопка, которая всегда отвечает
+            отказом, хуже её отсутствия. */}
+        {chat.peerId ? (
+          <Button
+            variant="icon"
+            size="icon"
+            aria-label={t(uiLang, "call")}
+            title={t(uiLang, "call")}
+            disabled={callBusy}
+            onClick={() =>
+              void startCall(chat.id).catch(() => toast(t(uiLang, "micDenied")))
+            }
+          >
+            <Phone className="size-5" />
+          </Button>
+        ) : null}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="icon" size="icon" aria-label={t(uiLang, "settings")}>
+            <Button
+              variant="icon"
+              size="icon"
+              aria-label={t(uiLang, "settings")}
+            >
               <MoreVertical className="size-5" />
             </Button>
           </DropdownMenuTrigger>
@@ -153,7 +189,11 @@ export function ChatPane() {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => toggleMute(chat.id)}>
-              {chat.muted ? <Volume2 className="size-4" /> : <BellOff className="size-4" />}
+              {chat.muted ? (
+                <Volume2 className="size-4" />
+              ) : (
+                <BellOff className="size-4" />
+              )}
               {chat.muted ? t(uiLang, "unmute") : t(uiLang, "mute")}
             </DropdownMenuItem>
           </DropdownMenuContent>

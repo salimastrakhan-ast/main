@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Toaster } from "sonner";
+import { CallOverlay } from "@/components/call-overlay";
 import { ChatPane } from "@/components/chat-pane";
 import { NewChatView } from "@/components/new-chat-view";
 import { SettingsView } from "@/components/settings-view";
@@ -37,7 +38,9 @@ export function Messenger() {
     return (
       <div className="flex h-dvh flex-col items-center justify-center bg-bg text-fg">
         <AppMark className="size-12" />
-        <p className="mt-3 font-display text-lg font-medium tracking-tight">Tito</p>
+        <p className="mt-3 font-display text-lg font-medium tracking-tight">
+          Tito
+        </p>
       </div>
     );
   }
@@ -63,17 +66,21 @@ export function Messenger() {
             <SettingsView />
           )}
         </aside>
-        <main className={cn("min-w-0 flex-1", showChat ? "flex" : "hidden md:flex")}>
+        <main
+          className={cn("min-w-0 flex-1", showChat ? "flex" : "hidden md:flex")}
+        >
           <div className="h-full w-full">
             <ChatPane />
           </div>
         </main>
       </div>
+      <CallOverlay />
       <Toaster
         theme="dark"
         position="top-center"
         toastOptions={{
-          className: "bg-elevated text-fg border-border shadow-[var(--shadow-border)]",
+          className:
+            "bg-elevated text-fg border-border shadow-[var(--shadow-border)]",
         }}
       />
     </TooltipProvider>

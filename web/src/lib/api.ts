@@ -219,6 +219,14 @@ export const api = {
     return (json.contacts as unknown[]) ?? [];
   },
 
+  /// Адреса серверов для звонка: STUN, чтобы узнать себя снаружи, и TURN с
+  /// временным паролем, чтобы пройти там, где прямое соединение не встаёт.
+  /// Список берётся на каждый звонок: пароль живёт часы, а не вечно.
+  async iceServers(): Promise<RTCIceServer[]> {
+    const json = await get("/v1/calls/ice");
+    return (json.ice_servers as RTCIceServer[]) ?? [];
+  },
+
   async searchUsers(query: string): Promise<unknown[]> {
     const json = await get("/v1/users/search", { q: query });
     return (json.users as unknown[]) ?? [];
