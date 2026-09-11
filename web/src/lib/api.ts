@@ -224,6 +224,31 @@ export const api = {
     return (json.users as unknown[]) ?? [];
   },
 
+  /// Ставит аватар. Одним запросом: сервер сам кладёт файл в хранилище и
+  /// запоминает его ключ, а подписанную ссылку выдаёт при каждом чтении
+  /// профиля — она живёт шесть часов и хранению не подлежит.
+  async setAvatar(file: File): Promise<Record<string, unknown>> {
+    const form = new FormData();
+    form.append("file", file, file.name);
+    const token = await freshAccessToken();
+    return parse(
+      await fetch(BASE + "/v1/users/me/avatar", {
+        method: "PUT",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: form,
+      }),
+    );
+  },
+
+  async removeAvatar(): Promise<Record<string, unknown>> {
+    return parse(
+      await fetch(BASE + "/v1/users/me/avatar", {
+        method: "DELETE",
+        headers: await headers(true),
+      }),
+    );
+  },
+
   /// Загружает файл и возвращает описание вложения.
   ///
   /// Файл уходит ДО отправки сообщения: так виден прогресс, а сообщение

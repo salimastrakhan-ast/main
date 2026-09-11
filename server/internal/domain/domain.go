@@ -39,8 +39,14 @@ type User struct {
 	Username    string    `json:"username,omitempty"`
 	DisplayName string    `json:"display_name"`
 	AvatarURL   string    `json:"avatar_url,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	LastSeenAt  time.Time `json:"last_seen_at"`
+
+	// AvatarKey — ключ объекта в хранилище. Клиенту не уходит: ему нужна
+	// ссылка, а она подписывается заново при каждой выдаче, потому что
+	// живёт шесть часов.
+	AvatarKey string `json:"-"`
+
+	CreatedAt  time.Time `json:"created_at"`
+	LastSeenAt time.Time `json:"last_seen_at"`
 }
 
 // Public отдаёт профиль без телефона — его видит только владелец аккаунта.

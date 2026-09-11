@@ -169,6 +169,35 @@ class ApiClient {
     return json['attachment'] as Map<String, dynamic>;
   }
 
+  /// Ставит аватар. Одним запросом: сервер сам кладёт файл в хранилище и
+  /// запоминает ключ, а подписанную ссылку выдаёт при каждом чтении профиля.
+  /// Хранить её нельзя — она живёт шесть часов.
+  Future<Map<String, dynamic>> setAvatar({
+    required String fileName,
+    required List<int> bytes,
+  }) async {
+    final token = await freshAccessToken();
+    final request =
+        http.MultipartRequest(
+            'PUT',
+            Uri.parse('${AppConfig.apiBase}/v1/users/me/avatar'),
+          )
+          ..headers['Authorization'] = 'Bearer $token'
+          ..files.add(
+            http.MultipartFile.fromBytes('file', bytes, filename: fileName),
+          );
+
+    return _parse(await http.Response.fromStream(await request.send()));
+  }
+
+  Future<Map<String, dynamic>> removeAvatar() async {
+    final request = http.Request(
+      'DELETE',
+      Uri.parse('${AppConfig.apiBase}/v1/users/me/avatar'),
+    )..headers.addAll(await _headers(true));
+    return _parse(await http.Response.fromStream(await _http.send(request)));
+  }
+
   Future<Map<String, dynamic>> _get(
     String path, {
     Map<String, String>? query,

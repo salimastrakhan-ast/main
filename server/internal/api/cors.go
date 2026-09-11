@@ -28,7 +28,10 @@ func withCORS(allowed []string, next http.Handler) http.Handler {
 		}
 
 		if r.Method == http.MethodOptions {
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+			// Список методов ведётся руками, и о нём легко забыть: аватар
+			// ставится PUT, и без него браузер отказал ещё до запроса —
+			// в логах сервера при этом было пусто.
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 			w.Header().Set("Access-Control-Max-Age", "600")
 			w.WriteHeader(http.StatusNoContent)

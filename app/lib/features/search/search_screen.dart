@@ -133,6 +133,7 @@ class _Chats extends ConsumerWidget {
           leading: PersonAvatar(
             id: peer?.id ?? chat.id,
             name: title,
+            photo: peer?.avatarUrl ?? chat.avatarUrl,
             online: peer?.online ?? false,
             icon: chat.type == 'group' ? TitoIcons.contacts : null,
           ),
@@ -178,6 +179,7 @@ class _People extends ConsumerWidget {
           leading: PersonAvatar(
             id: person.id,
             name: person.displayName,
+            photo: person.avatarUrl,
             online: person.online,
           ),
           title: Text(person.displayName),
@@ -225,7 +227,11 @@ class _Messages extends ConsumerWidget {
             : peer?.displayName ?? 'Чат';
 
         return ListTile(
-          leading: PersonAvatar(id: peer?.id ?? message.chatId, name: title),
+          leading: PersonAvatar(
+            id: peer?.id ?? message.chatId,
+            name: title,
+            photo: peer?.avatarUrl,
+          ),
           title: Text(title, style: theme.textTheme.titleMedium),
           subtitle: Text(
             message.body,

@@ -40,6 +40,7 @@ class SettingsScreen extends ConsumerWidget {
               id: session?.userId ?? '',
               name: me?.displayName ?? '?',
               radius: 44,
+              photo: me?.avatarUrl,
               online: connection == WsStatus.online,
             ),
           ),

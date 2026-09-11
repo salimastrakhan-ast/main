@@ -342,6 +342,7 @@ class _ChatTile extends ConsumerWidget {
       leading: PersonAvatar(
         id: peer?.id ?? chat.id,
         name: title,
+        photo: peer?.avatarUrl ?? chat.avatarUrl,
         online: peer?.online ?? false,
         saved: _isSaved,
         icon: _isGroup ? TitoIcons.contacts : null,

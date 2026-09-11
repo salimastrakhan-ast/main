@@ -12,11 +12,12 @@ import (
 	"github.com/salimastrakhan-ast/main/server/internal/domain"
 )
 
-const userColumns = `id, phone, COALESCE(username, ''), display_name, COALESCE(avatar_url, ''), created_at, last_seen_at`
+const userColumns = `id, phone, COALESCE(username, ''), display_name, COALESCE(avatar_url, ''), COALESCE(avatar_key, ''), created_at, last_seen_at`
 
 func scanUser(row pgx.Row) (domain.User, error) {
 	var u domain.User
-	err := row.Scan(&u.ID, &u.Phone, &u.Username, &u.DisplayName, &u.AvatarURL, &u.CreatedAt, &u.LastSeenAt)
+	err := row.Scan(&u.ID, &u.Phone, &u.Username, &u.DisplayName, &u.AvatarURL, &u.AvatarKey,
+		&u.CreatedAt, &u.LastSeenAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.User{}, ErrNotFound
 	}
@@ -102,6 +103,10 @@ type UserPatch struct {
 	DisplayName *string
 	Username    *string
 	AvatarURL   *string
+
+	// AvatarKey: пустая строка снимает аватар. Поэтому COALESCE здесь не
+	// годится — он не отличит «не меняли» от «убрали».
+	AvatarKey *string
 }
 
 func (s *Store) UpdateUser(ctx context.Context, id uuid.UUID, p UserPatch) (domain.User, error) {
@@ -109,9 +114,14 @@ func (s *Store) UpdateUser(ctx context.Context, id uuid.UUID, p UserPatch) (doma
 		UPDATE users SET
 			display_name = COALESCE($2, display_name),
 			username     = COALESCE($3, username),
-			avatar_url   = COALESCE($4, avatar_url)
+			avatar_url   = COALESCE($4, avatar_url),
+			avatar_key   = CASE
+				WHEN $5::text IS NULL THEN avatar_key
+				WHEN $5 = '' THEN NULL
+				ELSE $5
+			END
 		WHERE id = $1
-		RETURNING `+userColumns, id, p.DisplayName, p.Username, p.AvatarURL)
+		RETURNING `+userColumns, id, p.DisplayName, p.Username, p.AvatarURL, p.AvatarKey)
 
 	u, err := scanUser(row)
 	if isUniqueViolation(err) {
@@ -180,8 +190,11 @@ func (s *Store) UpsertContacts(ctx context.Context, userID uuid.UUID, contacts m
 func (s *Store) Contacts(ctx context.Context, userID uuid.UUID) ([]domain.User, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT u.id, u.phone, COALESCE(u.username, ''),
+		       -- Имя из адресной книги важнее того, что человек поставил
+		       -- себе сам: в списке контактов ищут по своей подписи.
 		       COALESCE(NULLIF(c.name, ''), u.display_name),
-		       COALESCE(u.avatar_url, ''), u.created_at, u.last_seen_at
+		       COALESCE(u.avatar_url, ''), COALESCE(u.avatar_key, ''),
+		       u.created_at, u.last_seen_at
 		FROM contacts c
 		JOIN users u ON u.id = c.contact_user_id
 		WHERE c.user_id = $1

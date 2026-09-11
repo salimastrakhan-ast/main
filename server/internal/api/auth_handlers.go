@@ -49,6 +49,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
+	session.User = s.withAvatar(r.Context(), session.User)
 	writeJSON(w, http.StatusOK, session)
 }
 
@@ -66,6 +67,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
+	session.User = s.withAvatar(r.Context(), session.User)
 	writeJSON(w, http.StatusOK, session)
 }
 
@@ -88,7 +90,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, user)
+	writeJSON(w, http.StatusOK, s.withAvatar(r.Context(), user))
 }
 
 type updateMeReq struct {
@@ -121,7 +123,7 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, user)
+	writeJSON(w, http.StatusOK, s.withAvatar(r.Context(), user))
 }
 
 func validUsername(s string) bool {
@@ -150,7 +152,7 @@ func (s *Server) handleSearchUsers(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"users": publicUsers(users)})
+	writeJSON(w, http.StatusOK, map[string]any{"users": s.publicUsers(r.Context(), users)})
 }
 
 func (s *Server) handleContacts(w http.ResponseWriter, r *http.Request) {
@@ -160,7 +162,7 @@ func (s *Server) handleContacts(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"contacts": publicUsers(contacts)})
+	writeJSON(w, http.StatusOK, map[string]any{"contacts": s.publicUsers(r.Context(), contacts)})
 }
 
 type syncContactsReq struct {
@@ -216,7 +218,9 @@ func (s *Server) handleSyncContacts(w http.ResponseWriter, r *http.Request) {
 	}
 	// Телефоны здесь оставляем: их прислал сам клиент, и по ним он
 	// сшивает найденных людей со своей адресной книгой.
-	writeJSON(w, http.StatusOK, map[string]any{"users": found})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"users": s.usersWithPhones(r.Context(), found),
+	})
 }
 
 type pushTokenReq struct {

@@ -198,6 +198,8 @@ type Actions = {
   setTargetLang: (lang: TargetLang) => void;
   setNotifications: (v: boolean) => void;
   setMe: (patch: Partial<Me>) => void;
+  setAvatar: (file: File) => Promise<void>;
+  removeAvatar: () => Promise<void>;
   setSearch: (q: string) => void;
   setFolder: (f: FolderId) => void;
   setSidebarView: (v: SidebarView) => void;
@@ -339,6 +341,21 @@ export const useMessenger = create<MessengerStore>()(
         set({ me: { ...me, ...patch } });
         if (patch.name) void api.updateMe(patch.name).catch(() => {});
       },
+      /// Ставит аватар и обновляет его у себя же в списках.
+      ///
+      /// Свой профиль лежит в двух местах: `me` и в книге контактов — второй
+      /// показывает аватар в «Избранном». Обновляем оба, иначе картинка
+      /// появится в настройках и не появится в списке диалогов.
+      setAvatar: async (file) => {
+        const updated = (await api.setAvatar(file)) as { avatar_url?: string };
+        applyOwnAvatar(updated.avatar_url ?? "");
+      },
+
+      removeAvatar: async () => {
+        await api.removeAvatar();
+        applyOwnAvatar("");
+      },
+
       setSearch: (search) => set({ search }),
       setFolder: (folder) => set({ folder }),
       setSidebarView: (sidebarView) => set({ sidebarView }),
@@ -685,6 +702,19 @@ export const useMessenger = create<MessengerStore>()(
 
 const set = useMessenger.setState;
 const get = useMessenger.getState;
+
+/// Раскладывает свой аватар по обоим местам, где он показывается.
+function applyOwnAvatar(avatar: string) {
+  const me = get().me;
+  if (!me) return;
+  set((s) => {
+    const mine = s.contacts[me.id];
+    return {
+      me: { ...me, avatar },
+      contacts: mine ? { ...s.contacts, [me.id]: { ...mine, avatar } } : s.contacts,
+    };
+  });
+}
 
 async function refreshContacts() {
   try {

@@ -177,6 +177,10 @@ func contentDisposition(fileName string) string {
 // само хранилище: им достаточно уметь превратить ключ объекта в ссылку.
 type Resolver interface {
 	Resolve(ctx context.Context, attachments []domain.Attachment) []domain.Attachment
+
+	// Link подписывает ссылку на один объект. Нужен там, где файл не
+	// вложение: например, аватар профиля.
+	Link(ctx context.Context, objectKey string) (string, error)
 }
 
 // NoopResolver оставляет вложения как есть. Используется там, где хранилище
@@ -185,6 +189,38 @@ type NoopResolver struct{}
 
 func (NoopResolver) Resolve(_ context.Context, attachments []domain.Attachment) []domain.Attachment {
 	return attachments
+}
+
+func (NoopResolver) Link(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+
+// ResolveUsers подписывает ссылки на аватары.
+//
+// Вызывается всюду, где профиль уходит клиенту. Забыть вызов — значит
+// показать человека без аватара в одном месте из пяти, и заметит это не
+// разработчик, а тот, у кого аватар пропал в списке контактов.
+func ResolveUsers(ctx context.Context, r Resolver, users []domain.User) []domain.User {
+	if r == nil {
+		return users
+	}
+	for i := range users {
+		if users[i].AvatarKey == "" {
+			continue
+		}
+		link, err := r.Link(ctx, users[i].AvatarKey)
+		if err != nil {
+			// Без ссылки профиль всё равно годен: клиент покажет буквы.
+			continue
+		}
+		users[i].AvatarURL = link
+	}
+	return users
+}
+
+// ResolveUser — то же для одного профиля.
+func ResolveUser(ctx context.Context, r Resolver, user domain.User) domain.User {
+	return ResolveUsers(ctx, r, []domain.User{user})[0]
 }
 
 // ResolveMessages проставляет ссылки вложениям пачки сообщений.
@@ -221,5 +257,8 @@ func ResolveSummaries(ctx context.Context, r Resolver, summaries []domain.ChatSu
 		if summaries[i].LastMessage != nil {
 			ResolveMessage(ctx, r, summaries[i].LastMessage)
 		}
+		// Участники приезжают вместе со сводкой, и аватар нужен им там же:
+		// список диалогов — первое, что человек видит после входа.
+		summaries[i].Users = ResolveUsers(ctx, r, summaries[i].Users)
 	}
 }

@@ -20,6 +20,7 @@ class PersonAvatar extends StatelessWidget {
     this.online = false,
     this.icon,
     this.saved = false,
+    this.photo,
     super.key,
   });
 
@@ -27,6 +28,12 @@ class PersonAvatar extends StatelessWidget {
   final String name;
   final double radius;
   final bool online;
+
+  /// Ссылка на фотографию. Временная: сервер подписывает её при выдаче
+  /// профиля, и в локальной базе она к следующему дню протухнет. Это не
+  /// беда — картинка просто не загрузится, и кружок покажет букву, пока
+  /// синхронизация не принесёт свежую ссылку.
+  final String? photo;
 
   /// Значок вместо буквы — для групп.
   final IconData? icon;
@@ -49,12 +56,20 @@ class PersonAvatar extends StatelessWidget {
             backgroundColor: saved
                 ? scheme.primary
                 : scheme.surfaceContainerHighest,
+            // Фотография кладётся фоном, а не поверх: так буква остаётся
+            // видна, пока картинка грузится, и снова появляется, если
+            // ссылка успела устареть.
+            backgroundImage: !saved && (photo?.isNotEmpty ?? false)
+                ? NetworkImage(photo!)
+                : null,
             child: saved
                 ? Icon(
                     TitoIcons.saved,
                     size: radius,
                     color: scheme.onPrimary,
                   )
+                : (photo?.isNotEmpty ?? false)
+                ? null
                 : icon != null
                 ? Icon(icon, size: radius * 0.9, color: scheme.onSurface)
                 : Text(

@@ -44,6 +44,8 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /v1/users/me", s.requireAuth(s.handleMe))
 	mux.HandleFunc("PATCH /v1/users/me", s.requireAuth(s.handleUpdateMe))
+	mux.HandleFunc("PUT /v1/users/me/avatar", s.requireAuth(s.handleSetAvatar))
+	mux.HandleFunc("DELETE /v1/users/me/avatar", s.requireAuth(s.handleDeleteAvatar))
 	mux.HandleFunc("GET /v1/users/search", s.requireAuth(s.handleSearchUsers))
 
 	mux.HandleFunc("GET /v1/contacts", s.requireAuth(s.handleContacts))

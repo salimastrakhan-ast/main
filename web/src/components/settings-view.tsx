@@ -1,5 +1,6 @@
-import { useRef } from "react";
-import { ChevronLeft, LogOut } from "lucide-react";
+import { useRef, useState } from "react";
+import { Camera, ChevronLeft, Loader2, LogOut, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +22,29 @@ export function SettingsView() {
   const setMe = useMessenger((s) => s.setMe);
   const setSidebarView = useMessenger((s) => s.setSidebarView);
   const signOut = useMessenger((s) => s.signOut);
+  const setAvatar = useMessenger((s) => s.setAvatar);
+  const removeAvatar = useMessenger((s) => s.removeAvatar);
   const nameField = useRef<HTMLInputElement>(null);
+  const avatarField = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function pickAvatar(file: File | undefined) {
+    if (!file) return;
+    // Предел сервера — 8 МБ: в кружок сорок на сорок больше не нужно, а
+    // гнать по сети лишнее незачем.
+    if (file.size > 8 * 1024 * 1024) {
+      toast(t(uiLang, "avatarTooBig"));
+      return;
+    }
+    setBusy(true);
+    try {
+      await setAvatar(file);
+    } catch {
+      toast(t(uiLang, "avatarFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar">
@@ -38,20 +61,60 @@ export function SettingsView() {
       </header>
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-3 pb-6">
-        <button
-          type="button"
-          onClick={() => {
-            nameField.current?.scrollIntoView({ block: "center" });
-            nameField.current?.focus();
-          }}
-          className="flex w-full items-center gap-3 rounded-lg bg-surface p-3 text-left shadow-[var(--shadow-border)] transition-colors duration-150 hover:bg-elevated"
-        >
-          <UserAvatar src={me.avatar} initials={me.initials} name={me.name} size="lg" />
-          <span className="min-w-0">
+        <div className="flex items-center gap-3 rounded-lg bg-surface p-3 shadow-[var(--shadow-border)]">
+          <input
+            ref={avatarField}
+            type="file"
+            accept="image/*"
+            hidden
+            aria-label={t(uiLang, "changeAvatar")}
+            onChange={(e) => {
+              void pickAvatar(e.target.files?.[0]);
+              // Сброс: иначе выбор того же файла второй раз не даст события.
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => avatarField.current?.click()}
+            aria-label={t(uiLang, "changeAvatar")}
+            className="group relative shrink-0 rounded-full"
+          >
+            <UserAvatar src={me.avatar} initials={me.initials} name={me.name} size="lg" />
+            <span className="absolute inset-0 flex items-center justify-center rounded-full bg-bg/65 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+              {busy ? (
+                <Loader2 className="size-5 animate-spin text-fg" />
+              ) : (
+                <Camera className="size-5 text-fg" />
+              )}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              nameField.current?.scrollIntoView({ block: "center" });
+              nameField.current?.focus();
+            }}
+            className="min-w-0 flex-1 text-left"
+          >
             <span className="block truncate font-medium">{me.name}</span>
             <span className="mt-0.5 block truncate text-xs text-muted">{me.about}</span>
-          </span>
-        </button>
+          </button>
+
+          {me.avatar ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void removeAvatar()}
+              aria-label={t(uiLang, "removeAvatar")}
+              className="shrink-0 rounded-md p-2 text-muted transition-colors duration-150 hover:bg-elevated hover:text-danger"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          ) : null}
+        </div>
 
         <p className="mt-6 mb-2 px-1 text-xs font-medium tracking-wide text-subtle uppercase">
           {t(uiLang, "general")}

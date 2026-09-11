@@ -204,6 +204,7 @@ class _PersonRow extends StatelessWidget {
       leading: PersonAvatar(
         id: person.id,
         name: person.displayName,
+        photo: person.avatarUrl,
         online: person.online,
       ),
       title: Text(person.displayName, style: theme.textTheme.titleMedium),

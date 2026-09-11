@@ -83,6 +83,6 @@ func (s *Server) handleChatMembers(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"members": members,
-		"users":   publicUsers(users),
+		"users":   s.publicUsers(r.Context(), users),
 	})
 }

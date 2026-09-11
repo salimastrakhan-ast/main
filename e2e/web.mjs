@@ -213,8 +213,38 @@ check('картинка видна в ленте', (await app.page.locator('img[
 check('в списке вложение подписано родом, а не пустотой',
   (await app.page.locator('body').innerText()).includes('Вы: Фото'));
 
-// --- Настройки ---
+// --- Аватар ---
+//
+// Ссылка на фото подписанная и живёт шесть часов, поэтому в базе лежит ключ,
+// а ссылка выдаётся при каждом чтении профиля. Проверяем весь путь: файл
+// уходит, профиль обновляется, картинка отдаётся по выданной ссылке.
 await app.page.locator('button[aria-label="Меню"]:visible').first().click();
+await app.page.waitForTimeout(900);
+
+const avatarPng = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAHElEQVR4nGP8z8Dwn4GBgYGJAQUMLQ4TAwMDAwB2NwGtGZLwzQAAAABJRU5ErkJggg==',
+  'base64',
+);
+await app.page.setInputFiles('input[type="file"][accept="image/*"]', {
+  name: 'я.png',
+  mimeType: 'image/png',
+  buffer: avatarPng,
+});
+await app.page.waitForTimeout(4000);
+await app.page.screenshot({ path: `${OUT}/09-аватар.png` });
+
+const avatar = await app.page.evaluate(async () => {
+  const raw = localStorage.getItem('tito-messenger');
+  const url = raw ? JSON.parse(raw).state?.me?.avatar : '';
+  if (!url) return { url: '', ok: false };
+  const res = await fetch(url);
+  return { url, ok: res.ok, type: res.headers.get('content-type') };
+});
+check('аватар загрузился и попал в профиль', Boolean(avatar.url), avatar.url);
+check('по выданной ссылке картинка открывается', avatar.ok === true && avatar.type === 'image/png',
+  JSON.stringify(avatar));
+
+// --- Настройки ---
 await app.page.waitForTimeout(1200);
 await app.page.screenshot({ path: `${OUT}/09-настройки.png` });
 check('выход из аккаунта выведен в настройки',

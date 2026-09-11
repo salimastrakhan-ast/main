@@ -60,6 +60,7 @@ class ChatInfoScreen extends ConsumerWidget {
               id: peer?.id ?? chatId,
               name: title,
               radius: 44,
+              photo: peer?.avatarUrl ?? chat?.avatarUrl,
               online: peer?.online ?? false,
               icon: isGroup ? TitoIcons.contacts : null,
             ),
@@ -111,6 +112,7 @@ class ChatInfoScreen extends ConsumerWidget {
                   id: entry.user.id,
                   name: entry.user.displayName,
                   radius: 18,
+                  photo: entry.user.avatarUrl,
                   online: entry.user.online,
                 ),
                 title: Text(

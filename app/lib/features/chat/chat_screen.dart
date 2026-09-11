@@ -345,6 +345,7 @@ class _ChatTitle extends StatelessWidget {
             id: id,
             name: name,
             radius: 17,
+            photo: peer?.avatarUrl,
             online: peer?.online ?? false,
             saved: isSaved,
             icon: isGroup ? TitoIcons.contacts : null,
