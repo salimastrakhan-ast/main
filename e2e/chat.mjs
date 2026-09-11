@@ -2,7 +2,12 @@ import { chromium } from 'playwright';
 
 const WEB = 'http://localhost:8090';
 const API = 'http://localhost:8080';
-const OUT = process.env.SCRATCH + '/e2e';
+// Папка для кадров: рядом со скриптом, если снаружи ничего не задано.
+// Без этого при пустом SCRATCH путь склеивался в «undefined/…», и кадры
+// оседали мусорной папкой в репозитории.
+const OUT = process.env.SCRATCH
+  ? process.env.SCRATCH + '/e2e'
+  : new URL('shots/e2e', import.meta.url).pathname;
 
 // Жёсткий предохранитель: зависший шаг не должен держать прогон вечно.
 const watchdog = setTimeout(() => {

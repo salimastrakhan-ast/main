@@ -49,7 +49,7 @@ redis:
 
 # --- Клиент ---
 
-.PHONY: app-get app-gen app-test app-analyze app-web app-icon e2e e2e-web web-dev web-build web-test
+.PHONY: app-get app-gen app-test app-analyze app-web app-icon e2e e2e-web shots web-dev web-build web-test
 
 app-get:
 	cd app && flutter pub get
@@ -77,6 +77,16 @@ e2e:
 
 e2e-web:
 	cd e2e && npm install --silent && node web.mjs
+
+# Все экраны обоих клиентов одной картинкой. Нужны поднятые сервер,
+# веб-клиент на 4173 и сборка Flutter web на 8090 — см. e2e/README.md.
+#
+#   make shots ONLY=web       — только веб-клиент
+#   make shots ONLY=flutter   — только Flutter
+shots:
+	cd e2e && npm install --silent && node shots.mjs $(if $(ONLY),--only=$(ONLY),)
+	python3 e2e/sheet.py
+	python3 e2e/palette.py
 
 web-dev:
 	cd web && npm install --silent && npm run dev

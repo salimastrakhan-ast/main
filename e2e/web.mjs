@@ -2,7 +2,12 @@ import { chromium } from 'playwright';
 
 const WEB = 'http://127.0.0.1:4173';
 const API = 'http://localhost:8080';
-const OUT = process.env.SCRATCH + '/webshots';
+// Папка для кадров: рядом со скриптом, если снаружи ничего не задано.
+// Без этого при пустом SCRATCH путь склеивался в «undefined/…», и кадры
+// оседали мусорной папкой в репозитории.
+const OUT = process.env.SCRATCH
+  ? process.env.SCRATCH + '/webshots'
+  : new URL('shots/webshots', import.meta.url).pathname;
 
 const base = 9005000000 + Math.floor(Math.random() * 900000);
 const phone = (n) => `+7${base + n}`;

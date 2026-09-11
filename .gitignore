@@ -17,3 +17,7 @@ app/android/.gradle/
 e2e/node_modules/
 e2e/*.png
 e2e/*.log
+e2e/shots/
+
+# Снимки экранов: это вывод make shots, а не исходник.
+docs/shots/
