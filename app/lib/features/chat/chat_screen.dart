@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:record/record.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../core/providers.dart';
 import '../../data/db/database.dart';
@@ -18,6 +21,7 @@ import '../../ui/parts.dart';
 import '../../ui/state_view.dart';
 import '../../ui/theme.dart';
 import '../../ui/tokens.dart';
+import '../../ui/voice.dart';
 import '../chat_info/chat_info_screen.dart';
 
 /// Открывает переписку с человеком.
@@ -106,6 +110,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// исправленный текст второй строкой.
   Message? _editing;
 
+  /// Запись голосового.
+  final _recorder = AudioRecorder();
+  Timer? _recordTicker;
+  int? _recordSeconds;
+
   /// Высота поля ввода. Лента уходит под него, и на этот отступ снизу она
   /// сдвигается, иначе последнее сообщение окажется под полем. Значение
   /// измеряется, а не задаётся: поле растёт до пяти строк.
@@ -126,9 +135,82 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void dispose() {
     _typingThrottle?.cancel();
+    _recordTicker?.cancel();
+    // Микрофон отпускаем явно: уход с экрана не повод оставлять его
+    // включённым, а система показывает это человеку значком в шторке.
+    unawaited(_recorder.dispose());
     _input.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  /// Начинает запись голосового.
+  Future<void> _startRecording() async {
+    if (!await _recorder.hasPermission()) {
+      if (mounted) showMessage(context, 'Нет доступа к микрофону');
+      return;
+    }
+
+    final dir = await getTemporaryDirectory();
+    final path =
+        '${dir.path}/voice-${DateTime.now().millisecondsSinceEpoch}.m4a';
+    await _recorder.start(
+      // AAC, а не opus: в вебе браузер пишет opus сам, а на телефонах
+      // поддержка opus в контейнере зависит от версии системы, и там, где
+      // её нет, запись молча не начинается.
+      const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 32000),
+      path: path,
+    );
+
+    setState(() => _recordSeconds = 0);
+    _recordTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _recordSeconds = (_recordSeconds ?? 0) + 1);
+    });
+  }
+
+  Future<void> _finishRecording() async {
+    final seconds = _recordSeconds ?? 0;
+    _recordTicker?.cancel();
+    final path = await _recorder.stop();
+    if (mounted) setState(() => _recordSeconds = null);
+
+    // Меньше секунды — случайное касание, а не сообщение.
+    if (path == null || seconds < 1) return;
+
+    final file = File(path);
+    try {
+      final attachment = await ref
+          .read(apiProvider)
+          .upload(
+            fileName: 'голосовое.m4a',
+            bytes: await file.readAsBytes(),
+            mime: 'audio/mp4',
+            duration: seconds,
+          );
+      await ref
+          .read(repositoryProvider)
+          ?.send(
+            chatId: _chatId,
+            peerId: _chatId == null ? widget.peerId : null,
+            text: '',
+            attachmentIds: [attachment['id'] as String],
+          );
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+    } catch (_) {
+      if (mounted) showMessage(context, 'Не удалось отправить голосовое');
+    } finally {
+      // Временный файл нужен был только до отправки.
+      unawaited(file.delete().catchError((_) => file));
+    }
+  }
+
+  Future<void> _cancelRecording() async {
+    _recordTicker?.cancel();
+    final path = await _recorder.stop();
+    if (path != null) {
+      unawaited(File(path).delete().catchError((_) => File(path)));
+    }
+    if (mounted) setState(() => _recordSeconds = null);
   }
 
   /// Берётся править: прежний текст встаёт в поле.
@@ -392,6 +474,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               onAttach: _attach,
               editing: _editing,
               onCancelEdit: _cancelEditing,
+              recordSeconds: _recordSeconds,
+              onStartRecording: _startRecording,
+              onFinishRecording: _finishRecording,
+              onCancelRecording: _cancelRecording,
             ),
           ),
         ],
@@ -993,7 +1079,7 @@ class _Bubble extends ConsumerWidget {
                 for (final attachment in attachments)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 6),
-                    child: _Attachment(attachment: attachment),
+                    child: _Attachment(attachment: attachment, isMine: isMine),
                   ),
                 if (deleted)
                   Text(
@@ -1086,14 +1172,24 @@ class _StateIcon extends StatelessWidget {
 }
 
 class _Attachment extends StatelessWidget {
-  const _Attachment({required this.attachment});
+  const _Attachment({required this.attachment, required this.isMine});
 
   final Map<String, dynamic> attachment;
+  final bool isMine;
 
   @override
   Widget build(BuildContext context) {
     final url = attachment['url'] as String?;
     final kind = attachment['kind'] as String?;
+
+    // Звук не строка со скрепкой: его слушают, а не скачивают.
+    if (kind == 'audio' && url != null) {
+      return VoiceBubble(
+        url: url,
+        seconds: attachment['duration'] as int? ?? 0,
+        isMine: isMine,
+      );
+    }
 
     if (kind == 'image' && url != null) {
       return ClipRRect(
@@ -1137,6 +1233,10 @@ class _Composer extends StatelessWidget {
     required this.onSend,
     required this.onChanged,
     required this.onAttach,
+    required this.recordSeconds,
+    required this.onStartRecording,
+    required this.onFinishRecording,
+    required this.onCancelRecording,
     this.editing,
     this.onCancelEdit,
     super.key,
@@ -1150,6 +1250,12 @@ class _Composer extends StatelessWidget {
   /// Правящееся сообщение — над полем показывается полоска с его текстом.
   final Message? editing;
   final VoidCallback? onCancelEdit;
+
+  /// Сколько секунд идёт запись. null — записи нет.
+  final int? recordSeconds;
+  final VoidCallback onStartRecording;
+  final VoidCallback onFinishRecording;
+  final VoidCallback onCancelRecording;
 
   @override
   Widget build(BuildContext context) {
@@ -1200,38 +1306,126 @@ class _Composer extends StatelessWidget {
                   ],
                 ),
               ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 12, 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      TitoIcons.attach,
-                      size: 22,
-                      color: scheme.onSurfaceVariant,
+            if (recordSeconds != null)
+              // Во время записи поле ввода уступает место счётчику: писать
+              // и говорить одновременно нельзя, а показывать оба состояния
+              // значит сбивать с толку.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 12, 10),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        TitoIcons.delete,
+                        size: 22,
+                        color: scheme.error,
+                      ),
+                      tooltip: 'Отменить запись',
+                      onPressed: onCancelRecording,
                     ),
-                    tooltip: 'Прикрепить',
-                    onPressed: onAttach,
-                  ),
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      minLines: 1,
-                      maxLines: 5,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(hintText: 'Сообщение'),
-                      onChanged: (_) => onChanged(),
-                      onSubmitted: (_) => onSend(),
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: scheme.error,
+                        shape: BoxShape.circle,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  _SendButton(onPressed: onSend, editing: message != null),
-                ],
+                    const SizedBox(width: Tokens.space2),
+                    Text(
+                      _recordTime(recordSeconds!),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontFeatures: TitoTheme.tabularFigures,
+                      ),
+                    ),
+                    const SizedBox(width: Tokens.space2),
+                    Expanded(
+                      child: Text(
+                        'идёт запись',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    _SendButton(onPressed: onFinishRecording),
+                  ],
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 12, 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        TitoIcons.attach,
+                        size: 22,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      tooltip: 'Прикрепить',
+                      onPressed: onAttach,
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: controller,
+                        minLines: 1,
+                        maxLines: 5,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: const InputDecoration(
+                          hintText: 'Сообщение',
+                        ),
+                        onChanged: (_) => onChanged(),
+                        onSubmitted: (_) => onSend(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Пустое поле — микрофон, набранный текст — отправка.
+                    // Так устроено везде, и человек не ищет, куда делась
+                    // кнопка.
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: controller,
+                      builder: (context, value, _) =>
+                          value.text.trim().isEmpty && message == null
+                          ? _MicButton(onPressed: onStartRecording)
+                          : _SendButton(
+                              onPressed: onSend,
+                              editing: message != null,
+                            ),
+                    ),
+                  ],
+                ),
               ),
-            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Секунды в «м:сс» для счётчика записи.
+String _recordTime(int total) {
+  final m = total ~/ 60;
+  final s = total % 60;
+  return '$m:${s.toString().padLeft(2, '0')}';
+}
+
+/// Кнопка записи голосового. Стоит на месте отправки, пока поле пустое.
+class _MicButton extends StatelessWidget {
+  const _MicButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: 48,
+      height: 48,
+      child: IconButton(
+        icon: Icon(TitoIcons.voice, size: 22, color: scheme.onSurfaceVariant),
+        tooltip: 'Записать голосовое',
+        onPressed: onPressed,
       ),
     );
   }

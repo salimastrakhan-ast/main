@@ -165,8 +165,12 @@ abstract final class TitoIcons {
   /// Ссылка.
   static const link = IconData(57602, fontFamily: 'Lucide');
 
-  /// Голосовое сообщение.
+  /// Микрофон: он же значок голосового сообщения, он же кнопка записи.
   static const voice = IconData(57624, fontFamily: 'Lucide');
+
+  /// Проигрывание записи.
+  static const play = IconData(57660, fontFamily: 'Lucide');
+  static const pause = IconData(57646, fontFamily: 'Lucide');
 
   /// Картинку не удалось загрузить.
   static const brokenImage = IconData(57792, fontFamily: 'Lucide');
@@ -217,6 +221,8 @@ abstract final class TitoIcons {
     image,
     link,
     voice,
+    play,
+    pause,
     brokenImage,
   ];
 }

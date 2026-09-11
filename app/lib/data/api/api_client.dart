@@ -148,6 +148,7 @@ class ApiClient {
     required String mime,
     int? width,
     int? height,
+    int? duration,
   }) async {
     final token = await freshAccessToken();
     final request =
@@ -162,6 +163,9 @@ class ApiClient {
           ..fields.addAll({
             if (width != null) 'width': '$width',
             if (height != null) 'height': '$height',
+            // Длительность знает только тот, кто записывал: в ленте она
+            // нужна до нажатия, а из файла достаётся лишь после загрузки.
+            if (duration != null) 'duration': '$duration',
           });
 
     final response = await http.Response.fromStream(await request.send());
