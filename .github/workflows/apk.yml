@@ -1,0 +1,50 @@
+name: APK для стенда
+
+# Общий CI собирает APK без адреса сервера, и такое приложение стучится в
+# localhost. Здесь адрес зашивается при сборке (TITO_API), и APK сразу
+# работает со стендом.
+on:
+  push:
+    branches: [claude/tito-apk-build]
+  workflow_dispatch:
+    inputs:
+      api:
+        description: Адрес сервера (TITO_API)
+        required: true
+        default: https://tito.5-39-250-63.sslip.io:8448
+
+jobs:
+  apk:
+    name: APK
+    runs-on: ubuntu-latest
+    env:
+      # Через env, а не подстановкой в run: ввод из формы не попадёт в скрипт.
+      TITO_API: ${{ inputs.api || 'https://tito.5-39-250-63.sslip.io:8448' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.4'
+          channel: stable
+          cache: true
+
+      - name: Зависимости
+        working-directory: app
+        run: flutter pub get
+
+      - name: Кодогенерация
+        working-directory: app
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      # Один APK на все архитектуры: ссылку можно дать любому, не выясняя,
+      # какой у него телефон.
+      - name: Сборка APK
+        working-directory: app
+        run: flutter build apk --release --dart-define=TITO_API="$TITO_API"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tito-apk
+          path: app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
