@@ -82,6 +82,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       final updated = await ref.read(apiProvider).setAvatar(
         fileName: picked.name,
         bytes: await picked.readAsBytes(),
+        // Галерея тип сообщает не всегда — тогда он берётся из расширения.
+        mime: picked.mimeType ?? mimeByName(picked.name),
       );
       await ref.read(repositoryProvider)?.upsertUser(updated);
     } catch (_) {

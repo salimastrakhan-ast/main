@@ -11,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../core/mime.dart';
 import '../../core/providers.dart';
 import '../../data/db/database.dart';
 import '../../data/repo/message_repository.dart';
@@ -339,7 +340,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return _PickedFile(
       name: picked.name,
       bytes: await picked.readAsBytes(),
-      mime: picked.mimeType ?? _mimeByName(picked.name),
+      mime: picked.mimeType ?? mimeByName(picked.name),
     );
   }
 
@@ -357,7 +358,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return _PickedFile(
       name: picked.name,
       bytes: bytes,
-      mime: _mimeByName(picked.name),
+      mime: mimeByName(picked.name),
     );
   }
 
@@ -722,39 +723,6 @@ class _PickedFile {
   final String name;
   final List<int> bytes;
   final String mime;
-}
-
-/// Тип содержимого по расширению имени.
-///
-/// Файловый выбор его не сообщает, а сервер по нему решает, картинка это,
-/// звук или документ — то есть как клиент нарисует вложение. Ошибиться
-/// здесь значит показать фотографию строкой «файл».
-String _mimeByName(String name) {
-  final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
-  return switch (ext) {
-    'jpg' || 'jpeg' => 'image/jpeg',
-    'png' => 'image/png',
-    'gif' => 'image/gif',
-    'webp' => 'image/webp',
-    'heic' => 'image/heic',
-    'mp4' => 'video/mp4',
-    'mov' => 'video/quicktime',
-    'webm' => 'video/webm',
-    'mp3' => 'audio/mpeg',
-    'ogg' || 'oga' => 'audio/ogg',
-    'm4a' => 'audio/mp4',
-    'wav' => 'audio/wav',
-    'pdf' => 'application/pdf',
-    'doc' => 'application/msword',
-    'docx' =>
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'xls' => 'application/vnd.ms-excel',
-    'xlsx' =>
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'zip' => 'application/zip',
-    'txt' => 'text/plain',
-    _ => 'application/octet-stream',
-  };
 }
 
 /// Полотно переписки.

@@ -199,8 +199,11 @@ class _ActiveButtons extends StatelessWidget {
         _RoundButton(
           icon: call.muted ? TitoIcons.voiceOff : TitoIcons.voice,
           label: call.muted ? 'Включить микрофон' : 'Выключить микрофон',
-          color: scheme.surfaceContainerHighest,
-          foreground: scheme.onSurface,
+          // Выключенный микрофон подсвечен, как и включённая громкая связь:
+          // перечёркнутый значок сам по себе читается плохо, а «меня не
+          // слышно» — то, что нужно видеть мгновенно.
+          color: call.muted ? scheme.primary : scheme.surfaceContainerHighest,
+          foreground: call.muted ? scheme.onPrimary : scheme.onSurface,
           onPressed: () => service.setMuted(!call.muted),
         ),
         _RoundButton(

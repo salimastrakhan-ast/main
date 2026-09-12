@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' show MediaType;
 
 import '../../core/config.dart';
 import 'session_store.dart';
@@ -168,7 +169,15 @@ class ApiClient {
           )
           ..headers['Authorization'] = 'Bearer $token'
           ..files.add(
-            http.MultipartFile.fromBytes('file', bytes, filename: fileName),
+            http.MultipartFile.fromBytes(
+              'file',
+              bytes,
+              filename: fileName,
+              // Без этого часть уходит как application/octet-stream, и сервер
+              // записывает вложение файлом: голосовое приходит безымянным
+              // вложением вместо плеера, фотография — строкой «файл».
+              contentType: MediaType.parse(mime),
+            ),
           )
           ..fields.addAll({
             if (width != null) 'width': '$width',
@@ -189,6 +198,7 @@ class ApiClient {
   Future<Map<String, dynamic>> setAvatar({
     required String fileName,
     required List<int> bytes,
+    required String mime,
   }) async {
     final token = await freshAccessToken();
     final request =
@@ -198,7 +208,14 @@ class ApiClient {
           )
           ..headers['Authorization'] = 'Bearer $token'
           ..files.add(
-            http.MultipartFile.fromBytes('file', bytes, filename: fileName),
+            http.MultipartFile.fromBytes(
+              'file',
+              bytes,
+              filename: fileName,
+              // Сервер принимает только image/*: без типа он отвечает
+              // отказом, и фото профиля с телефона не ставилось вовсе.
+              contentType: MediaType.parse(mime),
+            ),
           );
 
     return _parse(await http.Response.fromStream(await request.send()));

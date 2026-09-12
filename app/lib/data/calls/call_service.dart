@@ -261,6 +261,13 @@ class CallService {
     // зазвонил телефон.
     _local = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
 
+    // Разговорный динамик, а не громкая связь. WebRTC на Android включает
+    // громкую сам, и разговор начинался на всю комнату, хотя кнопка на
+    // экране показывала обратное. Громкую человек включает сам.
+    for (final track in _local!.getAudioTracks()) {
+      track.enableSpeakerphone(false);
+    }
+
     final servers = await _iceServers();
     final pc = await createPeerConnection({'iceServers': servers});
     _pc = pc;
