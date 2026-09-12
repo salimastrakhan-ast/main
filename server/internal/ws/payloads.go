@@ -184,6 +184,10 @@ type CallHangupData struct {
 // незачем держать человека сорок секунд у гудков.
 type CallStartedData struct {
 	CallID uuid.UUID `json:"call_id"`
+	// ChatID возвращается всегда, даже когда звонили по собеседнику: чат
+	// мог быть заведён этим же звонком, и клиенту надо знать, куда ляжет
+	// запись о нём.
+	ChatID uuid.UUID `json:"chat_id"`
 	Status string    `json:"status"` // "ringing" или "offline"
 }
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/salimastrakhan-ast/main/server/internal/domain"
 	"github.com/salimastrakhan-ast/main/server/internal/ws"
 )
 
@@ -252,6 +253,106 @@ func TestСебеНеПозвонить(t *testing.T) {
 	reply := anyaConn.call(ws.CmdCallStart, ws.CallStartData{PeerID: anya.ID, SDP: sdp(20)})
 	if reply.T != ws.TypeError {
 		t.Fatal("звонок самому себе прошёл")
+	}
+}
+
+func TestЗвонокОставляетСледВПереписке(t *testing.T) {
+	// Звонок, не оставляющий записи, порождает вопрос «он мне звонил или
+	// нет?», на который в мессенджере отвечать нечем.
+	e := newEnv(t)
+	_, anyaToken := e.newUser("79001110020")
+	borya, boryaToken := e.newUser("79001110021")
+
+	anyaConn := e.connect(anyaToken)
+	defer anyaConn.close()
+	boryaConn := e.connect(boryaToken)
+	defer boryaConn.close()
+
+	chatID := e.privateChat(anyaConn, borya.ID)
+	started := decode[ws.CallStartedData](t,
+		anyaConn.call(ws.CmdCallStart, ws.CallStartData{ChatID: chatID, SDP: sdp(20)}))
+	boryaConn.await(ws.EventCallIncoming, 3*time.Second)
+
+	boryaConn.call(ws.CmdCallAnswer, ws.CallAnswerData{CallID: started.CallID, SDP: sdp(18)})
+	anyaConn.await(ws.EventCallAccepted, 3*time.Second)
+
+	anyaConn.call(ws.CmdCallHangup, ws.CallHangupData{
+		CallID: started.CallID, Reason: ws.CallEndHangup,
+	})
+
+	// Запись приезжает обычным событием сообщения: клиенты уже умеют класть
+	// такое в ленту.
+	deadline := time.Now().Add(5 * time.Second)
+	var logged domain.Message
+	for time.Now().Before(deadline) {
+		env := boryaConn.read(time.Until(deadline))
+		if env.T != ws.EventMessageNew {
+			continue
+		}
+		msg := decode[ws.MessageEventData](t, env).Message
+		if msg.Kind == domain.MessageCall {
+			logged = msg
+			break
+		}
+	}
+
+	if logged.Kind != domain.MessageCall {
+		t.Fatal("запись о звонке в переписку не попала")
+	}
+	if logged.ChatID != chatID {
+		t.Error("запись легла не в тот чат")
+	}
+	if logged.Payload == nil {
+		t.Fatal("у записи нет подробностей звонка")
+	}
+	if logged.Payload.Reason != ws.CallEndHangup {
+		t.Errorf("исход %q вместо hangup", logged.Payload.Reason)
+	}
+}
+
+func TestНеотвеченныйЗвонокЗаписанКакПропущенный(t *testing.T) {
+	// Звонящий положил трубку, не дождавшись ответа. Для того, кому
+	// звонили, это пропущенный, а не «завершённый».
+	e := newEnv(t)
+	_, anyaToken := e.newUser("79001110022")
+	borya, boryaToken := e.newUser("79001110023")
+
+	anyaConn := e.connect(anyaToken)
+	defer anyaConn.close()
+	boryaConn := e.connect(boryaToken)
+	defer boryaConn.close()
+
+	chatID := e.privateChat(anyaConn, borya.ID)
+	started := decode[ws.CallStartedData](t,
+		anyaConn.call(ws.CmdCallStart, ws.CallStartData{ChatID: chatID, SDP: sdp(20)}))
+	boryaConn.await(ws.EventCallIncoming, 3*time.Second)
+
+	anyaConn.call(ws.CmdCallHangup, ws.CallHangupData{
+		CallID: started.CallID, Reason: ws.CallEndHangup,
+	})
+
+	deadline := time.Now().Add(5 * time.Second)
+	var logged domain.Message
+	for time.Now().Before(deadline) {
+		env := boryaConn.read(time.Until(deadline))
+		if env.T != ws.EventMessageNew {
+			continue
+		}
+		msg := decode[ws.MessageEventData](t, env).Message
+		if msg.Kind == domain.MessageCall {
+			logged = msg
+			break
+		}
+	}
+
+	if logged.Payload == nil {
+		t.Fatal("записи о звонке нет")
+	}
+	if logged.Payload.Reason != ws.CallEndMissed {
+		t.Errorf("исход %q вместо missed", logged.Payload.Reason)
+	}
+	if logged.Payload.Seconds != 0 {
+		t.Errorf("у неотвеченного звонка длительность %d", logged.Payload.Seconds)
 	}
 }
 

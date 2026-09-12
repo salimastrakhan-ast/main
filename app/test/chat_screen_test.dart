@@ -29,6 +29,7 @@ void main() {
     body: body,
     clientMsgId: id,
     createdAt: DateTime(2026, 1, 1, 12),
+    kind: 'text',
     sendState: SendState.sent,
   );
 

@@ -15,6 +15,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { api } from "./api";
+import { t } from "./i18n";
 import {
   CallSession,
   RING_TIMEOUT_MS,
@@ -24,6 +25,7 @@ import {
 import type {
   Attachment,
   AttachmentKind,
+  CallRecord,
   Chat,
   Contact,
   FolderId,
@@ -78,6 +80,8 @@ type ServerMessage = {
   edited_at?: string;
   deleted_at?: string;
   attachments?: ServerAttachment[];
+  kind?: "text" | "call";
+  payload?: { reason: string; seconds: number };
 };
 
 function toAttachment(raw: ServerAttachment): Attachment {
@@ -142,6 +146,13 @@ function toMessage(raw: ServerMessage): Message {
     seq: raw.seq,
     clientMsgId: raw.client_msg_id,
     deleted: Boolean(raw.deleted_at),
+    call:
+      raw.kind === "call" && raw.payload
+        ? {
+            reason: raw.payload.reason as CallRecord["reason"],
+            seconds: raw.payload.seconds,
+          }
+        : undefined,
   };
 }
 
@@ -434,6 +445,19 @@ export const useMessenger = create<MessengerStore>()(
         try {
           await session().start(chatId, peerId, await api.iceServers());
           armRingTimeout();
+
+          // Звонили из черновика — сервер завёл переписку, и открытой
+          // должна стать она. Иначе после разговора человек смотрит на
+          // пустой экран, хотя запись о звонке уже пришла.
+          const real = session().chatId;
+          if (!chatId && real) {
+            set((s) => ({
+              selectedChatId: real,
+              draftPeerId: null,
+              call: s.call ? { ...s.call, chatId: real } : s.call,
+            }));
+            await syncAll();
+          }
         } catch (e) {
           // Отказ в доступе к микрофону выглядит именно так, и молчать тут
           // нельзя: человек нажал «позвонить» и должен узнать, почему не
@@ -1423,6 +1447,28 @@ export function lastPreview(
     if (message?.chatId !== chatId) continue;
     if (message.deleted) return "Сообщение удалено";
     const prefix = message.senderId === me?.id ? `${meLabel}: ` : "";
+
+    // Запись о звонке описывается словами, иначе в списке остаётся пустая
+    // строка после «Вы:» — будто сообщение потерялось.
+    if (message.call) {
+      const outgoing = message.senderId === me?.id;
+      const missed =
+        message.call.reason === "missed" || message.call.seconds === 0;
+      return t(
+        uiLang,
+        message.call.reason === "declined"
+          ? outgoing
+            ? "callDeclinedOut"
+            : "callDeclinedIn"
+          : missed
+            ? outgoing
+              ? "callNoAnswer"
+              : "callMissed"
+            : outgoing
+              ? "callOut"
+              : "callIn",
+      );
+    }
     const attachment = message.attachments?.[0];
     const body = message.text.trim()
       ? message.text.replace(/\s+/g, " ")

@@ -416,6 +416,10 @@ class MessageRepository {
                   ? null
                   : jsonEncode(attachments),
             ),
+            kind: Value(raw['kind'] as String? ?? 'text'),
+            payloadJson: Value(
+              raw['payload'] == null ? null : jsonEncode(raw['payload']),
+            ),
             sendState: Value(state),
           ),
         );

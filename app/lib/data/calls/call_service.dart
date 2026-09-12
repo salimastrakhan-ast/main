@@ -159,6 +159,11 @@ class CallService {
         'sdp': offer.sdp ?? '',
       });
       _callId = reply['call_id'] as String?;
+      // Чат мог быть заведён этим же звонком: до него переписки не было.
+      final realChat = reply['chat_id'] as String?;
+      if (realChat != null && realChat.isNotEmpty) {
+        _emit(_current?.copyWith(chatId: realChat));
+      }
 
       if (reply['status'] == 'offline') {
         _finish(CallEndReason.offline);

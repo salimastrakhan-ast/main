@@ -152,6 +152,21 @@ try {
   await anya.page.locator('button[aria-label="Завершить"]').first().click();
   await borya.page.waitForSelector('text=Звонок завершён', { timeout: 10000 });
   check('отбой слышен на той стороне', true);
+
+  // След в переписке: без него остаётся вопрос «он мне звонил или нет?».
+  await anya.page.waitForTimeout(4000);
+  const trace = async (app) =>
+    app.page.evaluate(() => {
+      const raw = localStorage.getItem('tito-messenger');
+      const state = raw ? JSON.parse(raw).state : {};
+      return (state.messages ?? []).find((m) => m.call) ?? null;
+    });
+  const [atAnya, atBorya] = await Promise.all([trace(anya), trace(borya)]);
+  check('звонок записан в переписку у звонившего', Boolean(atAnya),
+    atAnya ? `${atAnya.call.reason}, ${atAnya.call.seconds} с` : 'записи нет');
+  check('и у собеседника', Boolean(atBorya),
+    atBorya ? `${atBorya.call.reason}, ${atBorya.call.seconds} с` : 'записи нет');
+  await anya.page.screenshot({ path: `${OUT}/05-след-в-переписке.png` });
 } finally {
   await browser.close();
 }

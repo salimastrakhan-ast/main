@@ -795,6 +795,27 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('text'),
+  );
+  static const VerificationMeta _payloadJsonMeta = const VerificationMeta(
+    'payloadJson',
+  );
+  @override
+  late final GeneratedColumn<String> payloadJson = GeneratedColumn<String>(
+    'payload_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   late final GeneratedColumnWithTypeConverter<SendState, int> sendState =
       GeneratedColumn<int>(
@@ -819,6 +840,8 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     editedAt,
     deletedAt,
     attachmentsJson,
+    kind,
+    payloadJson,
     sendState,
   ];
   @override
@@ -918,6 +941,21 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         ),
       );
     }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    }
+    if (data.containsKey('payload_json')) {
+      context.handle(
+        _payloadJsonMeta,
+        payloadJson.isAcceptableOrUnknown(
+          data['payload_json']!,
+          _payloadJsonMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -975,6 +1013,14 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         DriftSqlType.string,
         data['${effectivePrefix}attachments_json'],
       ),
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      payloadJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payload_json'],
+      ),
       sendState: $MessagesTable.$convertersendState.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -1016,6 +1062,15 @@ class Message extends DataClass implements Insertable<Message> {
   /// Вложения в JSON: их немного, отдельная таблица дала бы join на каждый
   /// экран ради двух-трёх строк.
   final String? attachmentsJson;
+
+  /// Служебная запись вместо сообщения: пока только след звонка.
+  /// Пусто у обычных — так же, как на сервере.
+  final String kind;
+
+  /// Подробности служебной записи в JSON: исход звонка и длительность. По
+  /// той же причине, что и вложения, — колонок под них было бы больше, чем
+  /// таких строк в таблице.
+  final String? payloadJson;
   final SendState sendState;
   const Message({
     required this.id,
@@ -1030,6 +1085,8 @@ class Message extends DataClass implements Insertable<Message> {
     this.editedAt,
     this.deletedAt,
     this.attachmentsJson,
+    required this.kind,
+    this.payloadJson,
     required this.sendState,
   });
   @override
@@ -1054,6 +1111,10 @@ class Message extends DataClass implements Insertable<Message> {
     }
     if (!nullToAbsent || attachmentsJson != null) {
       map['attachments_json'] = Variable<String>(attachmentsJson);
+    }
+    map['kind'] = Variable<String>(kind);
+    if (!nullToAbsent || payloadJson != null) {
+      map['payload_json'] = Variable<String>(payloadJson);
     }
     {
       map['send_state'] = Variable<int>(
@@ -1085,6 +1146,10 @@ class Message extends DataClass implements Insertable<Message> {
       attachmentsJson: attachmentsJson == null && nullToAbsent
           ? const Value.absent()
           : Value(attachmentsJson),
+      kind: Value(kind),
+      payloadJson: payloadJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(payloadJson),
       sendState: Value(sendState),
     );
   }
@@ -1107,6 +1172,8 @@ class Message extends DataClass implements Insertable<Message> {
       editedAt: serializer.fromJson<DateTime?>(json['editedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       attachmentsJson: serializer.fromJson<String?>(json['attachmentsJson']),
+      kind: serializer.fromJson<String>(json['kind']),
+      payloadJson: serializer.fromJson<String?>(json['payloadJson']),
       sendState: $MessagesTable.$convertersendState.fromJson(
         serializer.fromJson<int>(json['sendState']),
       ),
@@ -1128,6 +1195,8 @@ class Message extends DataClass implements Insertable<Message> {
       'editedAt': serializer.toJson<DateTime?>(editedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'attachmentsJson': serializer.toJson<String?>(attachmentsJson),
+      'kind': serializer.toJson<String>(kind),
+      'payloadJson': serializer.toJson<String?>(payloadJson),
       'sendState': serializer.toJson<int>(
         $MessagesTable.$convertersendState.toJson(sendState),
       ),
@@ -1147,6 +1216,8 @@ class Message extends DataClass implements Insertable<Message> {
     Value<DateTime?> editedAt = const Value.absent(),
     Value<DateTime?> deletedAt = const Value.absent(),
     Value<String?> attachmentsJson = const Value.absent(),
+    String? kind,
+    Value<String?> payloadJson = const Value.absent(),
     SendState? sendState,
   }) => Message(
     id: id ?? this.id,
@@ -1163,6 +1234,8 @@ class Message extends DataClass implements Insertable<Message> {
     attachmentsJson: attachmentsJson.present
         ? attachmentsJson.value
         : this.attachmentsJson,
+    kind: kind ?? this.kind,
+    payloadJson: payloadJson.present ? payloadJson.value : this.payloadJson,
     sendState: sendState ?? this.sendState,
   );
   Message copyWithCompanion(MessagesCompanion data) {
@@ -1185,6 +1258,10 @@ class Message extends DataClass implements Insertable<Message> {
       attachmentsJson: data.attachmentsJson.present
           ? data.attachmentsJson.value
           : this.attachmentsJson,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      payloadJson: data.payloadJson.present
+          ? data.payloadJson.value
+          : this.payloadJson,
       sendState: data.sendState.present ? data.sendState.value : this.sendState,
     );
   }
@@ -1204,6 +1281,8 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('editedAt: $editedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('attachmentsJson: $attachmentsJson, ')
+          ..write('kind: $kind, ')
+          ..write('payloadJson: $payloadJson, ')
           ..write('sendState: $sendState')
           ..write(')'))
         .toString();
@@ -1223,6 +1302,8 @@ class Message extends DataClass implements Insertable<Message> {
     editedAt,
     deletedAt,
     attachmentsJson,
+    kind,
+    payloadJson,
     sendState,
   );
   @override
@@ -1241,6 +1322,8 @@ class Message extends DataClass implements Insertable<Message> {
           other.editedAt == this.editedAt &&
           other.deletedAt == this.deletedAt &&
           other.attachmentsJson == this.attachmentsJson &&
+          other.kind == this.kind &&
+          other.payloadJson == this.payloadJson &&
           other.sendState == this.sendState);
 }
 
@@ -1257,6 +1340,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<DateTime?> editedAt;
   final Value<DateTime?> deletedAt;
   final Value<String?> attachmentsJson;
+  final Value<String> kind;
+  final Value<String?> payloadJson;
   final Value<SendState> sendState;
   final Value<int> rowid;
   const MessagesCompanion({
@@ -1272,6 +1357,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.editedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.attachmentsJson = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.payloadJson = const Value.absent(),
     this.sendState = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1288,6 +1375,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.editedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.attachmentsJson = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.payloadJson = const Value.absent(),
     this.sendState = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -1308,6 +1397,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<DateTime>? editedAt,
     Expression<DateTime>? deletedAt,
     Expression<String>? attachmentsJson,
+    Expression<String>? kind,
+    Expression<String>? payloadJson,
     Expression<int>? sendState,
     Expression<int>? rowid,
   }) {
@@ -1324,6 +1415,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (editedAt != null) 'edited_at': editedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (attachmentsJson != null) 'attachments_json': attachmentsJson,
+      if (kind != null) 'kind': kind,
+      if (payloadJson != null) 'payload_json': payloadJson,
       if (sendState != null) 'send_state': sendState,
       if (rowid != null) 'rowid': rowid,
     });
@@ -1342,6 +1435,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Value<DateTime?>? editedAt,
     Value<DateTime?>? deletedAt,
     Value<String?>? attachmentsJson,
+    Value<String>? kind,
+    Value<String?>? payloadJson,
     Value<SendState>? sendState,
     Value<int>? rowid,
   }) {
@@ -1358,6 +1453,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       editedAt: editedAt ?? this.editedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       attachmentsJson: attachmentsJson ?? this.attachmentsJson,
+      kind: kind ?? this.kind,
+      payloadJson: payloadJson ?? this.payloadJson,
       sendState: sendState ?? this.sendState,
       rowid: rowid ?? this.rowid,
     );
@@ -1402,6 +1499,12 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (attachmentsJson.present) {
       map['attachments_json'] = Variable<String>(attachmentsJson.value);
     }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (payloadJson.present) {
+      map['payload_json'] = Variable<String>(payloadJson.value);
+    }
     if (sendState.present) {
       map['send_state'] = Variable<int>(
         $MessagesTable.$convertersendState.toSql(sendState.value),
@@ -1428,6 +1531,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('editedAt: $editedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('attachmentsJson: $attachmentsJson, ')
+          ..write('kind: $kind, ')
+          ..write('payloadJson: $payloadJson, ')
           ..write('sendState: $sendState, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -3405,6 +3510,8 @@ typedef $$MessagesTableCreateCompanionBuilder =
       Value<DateTime?> editedAt,
       Value<DateTime?> deletedAt,
       Value<String?> attachmentsJson,
+      Value<String> kind,
+      Value<String?> payloadJson,
       Value<SendState> sendState,
       Value<int> rowid,
     });
@@ -3422,6 +3529,8 @@ typedef $$MessagesTableUpdateCompanionBuilder =
       Value<DateTime?> editedAt,
       Value<DateTime?> deletedAt,
       Value<String?> attachmentsJson,
+      Value<String> kind,
+      Value<String?> payloadJson,
       Value<SendState> sendState,
       Value<int> rowid,
     });
@@ -3492,6 +3601,16 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<String> get attachmentsJson => $composableBuilder(
     column: $table.attachmentsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get payloadJson => $composableBuilder(
+    column: $table.payloadJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3571,6 +3690,16 @@ class $$MessagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get payloadJson => $composableBuilder(
+    column: $table.payloadJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get sendState => $composableBuilder(
     column: $table.sendState,
     builder: (column) => ColumnOrderings(column),
@@ -3628,6 +3757,14 @@ class $$MessagesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get payloadJson => $composableBuilder(
+    column: $table.payloadJson,
+    builder: (column) => column,
+  );
+
   GeneratedColumnWithTypeConverter<SendState, int> get sendState =>
       $composableBuilder(column: $table.sendState, builder: (column) => column);
 }
@@ -3672,6 +3809,8 @@ class $$MessagesTableTableManager
                 Value<DateTime?> editedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String?> attachmentsJson = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String?> payloadJson = const Value.absent(),
                 Value<SendState> sendState = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion(
@@ -3687,6 +3826,8 @@ class $$MessagesTableTableManager
                 editedAt: editedAt,
                 deletedAt: deletedAt,
                 attachmentsJson: attachmentsJson,
+                kind: kind,
+                payloadJson: payloadJson,
                 sendState: sendState,
                 rowid: rowid,
               ),
@@ -3704,6 +3845,8 @@ class $$MessagesTableTableManager
                 Value<DateTime?> editedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String?> attachmentsJson = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String?> payloadJson = const Value.absent(),
                 Value<SendState> sendState = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion.insert(
@@ -3719,6 +3862,8 @@ class $$MessagesTableTableManager
                 editedAt: editedAt,
                 deletedAt: deletedAt,
                 attachmentsJson: attachmentsJson,
+                kind: kind,
+                payloadJson: payloadJson,
                 sendState: sendState,
                 rowid: rowid,
               ),

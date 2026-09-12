@@ -1,13 +1,24 @@
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
-import { Check, CheckCheck, Copy, Languages, Pencil, Reply, Trash2 } from "lucide-react";
+import {
+  Check,
+  CheckCheck,
+  Copy,
+  Languages,
+  Pencil,
+  PhoneIncoming,
+  PhoneMissed,
+  PhoneOutgoing,
+  Reply,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { AttachmentView } from "@/components/attachment";
 import { UserAvatar } from "@/components/user-avatar";
 import { dayKey, formatBubbleTime, formatDayLabel } from "@/lib/format";
 import { t, targetLangNames } from "@/lib/i18n";
 import { useMe, useMessenger } from "@/lib/store";
-import type { Message } from "@/lib/types";
+import type { CallRecord, Message, UiLang } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function MessageList({ chatId }: { chatId: string }) {
@@ -63,6 +74,22 @@ export function MessageList({ chatId }: { chatId: string }) {
           }
           const message = item.message;
           const mine = message.senderId === me.id;
+
+          // Запись о звонке — не сообщение: её никто не писал, отвечать на
+          // неё и править нечего. Поэтому отдельная строка посередине, как
+          // разделитель даты, а не пузырь с хвостиком.
+          if (message.call) {
+            return (
+              <CallRow
+                key={message.id}
+                record={message.call}
+                outgoing={mine}
+                at={message.createdAt}
+                lang={uiLang}
+              />
+            );
+          }
+
           const sender = mine ? me : contacts[message.senderId];
           const live = Boolean(chat?.translateOn && !mine);
           const tr = message.translations?.[targetLang];
@@ -243,6 +270,52 @@ export function MessageList({ chatId }: { chatId: string }) {
       </div>
     </div>
   );
+}
+
+/// Строка о звонке в ленте.
+function CallRow({
+  record,
+  outgoing,
+  at,
+  lang,
+}: {
+  record: CallRecord;
+  outgoing: boolean;
+  at: number;
+  lang: UiLang;
+}) {
+  // Пропущенный для того, кому звонили, — не то же, что для звонившего:
+  // один не дозвонился, другой не услышал. Красным он только у второго.
+  const missed = record.reason === "missed" || record.reason === "declined";
+  const alarming = missed && !outgoing;
+  const Icon = missed ? PhoneMissed : outgoing ? PhoneOutgoing : PhoneIncoming;
+
+  return (
+    <div className="flex justify-center">
+      <span
+        className={cn(
+          "inline-flex items-center gap-2 rounded-full bg-surface px-3 py-1 text-xs",
+          alarming ? "text-danger" : "text-muted",
+        )}
+      >
+        <Icon className="size-3.5" />
+        {callLabel(record, outgoing, lang)}
+        <span className="text-subtle">{formatBubbleTime(at)}</span>
+      </span>
+    </div>
+  );
+}
+
+function callLabel(record: CallRecord, outgoing: boolean, lang: UiLang): string {
+  if (record.reason === "declined") {
+    return t(lang, outgoing ? "callDeclinedOut" : "callDeclinedIn");
+  }
+  if (record.reason === "missed" || record.seconds === 0) {
+    return t(lang, outgoing ? "callNoAnswer" : "callMissed");
+  }
+  const minutes = Math.floor(record.seconds / 60);
+  const seconds = String(record.seconds % 60).padStart(2, "0");
+  return `${t(lang, outgoing ? "callOut" : "callIn")} · ${minutes}:${seconds}`;
 }
 
 function IconAction({

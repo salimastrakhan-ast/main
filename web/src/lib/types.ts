@@ -58,11 +58,21 @@ export type Attachment = {
   duration?: number;
 };
 
+/// След звонка в переписке: чем он кончился и сколько длился.
+export type CallRecord = {
+  reason: "hangup" | "declined" | "missed" | "busy" | "failed";
+  seconds: number;
+};
+
 export type Message = {
   id: string;
   chatId: string;
   senderId: string;
   text: string;
+
+  /// Запись о звонке вместо обычного сообщения. Рисуется отдельной
+  /// строкой, а не пузырём: её никто не писал.
+  call?: CallRecord;
   createdAt: number;
   status: MessageStatus;
   replyToId?: string;

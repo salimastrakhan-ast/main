@@ -83,11 +83,36 @@ type Member struct {
 	LastReadSeq int64     `json:"last_read_seq"`
 }
 
+// MessageKind различает обычное сообщение и служебную запись.
+//
+// Служебная — это то, что положил сам сервер: пока только след звонка.
+// Клиент рисует её отдельной строкой, а не пузырём.
+type MessageKind string
+
+const (
+	MessageText MessageKind = "text"
+	MessageCall MessageKind = "call"
+)
+
+// CallPayload — подробности записи о звонке.
+//
+// Исход и длительность: «отклонил» и «не ответил» — разные вещи, и в
+// истории они должны различаться.
+type CallPayload struct {
+	Reason  string `json:"reason"`
+	Seconds int    `json:"seconds"`
+	// Video оставлено на будущее: сигналинг его уже переносит, клиенты
+	// пока передают только звук.
+	Video bool `json:"video,omitempty"`
+}
+
 type Message struct {
 	ID          uuid.UUID    `json:"id"`
 	ChatID      uuid.UUID    `json:"chat_id"`
 	Seq         int64        `json:"seq"`
 	SenderID    uuid.UUID    `json:"sender_id"`
+	Kind        MessageKind  `json:"kind,omitempty"`
+	Payload     *CallPayload `json:"payload,omitempty"`
 	Text        string       `json:"text"`
 	ReplyToID   *uuid.UUID   `json:"reply_to_id,omitempty"`
 	ClientMsgID uuid.UUID    `json:"client_msg_id"`

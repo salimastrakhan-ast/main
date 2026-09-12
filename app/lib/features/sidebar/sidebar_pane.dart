@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -446,8 +448,35 @@ class _ChatTile extends ConsumerWidget {
     }
     if (last.deleted) return 'Сообщение удалено';
 
+    // Запись о звонке описывается словами, иначе в списке остаётся «Вы:» и
+    // пустота — будто сообщение потерялось.
+    if (last.kind == 'call') return _callPreview(last);
+
     final body = last.body.isEmpty ? 'Вложение' : last.body;
     return last.senderId == myUserId ? 'Вы: $body' : body;
+  }
+
+  String _callPreview(LastMessage call) {
+    final outgoing = call.senderId == myUserId;
+    var reason = 'hangup';
+    var seconds = 0;
+    final raw = call.payloadJson;
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final data = jsonDecode(raw) as Map<String, dynamic>;
+        reason = data['reason'] as String? ?? reason;
+        seconds = (data['seconds'] as num?)?.toInt() ?? 0;
+      } catch (_) {
+        // Подробности пропадут, сама запись останется.
+      }
+    }
+    if (reason == 'declined') {
+      return outgoing ? 'Звонок отклонён' : 'Вы отклонили звонок';
+    }
+    if (reason == 'missed' || seconds == 0) {
+      return outgoing ? 'Не ответили' : 'Пропущенный звонок';
+    }
+    return outgoing ? 'Исходящий звонок' : 'Входящий звонок';
   }
 
   /// Сегодняшнее — часами, вчерашнее — словом, старое — датой. Как в любом

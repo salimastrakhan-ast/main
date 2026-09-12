@@ -79,6 +79,15 @@ class Messages extends Table {
   /// экран ради двух-трёх строк.
   TextColumn get attachmentsJson => text().nullable()();
 
+  /// Служебная запись вместо сообщения: пока только след звонка.
+  /// Пусто у обычных — так же, как на сервере.
+  TextColumn get kind => text().withDefault(const Constant('text'))();
+
+  /// Подробности служебной записи в JSON: исход звонка и длительность. По
+  /// той же причине, что и вложения, — колонок под них было бы больше, чем
+  /// таких строк в таблице.
+  TextColumn get payloadJson => text().nullable()();
+
   IntColumn get sendState => intEnum<SendState>().withDefault(
     const Constant(1), // sent
   )();
@@ -164,12 +173,19 @@ class LastMessage {
     required this.body,
     required this.senderId,
     required this.deleted,
+    this.kind = 'text',
+    this.payloadJson,
   });
 
   final String chatId;
   final String body;
   final String senderId;
   final bool deleted;
+
+  /// Служебная запись вместо сообщения: список описывает её словами, иначе
+  /// после «Вы:» осталась бы пустота.
+  final String kind;
+  final String? payloadJson;
 }
 
 @DriftDatabase(tables: [Chats, Messages, Users, ChatMembers, Outbox, Prefs])
@@ -179,13 +195,14 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   /// Пересоздавать базу нельзя: в ней лежит вся переписка, и обновление
   /// приложения не повод её потерять. Поэтому каждая версия добавляет своё.
   ///
   ///   2 — таблица настроек, признаки контакта и избранного;
-  ///   3 — закрепление и беззвучный режим чата.
+  ///   3 — закрепление и беззвучный режим чата;
+  ///   4 — служебные записи в ленте: след звонка.
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
@@ -198,6 +215,10 @@ class AppDatabase extends _$AppDatabase {
       if (from < 3) {
         await m.addColumn(chats, chats.pinned);
         await m.addColumn(chats, chats.muted);
+      }
+      if (from < 4) {
+        await m.addColumn(messages, messages.kind);
+        await m.addColumn(messages, messages.payloadJson);
       }
     },
   );
@@ -370,7 +391,7 @@ class AppDatabase extends _$AppDatabase {
   /// на каждый чат.
   Stream<List<LastMessage>> watchLastMessages() {
     return customSelect(
-      'SELECT chat_id, body, sender_id, deleted_at, '
+      'SELECT chat_id, body, sender_id, deleted_at, kind, payload_json, '
       'max(created_at) AS created_at FROM messages GROUP BY chat_id',
       readsFrom: {messages},
     ).watch().map(
@@ -381,6 +402,8 @@ class AppDatabase extends _$AppDatabase {
             body: row.read<String>('body'),
             senderId: row.read<String>('sender_id'),
             deleted: row.read<DateTime?>('deleted_at') != null,
+            kind: row.read<String>('kind'),
+            payloadJson: row.read<String?>('payload_json'),
           ),
       ],
     );

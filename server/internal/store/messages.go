@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -17,7 +18,7 @@ import (
 var errDuplicate = errors.New("сообщение уже существует")
 
 const messageColumns = `id, chat_id, seq, updated_seq, COALESCE(sender_id, '00000000-0000-0000-0000-000000000000'::uuid),
-	text, reply_to_id, client_msg_id, created_at, edited_at, deleted_at`
+	text, reply_to_id, client_msg_id, created_at, edited_at, deleted_at, kind, payload`
 
 type scannedMessage struct {
 	domain.Message
@@ -26,13 +27,24 @@ type scannedMessage struct {
 
 func scanMessage(row pgx.Row) (scannedMessage, error) {
 	var m scannedMessage
+	var payload []byte
 	err := row.Scan(&m.ID, &m.ChatID, &m.Seq, &m.UpdatedSeq, &m.SenderID,
-		&m.Text, &m.ReplyToID, &m.ClientMsgID, &m.CreatedAt, &m.EditedAt, &m.DeletedAt)
+		&m.Text, &m.ReplyToID, &m.ClientMsgID, &m.CreatedAt, &m.EditedAt, &m.DeletedAt,
+		&m.Kind, &payload)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return scannedMessage{}, ErrNotFound
 	}
 	if err != nil {
 		return scannedMessage{}, fmt.Errorf("чтение сообщения: %w", err)
+	}
+	if len(payload) > 0 {
+		var call domain.CallPayload
+		if err := json.Unmarshal(payload, &call); err != nil {
+			// Не повод ронять выдачу истории: подробности звонка пропадут,
+			// сама запись останется.
+			return m, nil
+		}
+		m.Payload = &call
 	}
 	return m, nil
 }
@@ -44,6 +56,45 @@ type NewMessage struct {
 	ReplyToID     *uuid.UUID
 	ClientMsgID   uuid.UUID
 	AttachmentIDs []uuid.UUID
+}
+
+// LogCall кладёт в переписку запись о состоявшемся звонке.
+//
+// Отдельный метод, а не SendMessage с особым полем: у записи нет ни текста,
+// ни ответа, ни вложений, зато есть подробности звонка, и проверять права
+// отправителя тут нечего — её кладёт сам сервер по итогу звонка, который
+// уже проверил, кто кому звонит.
+//
+// Номер берётся тем же nextSeq, что и у сообщений: запись обязана встать в
+// ленту на своё место и доехать до клиента обычной синхронизацией.
+func (s *Store) LogCall(
+	ctx context.Context,
+	chatID, callerID uuid.UUID,
+	payload domain.CallPayload,
+) (domain.Message, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return domain.Message{}, fmt.Errorf("сборка записи о звонке: %w", err)
+	}
+
+	var msg scannedMessage
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		seq, err := nextSeq(ctx, tx, chatID)
+		if err != nil {
+			return err
+		}
+		row := tx.QueryRow(ctx, `
+			INSERT INTO messages (chat_id, seq, updated_seq, sender_id, client_msg_id, kind, payload)
+			VALUES ($1, $2, $2, $3, gen_random_uuid(), 'call', $4)
+			RETURNING `+messageColumns,
+			chatID, seq, callerID, body)
+		msg, err = scanMessage(row)
+		return err
+	})
+	if err != nil {
+		return domain.Message{}, err
+	}
+	return msg.Message, nil
 }
 
 // SendMessage кладёт сообщение в чат и возвращает его вместе с признаком

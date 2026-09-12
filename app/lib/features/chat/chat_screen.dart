@@ -814,6 +814,18 @@ class _Feed extends ConsumerWidget {
             if (row.divider != null) return _DateDivider(date: row.divider!);
 
             final message = row.message!;
+
+            // Запись о звонке — не сообщение: её никто не писал, отвечать
+            // и править нечего. Отдельной строкой посередине, как
+            // разделитель даты, а не пузырём с хвостиком.
+            if (message.kind == 'call') {
+              return _CallRow(
+                key: ValueKey(message.id),
+                message: message,
+                outgoing: message.senderId == myUserId,
+              );
+            }
+
             return _Bubble(
               key: ValueKey(message.id),
               message: message,
@@ -932,6 +944,96 @@ class _FirstMessage extends StatelessWidget {
       title: 'Здесь пока ничего нет',
       description: 'Напишите первым — сообщение уйдёт сразу.',
     );
+  }
+}
+
+/// Строка о звонке в ленте.
+class _CallRow extends StatelessWidget {
+  const _CallRow({required this.message, required this.outgoing, super.key});
+
+  final Message message;
+  final bool outgoing;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final call = _payload();
+    final reason = call['reason'] as String? ?? 'hangup';
+    final seconds = (call['seconds'] as num?)?.toInt() ?? 0;
+    final missed = reason == 'missed' || reason == 'declined';
+
+    // Пропущенный для того, кому звонили, — не то же, что для звонившего:
+    // один не дозвонился, другой не услышал. Красным он только у второго.
+    final alarming = missed && !outgoing;
+    final color = alarming
+        ? theme.colorScheme.error
+        : theme.colorScheme.onSurfaceVariant;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Tokens.space2),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: Tokens.space3,
+            vertical: 5,
+          ),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(Tokens.radiusShell),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                missed
+                    ? TitoIcons.callMissed
+                    : outgoing
+                    ? TitoIcons.callOut
+                    : TitoIcons.callIn,
+                size: 14,
+                color: color,
+              ),
+              const SizedBox(width: Tokens.space2),
+              Text(
+                _label(reason, seconds),
+                style: theme.textTheme.labelMedium?.copyWith(color: color),
+              ),
+              const SizedBox(width: Tokens.space2),
+              Text(
+                DateFormat.Hm().format(message.createdAt),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Map<String, dynamic> _payload() {
+    final raw = message.payloadJson;
+    if (raw == null || raw.isEmpty) return const {};
+    try {
+      return jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      // Подробности пропадут, сама запись останется: то, что звонок был,
+      // важнее того, сколько он длился.
+      return const {};
+    }
+  }
+
+  String _label(String reason, int seconds) {
+    if (reason == 'declined') {
+      return outgoing ? 'Звонок отклонён' : 'Вы отклонили звонок';
+    }
+    if (reason == 'missed' || seconds == 0) {
+      return outgoing ? 'Не ответили' : 'Пропущенный звонок';
+    }
+    final minutes = seconds ~/ 60;
+    final rest = (seconds % 60).toString().padLeft(2, '0');
+    return '${outgoing ? 'Исходящий' : 'Входящий'} звонок · $minutes:$rest';
   }
 }
 
@@ -1514,11 +1616,22 @@ class _CallButton extends ConsumerWidget {
           ? null
           : () async {
               try {
-                await ref.read(callServiceProvider).start(
+                final service = ref.read(callServiceProvider);
+                await service.start(
                   peerId: peer.id,
                   peerName: peer.displayName,
                   chatId: chatId,
                 );
+
+                // Звонили из черновика — сервер завёл переписку, и
+                // открытой должна стать она. Иначе после разговора человек
+                // смотрит на пустой экран, хотя запись о звонке уже
+                // пришла.
+                final real = service.current?.chatId;
+                if (chatId == null && real != null && real.isNotEmpty) {
+                  ref.read(selectedChatProvider.notifier).state = real;
+                  ref.read(draftPeerProvider.notifier).state = null;
+                }
               } catch (_) {
                 if (context.mounted) {
                   showMessage(context, 'Нет доступа к микрофону');

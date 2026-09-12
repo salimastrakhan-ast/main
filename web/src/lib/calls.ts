@@ -128,6 +128,8 @@ export class CallSession {
       sdp: offer.sdp ?? "",
     });
     this.callId = String(reply.call_id ?? "");
+    // Чат мог быть заведён этим же звонком: до него переписки не было.
+    this.chatId = String(reply.chat_id ?? chatId);
 
     if (reply.status === "offline") {
       this.finish("offline");

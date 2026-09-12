@@ -42,11 +42,17 @@ const (
 	maxCandidateLen = 1 << 10
 )
 
-// callRecord — кто с кем говорит. Больше серверу знать не нужно.
+// callRecord — кто с кем говорит и с какого момента.
+//
+// Время ответа нужно ради одной строки в переписке: длительность считается
+// от снятия трубки, а не от нажатия «позвонить». Гудки разговором не были,
+// и записывать их в его длину нечестно.
 type callRecord struct {
-	Caller uuid.UUID `json:"caller"`
-	Callee uuid.UUID `json:"callee"`
-	ChatID uuid.UUID `json:"chat_id"`
+	Caller     uuid.UUID  `json:"caller"`
+	Callee     uuid.UUID  `json:"callee"`
+	ChatID     uuid.UUID  `json:"chat_id"`
+	StartedAt  time.Time  `json:"started_at"`
+	AnsweredAt *time.Time `json:"answered_at,omitempty"`
 }
 
 // peerOf возвращает второго участника звонка — того, кому пересылать.
@@ -192,7 +198,12 @@ func (c *Conn) handleCallStart(ctx context.Context, env ws.Envelope) {
 	me = media.ResolveUser(ctx, c.hub.media, me)
 
 	callID := uuid.New()
-	rec := callRecord{Caller: c.userID, Callee: callee, ChatID: chatID}
+	rec := callRecord{
+		Caller:    c.userID,
+		Callee:    callee,
+		ChatID:    chatID,
+		StartedAt: time.Now().UTC(),
+	}
 	if err := c.hub.saveCall(ctx, callID, rec); err != nil {
 		c.log.Error("не сохранён звонок", "err", err)
 		c.replyError(env.ID, ws.ErrCodeInternal, "Внутренняя ошибка")
@@ -206,7 +217,11 @@ func (c *Conn) handleCallStart(ctx context.Context, env ws.Envelope) {
 	if !c.hub.IsOnline(ctx, callee) {
 		status = "offline"
 	}
-	c.reply(env.ID, ws.TypeAck, ws.CallStartedData{CallID: callID, Status: status})
+	c.reply(env.ID, ws.TypeAck, ws.CallStartedData{
+		CallID: callID,
+		ChatID: chatID,
+		Status: status,
+	})
 	if status == "offline" {
 		return
 	}
@@ -243,6 +258,13 @@ func (c *Conn) handleCallAnswer(ctx context.Context, env ws.Envelope) {
 		return
 	}
 
+	// Отметка ответа: по ней считается длительность записи в переписке.
+	now := time.Now().UTC()
+	rec.AnsweredAt = &now
+	if err := c.hub.saveCall(ctx, payload.CallID, rec); err != nil {
+		c.log.Warn("не отмечен ответ на звонок", "err", err, "call", payload.CallID)
+	}
+
 	c.reply(env.ID, ws.TypeAck, struct{}{})
 	c.hub.Publish(ctx, []uuid.UUID{peer}, uuid.Nil, ws.EventCallAccepted,
 		ws.CallAcceptedData{CallID: payload.CallID, SDP: payload.SDP})
@@ -276,7 +298,7 @@ func (c *Conn) handleCallHangup(ctx context.Context, env ws.Envelope) {
 		c.replyError(env.ID, ws.ErrCodeBadRequest, err.Error())
 		return
 	}
-	_, peer, ok := c.callPeer(ctx, env.ID, payload.CallID)
+	rec, peer, ok := c.callPeer(ctx, env.ID, payload.CallID)
 	if !ok {
 		return
 	}
@@ -298,4 +320,42 @@ func (c *Conn) handleCallHangup(ctx context.Context, env ws.Envelope) {
 	// с телефона, а окно разговора открыто ещё и в браузере.
 	c.hub.Publish(ctx, []uuid.UUID{peer, c.userID}, c.id, ws.EventCallEnded,
 		ws.CallEndedData{CallID: payload.CallID, Reason: reason})
+
+	c.logCall(ctx, rec, reason)
+}
+
+// logCall оставляет след звонка в переписке.
+//
+// Без него остаётся вопрос «он мне звонил или нет?», на который в
+// мессенджере отвечать нечем. Запись видят оба: кто звонил — видно по
+// отправителю.
+//
+// Ошибки только в лог: звонок уже состоялся, и отказывать из-за
+// неудавшейся записи нечему.
+func (c *Conn) logCall(ctx context.Context, rec callRecord, reason string) {
+	seconds := 0
+	if rec.AnsweredAt != nil {
+		seconds = int(time.Since(*rec.AnsweredAt).Seconds())
+		if seconds < 0 {
+			seconds = 0
+		}
+	} else if reason == ws.CallEndHangup {
+		// Трубку положили, не дождавшись ответа. Для того, кому звонили,
+		// это пропущенный, а не «завершённый».
+		reason = ws.CallEndMissed
+	}
+
+	msg, err := c.hub.store.LogCall(ctx, rec.ChatID, rec.Caller, domain.CallPayload{
+		Reason:  reason,
+		Seconds: seconds,
+	})
+	if err != nil {
+		c.log.Warn("не записан звонок в переписку", "err", err, "chat", rec.ChatID)
+		return
+	}
+
+	// Событие рассылается как обычное сообщение: клиенты уже умеют класть
+	// его в ленту и двигать курсор синхронизации.
+	c.hub.Publish(ctx, []uuid.UUID{rec.Caller, rec.Callee}, uuid.Nil,
+		ws.EventMessageNew, ws.MessageEventData{Message: msg})
 }
