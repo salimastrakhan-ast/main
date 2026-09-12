@@ -21,6 +21,7 @@ import '../../ui/parts.dart';
 import '../../ui/state_view.dart';
 import '../../ui/theme.dart';
 import '../../ui/tokens.dart';
+import 'emoji_sheet.dart';
 import '../../ui/voice.dart';
 import '../chat_info/chat_info_screen.dart';
 
@@ -220,6 +221,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       unawaited(File(path).delete().catchError((_) => File(path)));
     }
     if (mounted) setState(() => _recordSeconds = null);
+  }
+
+  /// Вставляет эмодзи туда, где стоит курсор.
+  ///
+  /// Не в конец: дописать знак в середину набранного — обычное дело, и
+  /// выбрасывать его в хвост значит заставлять вырезать и переставлять.
+  void _insertEmoji(String emoji) {
+    final selection = _input.selection;
+    final text = _input.text;
+    final at = selection.isValid ? selection.start : text.length;
+    final to = selection.isValid ? selection.end : text.length;
+
+    _input.text = text.substring(0, at) + emoji + text.substring(to);
+    _input.selection = TextSelection.collapsed(offset: at + emoji.length);
+    setState(() {});
   }
 
   /// Берётся отвечать: над полем встаёт полоска с цитатой.
@@ -502,6 +518,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             bottom: 0,
             child: _Composer(
               focusNode: _inputFocus,
+              onEmoji: () => showEmojiSheet(context, _insertEmoji),
               replyingTo: _replyingTo,
               onCancelReply: _cancelReply,
               key: _composerKey,
@@ -1448,6 +1465,7 @@ class _Composer extends StatelessWidget {
   const _Composer({
     required this.controller,
     required this.focusNode,
+    required this.onEmoji,
     required this.onSend,
     required this.onChanged,
     required this.onAttach,
@@ -1464,6 +1482,7 @@ class _Composer extends StatelessWidget {
 
   final TextEditingController controller;
   final FocusNode focusNode;
+  final VoidCallback onEmoji;
   final VoidCallback onSend;
   final VoidCallback onChanged;
   final VoidCallback onAttach;
@@ -1587,7 +1606,16 @@ class _Composer extends StatelessWidget {
                         onSubmitted: (_) => onSend(),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: Icon(
+                        TitoIcons.emoji,
+                        size: 22,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      tooltip: 'Эмодзи',
+                      onPressed: onEmoji,
+                    ),
+                    const SizedBox(width: 4),
                     // Пустое поле — микрофон, набранный текст — отправка.
                     // Так устроено везде, и человек не ищет, куда делась
                     // кнопка.

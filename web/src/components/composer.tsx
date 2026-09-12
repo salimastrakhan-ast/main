@@ -6,12 +6,14 @@ import {
   Paperclip,
   Pencil,
   Send,
+  Smile,
   Sparkles,
   Trash2,
   WandSparkles,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { EmojiPicker } from "@/components/emoji-picker";
 import { VoiceRecorder } from "@/lib/recorder";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -45,6 +47,7 @@ function formatSeconds(total: number): string {
 const MAX_FILE = 50 * 1024 * 1024;
 
 export function Composer({ chatId }: Props) {
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const uiLang = useMessenger((s) => s.uiLang);
   const messages = useMessenger((s) => s.messages);
   const replyToId = useMessenger((s) => s.replyToId);
@@ -62,6 +65,24 @@ export function Composer({ chatId }: Props) {
 
   const [value, setValue] = useState("");
   const areaRef = useRef<HTMLTextAreaElement>(null);
+
+  /// Эмодзи вставляется туда, где стоит курсор, а не в конец: дописать знак
+  /// в середину набранного — обычное дело, и выбрасывать его в хвост значит
+  /// заставлять человека вырезать и переставлять.
+  function insertEmoji(emoji: string) {
+    const area = areaRef.current;
+    const at = area?.selectionStart ?? value.length;
+    const to = area?.selectionEnd ?? at;
+    setValue(value.slice(0, at) + emoji + value.slice(to));
+
+    // Курсор ставится после вставки, когда DOM уже обновился: раньше он
+    // окажется в старом тексте и прыгнет.
+    requestAnimationFrame(() => {
+      const next = at + emoji.length;
+      area?.focus();
+      area?.setSelectionRange(next, next);
+    });
+  }
   const fileRef = useRef<HTMLInputElement>(null);
   const recorder = useRef(new VoiceRecorder());
   const [recording, setRecording] = useState<number | null>(null);
@@ -270,7 +291,10 @@ export function Composer({ chatId }: Props) {
           <TooltipContent>{t(uiLang, "attach")}</TooltipContent>
         </Tooltip>
 
-        <div className="flex min-w-0 flex-1 items-end rounded-xl bg-elevated px-3 py-1 shadow-[var(--shadow-border)]">
+        <div className="relative flex min-w-0 flex-1 items-end rounded-xl bg-elevated px-3 py-1 shadow-[var(--shadow-border)]">
+          {emojiOpen ? (
+            <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />
+          ) : null}
           <textarea
             ref={areaRef}
             id="tito-composer"
@@ -286,6 +310,17 @@ export function Composer({ chatId }: Props) {
               }
             }}
           />
+          <Button
+            variant="icon"
+            size="iconSm"
+            type="button"
+            className="mb-0.5 shrink-0"
+            aria-label={t(uiLang, "emoji")}
+            onClick={() => setEmojiOpen((open) => !open)}
+          >
+            <Smile className="size-4" />
+          </Button>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
