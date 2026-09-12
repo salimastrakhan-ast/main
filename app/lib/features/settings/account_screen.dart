@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/mime.dart';
 import '../../core/providers.dart';
 import '../../ui/glass.dart';
 import '../../ui/icons.dart';
