@@ -6,7 +6,10 @@ export type ChatKind = "ai" | "dm" | "group" | "saved";
 
 export type FolderId = "all" | "personal" | "groups" | "ai";
 
-export type SidebarView = "chats" | "settings" | "new";
+/// Что показывает левая панель. Сведения о чате и поиск по переписке —
+/// тоже её состояния: класть их окном поверх ленты значило бы прятать то,
+/// ради чего туда зашли.
+export type SidebarView = "chats" | "settings" | "new" | "info" | "search";
 
 export type Gender = "f" | "m";
 

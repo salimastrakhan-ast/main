@@ -2,9 +2,11 @@ import {
   ArrowLeft,
   BellOff,
   Languages,
+  Info,
   MoreVertical,
   Phone,
   Pin,
+  Search,
   Volume2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -38,6 +40,7 @@ export function ChatPane() {
   const toggleTranslate = useMessenger((s) => s.toggleTranslate);
   const togglePin = useMessenger((s) => s.togglePin);
   const startCall = useMessenger((s) => s.startCall);
+  const setSidebarView = useMessenger((s) => s.setSidebarView);
   // Кнопка гаснет, пока идёт другой звонок: второй означал бы два открытых
   // микрофона и путаницу, кому какой ответ.
   const callBusy = useMessenger((s) => s.call !== null);
@@ -179,6 +182,19 @@ export function ChatPane() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {chat.id ? (
+              <>
+                <DropdownMenuItem onSelect={() => setSidebarView("info")}>
+                  <Info className="size-4" />
+                  {t(uiLang, "chatInfo")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setSidebarView("search")}>
+                  <Search className="size-4" />
+                  {t(uiLang, "searchInChat")}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            ) : null}
             <DropdownMenuItem onSelect={() => void toggleTranslate(chat.id)}>
               <Languages className="size-4" />
               {t(uiLang, "translateChat")}

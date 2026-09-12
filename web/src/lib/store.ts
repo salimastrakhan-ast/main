@@ -251,6 +251,7 @@ type Actions = {
   selectChat: (id: string | null) => void;
   startChatWith: (userId: string) => void;
   createGroup: (title: string, memberIds: string[]) => Promise<void>;
+  leaveChat: (chatId: string) => Promise<void>;
   findPeople: (query: string) => Promise<Contact[]>;
   startCall: (chatId: string) => Promise<void>;
   acceptCall: () => Promise<void>;
@@ -597,6 +598,16 @@ export const useMessenger = create<MessengerStore>()(
       /// Поиск человека, которого нет в книге контактов, — по номеру или
       /// имени. Книга заполняется тем, что синхронизировал телефон; в
       /// браузере её может не быть вовсе.
+      leaveChat: async (chatId) => {
+        await ws.call(Cmd.chatLeave, { chat_id: chatId });
+        // Событие chat.update с gone:true придёт следом и уберёт чат из
+        // списка. Выбор снимаем сразу: смотреть на переписку, из которой
+        // только что вышел, незачем.
+        set((s) => ({
+          selectedChatId: s.selectedChatId === chatId ? null : s.selectedChatId,
+        }));
+      },
+
       findPeople: async (query) => {
         const q = query.trim();
         if (q.length < 2) return [];

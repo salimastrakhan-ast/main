@@ -80,6 +80,16 @@ abstract final class TitoIcons {
   /// Добавить человека.
   static const addPerson = IconData(57762, fontFamily: 'Lucide');
 
+  /// Убрать человека из группы.
+  static const removePerson = IconData(57763, fontFamily: 'Lucide');
+
+  /// Ответить на сообщение.
+  static const reply = IconData(57898, fontFamily: 'Lucide');
+
+  /// Переслать сообщение. Не `forward`: та — стрелка «вглубь» в строках
+  /// списка, и путать их значит поставить в меню шеврон вместо стрелки.
+  static const forwardMessage = IconData(57897, fontFamily: 'Lucide');
+
   /// Избранное.
   static const star = IconData(57718, fontFamily: 'Lucide');
 
@@ -239,6 +249,9 @@ abstract final class TitoIcons {
     language,
     help,
     phone,
+    reply,
+    forwardMessage,
+    removePerson,
     callStart,
     callEnd,
     voiceOff,

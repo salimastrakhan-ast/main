@@ -100,6 +100,10 @@ class ChatScreen extends ConsumerStatefulWidget {
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _input = TextEditingController();
+
+  /// Фокус поля ввода: после «Ответить» клавиатура должна открыться сама —
+  /// отвечают текстом, и лишнее нажатие тут ни к чему.
+  final _inputFocus = FocusNode();
   final _scroll = ScrollController();
   final _composerKey = GlobalKey();
   Timer? _typingThrottle;
@@ -109,6 +113,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// не отправляет новое: перепутать эти два состояния — значит отправить
   /// исправленный текст второй строкой.
   Message? _editing;
+
+  /// Сообщение, на которое отвечаем. С правкой не совмещается: нельзя
+  /// одновременно исправлять своё и отвечать на чужое.
+  Message? _replyingTo;
 
   /// Запись голосового.
   final _recorder = AudioRecorder();
@@ -140,6 +148,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // включённым, а система показывает это человеку значком в шторке.
     unawaited(_recorder.dispose());
     _input.dispose();
+    _inputFocus.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -213,9 +222,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (mounted) setState(() => _recordSeconds = null);
   }
 
+  /// Берётся отвечать: над полем встаёт полоска с цитатой.
+  void _startReply(Message message) {
+    setState(() {
+      _replyingTo = message;
+      _editing = null;
+    });
+    _inputFocus.requestFocus();
+  }
+
+  void _cancelReply() => setState(() => _replyingTo = null);
+
   /// Берётся править: прежний текст встаёт в поле.
   void _startEditing(Message message) {
-    setState(() => _editing = message);
+    setState(() {
+      _editing = message;
+      _replyingTo = null;
+    });
     _input.text = message.body;
     _input.selection = TextSelection.collapsed(offset: message.body.length);
   }
@@ -242,13 +265,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       return;
     }
 
+    final replyTo = _replyingTo;
     _input.clear();
+    if (replyTo != null) setState(() => _replyingTo = null);
     await ref
         .read(repositoryProvider)
         ?.send(
           chatId: _chatId,
           peerId: _chatId == null ? widget.peerId : null,
           text: text,
+          replyToId: replyTo?.id,
         );
     // Скроллим после того, как база разбудит подписчиков и лента вырастет.
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
@@ -467,6 +493,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       _measureComposer();
                     },
                     onEdit: _startEditing,
+                    onReply: _startReply,
                   ),
           ),
           Positioned(
@@ -474,6 +501,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             right: 0,
             bottom: 0,
             child: _Composer(
+              focusNode: _inputFocus,
+              replyingTo: _replyingTo,
+              onCancelReply: _cancelReply,
               key: _composerKey,
               controller: _input,
               onSend: _send,
@@ -768,6 +798,20 @@ class _CanvasPainter extends CustomPainter {
       old.accent != accent || old.dot != dot;
 }
 
+/// Чьё сообщение цитируется. В личной переписке имя собеседника в шапке, и
+/// в цитате важно лишь «вы или он»; в группе — имя.
+String _quotedAuthor(
+  Message reply,
+  List<Message> all,
+  Map<String, User> users,
+  String myUserId,
+) {
+  final source = all.where((m) => m.id == reply.replyToId).firstOrNull;
+  if (source == null) return '';
+  if (source.senderId == myUserId) return 'Вы';
+  return users[source.senderId]?.displayName ?? 'Собеседник';
+}
+
 class _Feed extends ConsumerWidget {
   const _Feed({
     required this.chatId,
@@ -779,6 +823,7 @@ class _Feed extends ConsumerWidget {
     required this.bottomPadding,
     required this.onRendered,
     required this.onEdit,
+    required this.onReply,
   });
 
   final String chatId;
@@ -790,6 +835,7 @@ class _Feed extends ConsumerWidget {
   final double bottomPadding;
   final ValueChanged<List<Message>> onRendered;
   final ValueChanged<Message> onEdit;
+  final ValueChanged<Message> onReply;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -835,6 +881,13 @@ class _Feed extends ConsumerWidget {
                   : '',
               showSender: row.startsBlock,
               onEdit: onEdit,
+              onReply: onReply,
+              quoted: message.replyToId == null
+                  ? null
+                  : list.where((m) => m.id == message.replyToId).firstOrNull,
+              quotedAuthor: message.replyToId == null
+                  ? ''
+                  : _quotedAuthor(message, list, users, myUserId),
             );
           },
         );
@@ -1049,6 +1102,9 @@ class _Bubble extends ConsumerWidget {
     required this.senderName,
     required this.showSender,
     this.onEdit,
+    this.onReply,
+    this.quoted,
+    this.quotedAuthor = '',
     super.key,
   });
 
@@ -1059,6 +1115,15 @@ class _Bubble extends ConsumerWidget {
 
   /// Взяться править: экран подставит текст в поле ввода.
   final ValueChanged<Message>? onEdit;
+
+  /// Взяться отвечать: над полем встанет цитата.
+  final ValueChanged<Message>? onReply;
+
+  /// Сообщение, на которое отвечали, и его автор. null — ответа не было.
+  /// Может быть null и при заполненном replyToId: цитируемое могло не
+  /// доехать при листании назад, и тогда цитата просто не рисуется.
+  final Message? quoted;
+  final String quotedAuthor;
 
   /// Меню сообщения по долгому нажатию.
   ///
@@ -1074,6 +1139,11 @@ class _Bubble extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ListTile(
+              leading: const Icon(TitoIcons.reply),
+              title: const Text('Ответить'),
+              onTap: () => Navigator.pop(context, 'reply'),
+            ),
             ListTile(
               leading: const Icon(TitoIcons.copy),
               title: const Text('Копировать'),
@@ -1104,6 +1174,8 @@ class _Bubble extends ConsumerWidget {
     if (choice == null || !context.mounted) return;
 
     switch (choice) {
+      case 'reply':
+        onReply?.call(message);
       case 'copy':
         await Clipboard.setData(ClipboardData(text: message.body));
         if (context.mounted) showMessage(context, 'Скопировано');
@@ -1183,6 +1255,42 @@ class _Bubble extends ConsumerWidget {
                         // В образце имя отправителя — акцент, один на всех.
                         color: theme.colorScheme.primary,
                       ),
+                    ),
+                  ),
+                // Цитата: на что отвечали. Без неё ответ в живой переписке
+                // теряется — через десяток сообщений непонятно, к чему он.
+                if (quoted != null)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.only(left: Tokens.space2),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        left: BorderSide(
+                          color: theme.colorScheme.primary,
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          quotedAuthor,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          quoted!.body.isEmpty ? 'Вложение' : quoted!.body,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: subdued,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 for (final attachment in attachments)
@@ -1339,6 +1447,7 @@ class _AttachmentStub extends StatelessWidget {
 class _Composer extends StatelessWidget {
   const _Composer({
     required this.controller,
+    required this.focusNode,
     required this.onSend,
     required this.onChanged,
     required this.onAttach,
@@ -1348,10 +1457,13 @@ class _Composer extends StatelessWidget {
     required this.onCancelRecording,
     this.editing,
     this.onCancelEdit,
+    this.replyingTo,
+    this.onCancelReply,
     super.key,
   });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final VoidCallback onSend;
   final VoidCallback onChanged;
   final VoidCallback onAttach;
@@ -1359,6 +1471,10 @@ class _Composer extends StatelessWidget {
   /// Правящееся сообщение — над полем показывается полоска с его текстом.
   final Message? editing;
   final VoidCallback? onCancelEdit;
+
+  /// Сообщение, на которое отвечаем: та же полоска, но с цитатой.
+  final Message? replyingTo;
+  final VoidCallback? onCancelReply;
 
   /// Сколько секунд идёт запись. null — записи нет.
   final int? recordSeconds;
@@ -1380,40 +1496,22 @@ class _Composer extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (message != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
-                child: Row(
-                  children: [
-                    Icon(TitoIcons.edit, size: 16, color: scheme.primary),
-                    const SizedBox(width: Tokens.space2),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Правка сообщения',
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              color: scheme.primary,
-                            ),
-                          ),
-                          Text(
-                            message.body,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(TitoIcons.close, size: 18),
-                      tooltip: 'Отменить правку',
-                      onPressed: onCancelEdit,
-                    ),
-                  ],
-                ),
+              _ComposerStrip(
+                icon: TitoIcons.edit,
+                title: 'Правка сообщения',
+                body: message.body,
+                tooltip: 'Отменить правку',
+                onCancel: onCancelEdit,
+              ),
+            if (replyingTo != null)
+              _ComposerStrip(
+                icon: TitoIcons.reply,
+                title: 'Ответ на сообщение',
+                body: replyingTo!.body.isEmpty
+                    ? 'Вложение'
+                    : replyingTo!.body,
+                tooltip: 'Отменить ответ',
+                onCancel: onCancelReply,
               ),
             if (recordSeconds != null)
               // Во время записи поле ввода уступает место счётчику: писать
@@ -1478,6 +1576,7 @@ class _Composer extends StatelessWidget {
                     Expanded(
                       child: TextField(
                         controller: controller,
+                        focusNode: focusNode,
                         minLines: 1,
                         maxLines: 5,
                         textCapitalization: TextCapitalization.sentences,
@@ -1638,6 +1737,69 @@ class _CallButton extends ConsumerWidget {
                 }
               }
             },
+    );
+  }
+}
+
+
+/// Полоска над полем ввода: что сейчас делаем с сообщением.
+///
+/// Одна на правку и на ответ — у них одинаковая роль и одинаковый вид, а
+/// две копии тридцати строк разметки разошлись бы при первой же правке.
+class _ComposerStrip extends StatelessWidget {
+  const _ComposerStrip({
+    required this.icon,
+    required this.title,
+    required this.body,
+    required this.tooltip,
+    required this.onCancel,
+  });
+
+  final IconData icon;
+  final String title;
+  final String body;
+  final String tooltip;
+  final VoidCallback? onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: scheme.primary),
+          const SizedBox(width: Tokens.space2),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: scheme.primary,
+                  ),
+                ),
+                Text(
+                  body,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(TitoIcons.close, size: 18),
+            tooltip: tooltip,
+            onPressed: onCancel,
+          ),
+        ],
+      ),
     );
   }
 }

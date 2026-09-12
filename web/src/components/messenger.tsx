@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Toaster } from "sonner";
 import { CallOverlay } from "@/components/call-overlay";
+import { ChatInfoView } from "@/components/chat-info-view";
+import { ChatSearchView } from "@/components/chat-search-view";
 import { ChatPane } from "@/components/chat-pane";
 import { NewChatView } from "@/components/new-chat-view";
 import { SettingsView } from "@/components/settings-view";
@@ -15,6 +17,11 @@ export function Messenger() {
   const selectedChatId = useMessenger((s) => s.selectedChatId);
   const draftPeerId = useMessenger((s) => s.draftPeerId);
   const sidebarView = useMessenger((s) => s.sidebarView);
+  // Сведения и поиск показываются по открытому чату: без него их нечем
+  // наполнить, и панель падает обратно к настройкам.
+  const openChat = useMessenger((s) =>
+    s.chats.find((c) => c.id === s.selectedChatId),
+  );
   const uiLang = useMessenger((s) => s.uiLang);
 
   useEffect(() => {
@@ -62,6 +69,10 @@ export function Messenger() {
             <Sidebar />
           ) : sidebarView === "new" ? (
             <NewChatView />
+          ) : sidebarView === "info" && openChat ? (
+            <ChatInfoView chat={openChat} />
+          ) : sidebarView === "search" && openChat ? (
+            <ChatSearchView chat={openChat} />
           ) : (
             <SettingsView />
           )}
