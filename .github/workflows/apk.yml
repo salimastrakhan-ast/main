@@ -29,6 +29,24 @@ jobs:
           channel: stable
           cache: true
 
+      # Ключ подписи стенда. Без него APK подписывается отладочным ключом
+      # раннера, который на каждом прогоне свой, и обновление не встаёт поверх
+      # прошлой установки.
+      - name: Ключ подписи
+        if: env.KEYSTORE != ''
+        working-directory: app/android
+        env:
+          KEYSTORE: ${{ secrets.TITO_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.TITO_KEYSTORE_PASSWORD }}
+        run: |
+          echo "$KEYSTORE" | base64 -d > tito-stand.jks
+          cat > key.properties <<PROPS
+          storeFile=tito-stand.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=tito
+          keyPassword=$KEYSTORE_PASSWORD
+          PROPS
+
       - name: Зависимости
         working-directory: app
         run: flutter pub get
@@ -36,6 +54,12 @@ jobs:
       - name: Кодогенерация
         working-directory: app
         run: dart run build_runner build --delete-conflicting-outputs
+
+      # Flutter установлен здесь и больше нигде: на машине, с которой идёт
+      # выкладка, его нет, поэтому тесты клиента гоняются в этой же сборке.
+      - name: Тесты
+        working-directory: app
+        run: flutter test
 
       # Один APK на все архитектуры: ссылку можно дать любому, не выясняя,
       # какой у него телефон.

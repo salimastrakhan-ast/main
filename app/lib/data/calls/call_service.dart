@@ -117,9 +117,18 @@ class CallService {
   final _early = <RTCIceCandidate>[];
   String _pendingOffer = '';
   Timer? _ringTimer;
+  Timer? _dismissTimer;
+
+  /// Сколько экран с исходом висит перед тем, как уйти сам.
+  ///
+  /// Столько же держится окно в вебе: «занято» и «не отвечает» человек должен
+  /// успеть прочитать. Без этого экран разговора остаётся на месте навсегда —
+  /// кнопок на нём в этом состоянии нет, и выйти из приложения некуда.
+  static const endedLinger = Duration(milliseconds: 2500);
 
   void dispose() {
     unawaited(_events.cancel());
+    _clearDismiss();
     _release();
     unawaited(_state.close());
   }
@@ -224,6 +233,7 @@ class CallService {
   /// Убирает окно разговора после того, как человек увидел исход.
   void dismiss() {
     _clearRingTimeout();
+    _clearDismiss();
     _release();
     _emit(null);
   }
@@ -397,6 +407,20 @@ class CallService {
   void _finish(CallEndReason reason) {
     _release();
     _emit(_current?.copyWith(state: CallState.ended, reason: reason));
+    _armDismiss();
+  }
+
+  void _armDismiss() {
+    _clearDismiss();
+    _dismissTimer = Timer(endedLinger, () {
+      // Мог начаться новый звонок: тогда убирать нечего.
+      if (_current?.state == CallState.ended) dismiss();
+    });
+  }
+
+  void _clearDismiss() {
+    _dismissTimer?.cancel();
+    _dismissTimer = null;
   }
 
   /// Отпускает микрофон.
