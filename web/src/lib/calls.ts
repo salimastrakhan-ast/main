@@ -127,7 +127,22 @@ export class CallSession {
       ...(chatId ? { chat_id: chatId } : { peer_id: peerId }),
       sdp: offer.sdp ?? "",
     });
-    this.callId = String(reply.call_id ?? "");
+    const startedId = String(reply.call_id ?? "");
+
+    // Пока сервер отвечал, человек мог нажать «Завершить»: разрешение на
+    // микрофон и ответ сервера занимают секунды. Тогда звонок уже завершён
+    // здесь, а у собеседника телефон только зазвонил — его надо отбить,
+    // иначе он звонит все 45 секунд в пустоту.
+    if (this.state === "ended" || this.state === "idle") {
+      if (startedId) {
+        void this.ws
+          .call(Cmd.callHangup, { call_id: startedId, reason: "hangup" })
+          .catch(() => {});
+      }
+      return;
+    }
+
+    this.callId = startedId;
     // Чат мог быть заведён этим же звонком: до него переписки не было.
     this.chatId = String(reply.chat_id ?? chatId);
 

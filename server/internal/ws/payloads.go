@@ -183,7 +183,6 @@ type CallStartData struct {
 	ChatID uuid.UUID `json:"chat_id,omitempty"`
 	PeerID uuid.UUID `json:"peer_id,omitempty"`
 	SDP    string    `json:"sdp"`
-	Video  bool      `json:"video,omitempty"`
 }
 
 type CallAnswerData struct {
@@ -226,7 +225,6 @@ type CallIncomingData struct {
 	ChatID uuid.UUID   `json:"chat_id"`
 	From   domain.User `json:"from"`
 	SDP    string      `json:"sdp"`
-	Video  bool        `json:"video,omitempty"`
 }
 
 type CallAcceptedData struct {

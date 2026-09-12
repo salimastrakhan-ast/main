@@ -42,7 +42,7 @@ export function AttachmentView({
 
   // Звук — не строка со скрепкой: его слушают, не скачивают.
   if (attachment.kind === "audio" && attachment.url) {
-    return <VoiceMessage attachment={attachment} mine={mine} />;
+    return <VoiceMessage attachment={attachment} mine={mine} uiLang={uiLang} />;
   }
 
   if (attachment.kind === "image" && attachment.url && !broken) {

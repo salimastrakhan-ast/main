@@ -101,9 +101,6 @@ const (
 type CallPayload struct {
 	Reason  string `json:"reason"`
 	Seconds int    `json:"seconds"`
-	// Video оставлено на будущее: сигналинг его уже переносит, клиенты
-	// пока передают только звук.
-	Video bool `json:"video,omitempty"`
 }
 
 type Message struct {

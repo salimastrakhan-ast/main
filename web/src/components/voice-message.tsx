@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Pause, Play } from "lucide-react";
-import type { Attachment } from "@/lib/types";
+import { t } from "@/lib/i18n";
+import type { Attachment, UiLang } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /// Секунды в «м:сс».
@@ -18,9 +19,11 @@ function formatSeconds(total: number): string {
 export function VoiceMessage({
   attachment,
   mine,
+  uiLang,
 }: {
   attachment: Attachment;
   mine: boolean;
+  uiLang: UiLang;
 }) {
   const audio = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -71,7 +74,7 @@ export function VoiceMessage({
       <button
         type="button"
         onClick={toggle}
-        aria-label={playing ? "Пауза" : "Слушать"}
+        aria-label={t(uiLang, playing ? "voicePause" : "voicePlay")}
         className={cn(
           "flex size-9 shrink-0 items-center justify-center rounded-full transition-colors duration-150",
           mine ? "bg-accent text-accent-fg" : "bg-elevated text-fg",

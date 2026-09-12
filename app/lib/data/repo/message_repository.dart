@@ -156,7 +156,7 @@ class MessageRepository {
         await (db.delete(
           db.messages,
         )..where((t) => t.id.equals(item.clientMsgId))).go();
-        await _upsertMessage(message, state: SendState.sent);
+        await _onLiveMessage(message, state: SendState.sent);
         await (db.delete(
           db.outbox,
         )..where((t) => t.clientMsgId.equals(item.clientMsgId))).go();
@@ -192,7 +192,7 @@ class MessageRepository {
       'message_id': messageId,
       'text': text,
     });
-    await _upsertMessage(result['message'] as Map<String, dynamic>);
+    await _onLiveMessage(result['message'] as Map<String, dynamic>);
   }
 
   Future<void> delete(String chatId, String messageId) async {
@@ -200,7 +200,7 @@ class MessageRepository {
       'chat_id': chatId,
       'message_id': messageId,
     });
-    await _upsertMessage(result['message'] as Map<String, dynamic>);
+    await _onLiveMessage(result['message'] as Map<String, dynamic>);
   }
 
   Future<void> markRead(String chatId, int upToSeq) async {
@@ -285,7 +285,7 @@ class MessageRepository {
       'client_msg_id': _uuid.v4(),
     });
     final message = result['message'] as Map<String, dynamic>?;
-    if (message != null) await _upsertMessage(message);
+    if (message != null) await _onLiveMessage(message);
   }
 
   /// Удаляет чат: у себя или, если это своя группа, у всех.
@@ -330,10 +330,27 @@ class MessageRepository {
     await drainOutbox();
   }
 
+  /// Сколько раз подряд готовы спросить дельту.
+  ///
+  /// Сервер отдаёт не больше двухсот сообщений на чат за раз. После долгого
+  /// перерыва их больше, и за один заход пропущенное не вычитать: каждый
+  /// следующий заход продолжает с того места, где кончился предыдущий.
+  /// Предел нужен, чтобы не крутиться вечно, если сервер по какой-то причине
+  /// перестал двигаться вперёд.
+  static const _syncRounds = 20;
+
   /// Спрашивает у сервера всё, что пропустили, начиная с локальных курсоров.
   Future<void> _sync() async {
+    for (var round = 0; round < _syncRounds; round++) {
+      if (!await _syncOnce()) return;
+    }
+  }
+
+  /// Один заход. Возвращает true, если остался хвост и надо спросить ещё.
+  Future<bool> _syncOnce() async {
     final cursors = await db.syncCursors();
     final result = await ws.call(Cmd.sync, {'cursors': cursors});
+    var more = false;
 
     await db.transaction(() async {
       for (final raw in (result['chats'] as List<dynamic>? ?? const [])) {
@@ -343,20 +360,35 @@ class MessageRepository {
         final delta = raw as Map<String, dynamic>;
         final chatId = delta['chat_id'] as String;
 
+        var received = 0;
         for (final m in (delta['messages'] as List<dynamic>? ?? const [])) {
-          await _upsertMessage(m as Map<String, dynamic>);
+          final message = m as Map<String, dynamic>;
+          await _upsertMessage(message);
+          // Сервер отдаёт дельту по возрастанию updated_seq, поэтому
+          // наибольший — у последнего пришедшего.
+          final updatedSeq =
+              message['updated_seq'] as int? ?? message['seq'] as int? ?? 0;
+          if (updatedSeq > received) received = updatedSeq;
         }
 
-        // Курсор двигаем только если чат приехал целиком. При truncated
-        // остаток надо дочитать через историю, и до тех пор в ленте дыра.
+        // Чат приехал целиком — курсор в конец. Обрезан — ровно на то, что
+        // получили: следующий _sync продолжит с этого места и дочитает
+        // остаток. Оставить курсор на месте значило бы просить тот же кусок
+        // вечно, а прыгнуть в конец — потерять пропущенное навсегда.
         final truncated = delta['truncated'] as bool? ?? false;
-        if (!truncated) {
+        final upTo = truncated ? received : (delta['last_seq'] as int? ?? 0);
+        if (upTo > 0) {
           await (db.update(db.chats)..where((t) => t.id.equals(chatId))).write(
-            ChatsCompanion(syncedSeq: Value(delta['last_seq'] as int? ?? 0)),
+            ChatsCompanion(syncedSeq: Value(upTo)),
           );
         }
+        // Курсор сдвинулся — значит следующий заход принесёт новое. Если он
+        // не сдвинулся, повторять бессмысленно: заход вернёт то же самое.
+        if (truncated && received > 0) more = true;
       }
     });
+
+    return more;
   }
 
   void _onEvent(Envelope envelope) {
@@ -365,7 +397,7 @@ class MessageRepository {
       case Ev.messageEdited:
       case Ev.messageDeleted:
         final message = envelope.data?['message'] as Map<String, dynamic>?;
-        if (message != null) unawaited(_upsertMessage(message));
+        if (message != null) unawaited(_onLiveMessage(message));
       case Ev.chatUpdate:
         unawaited(_onChatUpdate(envelope.data));
       case Ev.readUpdate:
@@ -462,14 +494,49 @@ class MessageRepository {
           ),
         );
 
-    // Событие о новом сообщении двигает и курсор чата: иначе после
-    // перезапуска клиент запросил бы то, что уже показывает. Заодно время
-    // последней активности: по нему список и упорядочен.
+    // Номер последнего сообщения и время последней активности: по нему
+    // упорядочен список чатов.
+    //
+    // Курсор синхронизации здесь НЕ двигаем. Он означает «всё до этого
+    // номера у нас есть», а одно записанное сообщение такого не доказывает:
+    // сводка чата приносит последнее сообщение, и от этого курсор
+    // перепрыгивал в конец, оставляя дыру, которую больше никто не дочитает.
+    // Двигают курсор только _sync и живое событие — там видно, есть ли
+    // пропуск.
     final createdAt = DateTime.parse(raw['created_at'] as String);
     await db.customStatement(
-      'UPDATE chats SET last_seq = MAX(last_seq, ?), synced_seq = MAX(synced_seq, ?), '
+      'UPDATE chats SET last_seq = MAX(last_seq, ?), '
       'updated_at = MAX(updated_at, ?) WHERE id = ?',
-      [seq, seq, createdAt.millisecondsSinceEpoch ~/ 1000, chatId],
+      [seq, createdAt.millisecondsSinceEpoch ~/ 1000, chatId],
+    );
+  }
+
+  /// Живое сообщение: записать и подвинуть курсор, если пропуска нет.
+  ///
+  /// Так же приходит ответ сервера на нашу же отправку, правку, удаление и
+  /// пересылку: это тоже свежий номер, и после него в чате ничего не
+  /// пропущено.
+  Future<void> _onLiveMessage(
+    Map<String, dynamic> raw, {
+    SendState state = SendState.sent,
+  }) async {
+    await _upsertMessage(raw, state: state);
+    final updatedSeq = raw['updated_seq'] as int? ?? raw['seq'] as int? ?? 0;
+    if (updatedSeq > 0) {
+      await _advanceCursor(raw['chat_id'] as String, updatedSeq);
+    }
+  }
+
+  /// Двигает курсор синхронизации, если за ним не осталось пропуска.
+  ///
+  /// Живое событие приходит по одному и по порядку, поэтому курсор можно
+  /// подвинуть ровно на следующий номер. Если пришедшее сообщение дальше —
+  /// значит что-то потеряно по дороге, и курсор остаётся на месте: дыру
+  /// закроет ближайший _sync.
+  Future<void> _advanceCursor(String chatId, int updatedSeq) async {
+    await db.customStatement(
+      'UPDATE chats SET synced_seq = ? WHERE id = ? AND synced_seq = ?',
+      [updatedSeq, chatId, updatedSeq - 1],
     );
   }
 

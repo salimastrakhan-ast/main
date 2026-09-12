@@ -9,16 +9,17 @@ on:
   workflow_dispatch:
     inputs:
       api:
-        description: Адрес сервера (TITO_API)
-        required: true
-        default: https://tito.5-39-250-63.sslip.io:8448
+        description: Адрес сервера (TITO_API); пусто — адрес стенда
+        required: false
+        default: ""
 
 jobs:
   apk:
     name: APK
     runs-on: ubuntu-latest
     env:
-      # Через env, а не подстановкой в run: ввод из формы не попадёт в скрипт.
+      # Адрес стенда записан один раз здесь. Через env, а не подстановкой в
+      # run: ввод из формы не попадёт в скрипт.
       TITO_API: ${{ inputs.api || 'https://tito.5-39-250-63.sslip.io:8448' }}
     steps:
       - uses: actions/checkout@v4

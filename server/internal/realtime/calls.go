@@ -232,7 +232,6 @@ func (c *Conn) handleCallStart(ctx context.Context, env ws.Envelope) {
 			ChatID: chatID,
 			From:   me.Public(),
 			SDP:    payload.SDP,
-			Video:  payload.Video,
 		})
 }
 
@@ -311,10 +310,18 @@ func (c *Conn) handleCallHangup(ctx context.Context, env ws.Envelope) {
 		reason = ws.CallEndHangup
 	}
 
-	if err := c.hub.rdb.Del(ctx, callKey(payload.CallID)).Err(); err != nil {
+	// Del возвращает, сколько ключей он на самом деле удалил. Ноль означает,
+	// что звонок уже закрыла другая сторона: трубки часто кладут
+	// одновременно. Тогда событие и запись в переписке — её забота, иначе в
+	// ленте появятся две записи об одном разговоре.
+	removed, err := c.hub.rdb.Del(ctx, callKey(payload.CallID)).Result()
+	if err != nil {
 		c.log.Warn("не удалён звонок", "err", err, "call", payload.CallID)
 	}
 	c.reply(env.ID, ws.TypeAck, struct{}{})
+	if err == nil && removed == 0 {
+		return
+	}
 
 	// Событие уходит обоим, а не только собеседнику: трубку могли положить
 	// с телефона, а окно разговора открыто ещё и в браузере.

@@ -87,7 +87,10 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
   void _searchOnServer(String query) {
     _searchDebounce?.cancel();
     final needle = query.trim();
-    if (needle.length < 3) {
+    // Два знака, как в вебе и как у сервера (auth_handlers.go: «не короче
+    // двух»). С тремя знаками поиск по последним цифрам номера в приложении
+    // молчал, а в браузере находил.
+    if (needle.length < 2) {
       setState(() {
         _found = const [];
         _searching = false;
@@ -96,7 +99,7 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
     }
 
     setState(() => _searching = true);
-    _searchDebounce = Timer(const Duration(milliseconds: 400), () async {
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () async {
       final people =
           await ref.read(repositoryProvider)?.searchPeople(needle) ?? const [];
       if (!mounted) return;

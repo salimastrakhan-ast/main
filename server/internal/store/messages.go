@@ -264,7 +264,20 @@ func (s *Store) DeleteMessage(ctx context.Context, chatID, messageID, actorID uu
 		if errors.Is(err, ErrNotFound) {
 			return ErrForbidden
 		}
-		return err
+		if err != nil {
+			return err
+		}
+
+		// Вложения удаляются вместе с текстом. Иначе «удалил» означало бы
+		// только «убрал подпись»: сервер продолжал бы отдавать фотографию
+		// или голосовое каждому, кто синхронизируется, да ещё со свежей
+		// подписанной ссылкой.
+		if _, err := tx.Exec(ctx,
+			`DELETE FROM attachments WHERE message_id = $1`, messageID); err != nil {
+			return fmt.Errorf("удаление вложений: %w", err)
+		}
+		msg.Attachments = nil
+		return nil
 	})
 	if err != nil {
 		return domain.Message{}, err

@@ -1337,7 +1337,10 @@ function handleEvent(envelope: Envelope) {
       if (raw.chat_id === state.selectedChatId) {
         markRead(raw.chat_id);
         void state.ensureLiveTranslation(raw.chat_id);
-      } else if (raw.sender_id !== state.me?.id) {
+        // Счётчик растёт только на новом сообщении. Правка и удаление
+        // приходят тем же кадром, и на них счётчик уезжал вверх — вплоть
+        // до того, что удаление собеседником прибавляло непрочитанное.
+      } else if (envelope.t === Ev.messageNew && raw.sender_id !== state.me?.id) {
         set((s) => ({
           chats: s.chats.map((c) =>
             c.id === raw.chat_id ? { ...c, unread: c.unread + 1 } : c,
@@ -1452,13 +1455,19 @@ function handleEvent(envelope: Envelope) {
       return;
     }
 
+    // Событие может относиться к чужому звонку: сервер шлёт их на все
+    // соединения пользователя, а вкладок и устройств бывает несколько.
+    // Без сверки отбой звонка в соседней вкладке кладёт живой разговор
+    // здесь — в приложении сверка есть с самого начала.
     case Ev.callAccepted: {
+      if (String(data.call_id ?? "") !== session().callId) return;
       clearRingTimeout();
       void session().accepted(String(data.sdp ?? ""));
       return;
     }
 
     case Ev.callIce: {
+      if (String(data.call_id ?? "") !== session().callId) return;
       void session().addCandidate({
         candidate: String(data.candidate ?? ""),
         sdpMid: (data.sdp_mid as string) || null,
@@ -1468,6 +1477,7 @@ function handleEvent(envelope: Envelope) {
     }
 
     case Ev.callEnded: {
+      if (String(data.call_id ?? "") !== session().callId) return;
       const reason = (data.reason as CallEndReason) ?? "hangup";
       session().finish(reason);
       return;

@@ -167,7 +167,25 @@ class CallService {
         if (chatId != null && chatId.isNotEmpty) 'chat_id': chatId else 'peer_id': peerId,
         'sdp': offer.sdp ?? '',
       });
-      _callId = reply['call_id'] as String?;
+      final startedId = reply['call_id'] as String?;
+
+      // Пока сервер отвечал, человек мог нажать «Завершить»: разрешение на
+      // микрофон и ответ сервера занимают секунды. Тогда звонок уже
+      // завершён локально, а у собеседника телефон только зазвонил — его
+      // надо отбить, иначе он звонит все 45 секунд в пустоту.
+      if (_current == null || _current!.state == CallState.ended) {
+        if (startedId != null) {
+          unawaited(
+            ws.call(Cmd.callHangup, {
+              'call_id': startedId,
+              'reason': _reasonTo(CallEndReason.hangup),
+            }).catchError((_) => <String, dynamic>{}),
+          );
+        }
+        return;
+      }
+
+      _callId = startedId;
       // Чат мог быть заведён этим же звонком: до него переписки не было.
       final realChat = reply['chat_id'] as String?;
       if (realChat != null && realChat.isNotEmpty) {
@@ -264,8 +282,15 @@ class CallService {
     // Разговорный динамик, а не громкая связь. WebRTC на Android включает
     // громкую сам, и разговор начинался на всю комнату, хотя кнопка на
     // экране показывала обратное. Громкую человек включает сам.
+    //
+    // В браузере выводом распоряжается сам браузер, и метода там нет —
+    // поэтому отказ здесь не должен ронять звонок.
     for (final track in _local!.getAudioTracks()) {
-      track.enableSpeakerphone(false);
+      try {
+        track.enableSpeakerphone(false);
+      } catch (_) {
+        // Вывод останется тем, что выбрала система.
+      }
     }
 
     final servers = await _iceServers();

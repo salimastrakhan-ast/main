@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -147,15 +148,24 @@ func (s *Store) TouchUser(ctx context.Context, id uuid.UUID) error {
 //
 // Номер приходит как угодно: +7 900…, 8 900…, с пробелами и скобками.
 // Сравнивать надо с тем, что лежит в базе, а там он в виде одних цифр.
+// escapeLike обезвреживает подстановочные знаки в том, что ввёл человек.
+//
+// Без этого запрос из двух знаков `%%` или `__` подходит под любое имя, и
+// поиск людей превращается в выгрузку списка пользователей по частям.
+func escapeLike(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return r.Replace(s)
+}
+
 func (s *Store) SearchUsers(ctx context.Context, query string, phone string, limit int) ([]domain.User, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT `+userColumns+`
 		FROM users
-		WHERE username ILIKE $1
-		   OR display_name ILIKE $1
+		WHERE username ILIKE $1 ESCAPE '\'
+		   OR display_name ILIKE $1 ESCAPE '\'
 		   OR ($3 <> '' AND phone = $3)
 		ORDER BY display_name
-		LIMIT $2`, "%"+query+"%", limit, phone)
+		LIMIT $2`, "%"+escapeLike(query)+"%", limit, phone)
 	if err != nil {
 		return nil, fmt.Errorf("поиск пользователей: %w", err)
 	}
