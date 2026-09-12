@@ -26,6 +26,7 @@ export const Cmd = {
   messageSend: "message.send",
   messageEdit: "message.edit",
   messageDelete: "message.delete",
+  messageForward: "message.forward",
   read: "read",
   typing: "typing",
   chatCreate: "chat.create",

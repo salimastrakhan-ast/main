@@ -93,6 +93,10 @@ e2e-call-app:
 e2e-groups:
 	cd e2e && npm install --silent && xvfb-run -a node groups.mjs
 
+# Пересылка: чужой текст в другой переписке, подписанный первым автором.
+e2e-forward:
+	cd e2e && npm install --silent && xvfb-run -a node forward.mjs
+
 # Все экраны обоих клиентов одной картинкой. Нужны поднятые сервер,
 # веб-клиент на 4173 и сборка Flutter web на 8090 — см. e2e/README.md.
 #

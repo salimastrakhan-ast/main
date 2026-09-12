@@ -82,6 +82,8 @@ type ServerMessage = {
   attachments?: ServerAttachment[];
   kind?: "text" | "call";
   payload?: { reason: string; seconds: number };
+  forwarded_from?: string;
+  forwarded_name?: string;
 };
 
 function toAttachment(raw: ServerAttachment): Attachment {
@@ -146,6 +148,8 @@ function toMessage(raw: ServerMessage): Message {
     seq: raw.seq,
     clientMsgId: raw.client_msg_id,
     deleted: Boolean(raw.deleted_at),
+    forwardedFrom: raw.forwarded_from,
+    forwardedName: raw.forwarded_name,
     call:
       raw.kind === "call" && raw.payload
         ? {
@@ -280,6 +284,7 @@ type Actions = {
     text: string,
   ) => Promise<void>;
   deleteMessage: (chatId: string, messageId: string) => Promise<void>;
+  forwardMessage: (messageId: string, toChatId: string) => Promise<void>;
   setEditing: (messageId: string | null) => void;
   toggleTranslate: (chatId: string) => Promise<void>;
   translateMessage: (messageId: string) => Promise<void>;
@@ -793,6 +798,25 @@ export const useMessenger = create<MessengerStore>()(
         if (raw) mergeMessage(raw);
       },
 
+      forwardMessage: async (messageId, toChatId) => {
+        const source = get().messages.find((m) => m.id === messageId);
+        if (!source) return;
+
+        const result = await ws.call(Cmd.messageForward, {
+          from_chat_id: source.chatId,
+          message_id: messageId,
+          to_chat_id: toChatId,
+          // Настоящий UUID, а не uid(): у того свой короткий формат для
+          // ключей в интерфейсе, и сервер его не разберёт.
+          client_msg_id: crypto.randomUUID(),
+        });
+        const raw = result.message as ServerMessage | undefined;
+        if (raw) mergeMessage(raw);
+        // Открываем ту переписку, куда переслали: иначе человек жмёт
+        // «переслать» и остаётся смотреть на исходную, не понимая, ушло ли.
+        set({ selectedChatId: toChatId, sidebarView: "chats" });
+      },
+
       /// Отправляет голосовое.
       ///
       /// Отдельно от sendFiles ради длительности: её знает только тот, кто
@@ -1087,7 +1111,9 @@ async function refreshContacts() {
       contacts: {
         ...s.contacts,
         ...Object.fromEntries(
-          list.filter((u) => u.id !== mine).map((u) => [u.id, toContact(u, false)]),
+          list
+            .filter((u) => u.id !== mine)
+            .map((u) => [u.id, toContact(u, false)]),
         ),
       },
     }));
@@ -1353,7 +1379,10 @@ function handleEvent(envelope: Envelope) {
           ...Object.fromEntries(
             summary.users
               .filter((u) => u.id !== me.id)
-              .map((u) => [u.id, toContact(u, s.contacts[u.id]?.online ?? false)]),
+              .map((u) => [
+                u.id,
+                toContact(u, s.contacts[u.id]?.online ?? false),
+              ]),
           ),
         },
       }));

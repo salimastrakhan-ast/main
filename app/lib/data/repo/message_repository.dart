@@ -267,6 +267,27 @@ class MessageRepository {
   Future<void> leaveChat(String chatId) =>
       ws.call(Cmd.chatLeave, {'chat_id': chatId});
 
+  /// Пересылает сообщение в другой чат.
+  ///
+  /// Копию делает сервер: он же и проверяет, что пересылающий состоит в
+  /// обоих чатах. Клиент только называет, что и куда.
+  Future<void> forward({
+    required String fromChatId,
+    required String messageId,
+    String? toChatId,
+    String? toPeerId,
+  }) async {
+    final result = await ws.call(Cmd.messageForward, {
+      'from_chat_id': fromChatId,
+      'message_id': messageId,
+      if (toChatId != null) 'to_chat_id': toChatId,
+      if (toPeerId != null) 'to_peer_id': toPeerId,
+      'client_msg_id': _uuid.v4(),
+    });
+    final message = result['message'] as Map<String, dynamic>?;
+    if (message != null) await _upsertMessage(message);
+  }
+
   /// Удаляет чат: у себя или, если это своя группа, у всех.
   Future<void> deleteChat(String chatId, {bool forEveryone = false}) =>
       ws.call(Cmd.chatDelete, {
@@ -432,6 +453,8 @@ class MessageRepository {
                   : jsonEncode(attachments),
             ),
             kind: Value(raw['kind'] as String? ?? 'text'),
+            forwardedFrom: Value(raw['forwarded_from'] as String?),
+            forwardedName: Value(raw['forwarded_name'] as String?),
             payloadJson: Value(
               raw['payload'] == null ? null : jsonEncode(raw['payload']),
             ),

@@ -53,6 +53,8 @@ func (c *Conn) handle(ctx context.Context, env ws.Envelope) {
 		c.handleEdit(ctx, env)
 	case ws.CmdMessageDelete:
 		c.handleDelete(ctx, env)
+	case ws.CmdMessageForward:
+		c.handleForward(ctx, env)
 	case ws.CmdRead:
 		c.handleRead(ctx, env)
 	case ws.CmdTyping:
@@ -364,6 +366,53 @@ func (c *Conn) handleLeave(ctx context.Context, env ws.Envelope) {
 		Chat: domain.ChatSummary{Chat: domain.Chat{ID: payload.ChatID}},
 		Gone: true,
 	})
+}
+
+// handleForward пересылает сообщение в другой чат.
+func (c *Conn) handleForward(ctx context.Context, env ws.Envelope) {
+	var payload ws.MessageForwardData
+	if err := decodeData(env, &payload); err != nil {
+		c.replyError(env.ID, ws.ErrCodeBadRequest, err.Error())
+		return
+	}
+
+	target := payload.ToChatID
+	if target == uuid.Nil {
+		if payload.ToPeerID == uuid.Nil {
+			c.replyError(env.ID, ws.ErrCodeBadRequest, "Нужен to_chat_id или to_peer_id")
+			return
+		}
+		chat, err := c.hub.store.EnsurePrivateChat(ctx, c.userID, payload.ToPeerID)
+		if err != nil {
+			c.fail(env.ID, err)
+			return
+		}
+		target = chat.ID
+		c.announceChat(ctx, target)
+	}
+
+	msg, created, err := c.hub.store.ForwardMessage(
+		ctx, payload.FromChatID, payload.MessageID, target, c.userID, payload.ClientMsgID)
+	if err != nil {
+		c.fail(env.ID, err)
+		return
+	}
+
+	media.ResolveMessage(ctx, c.hub.media, &msg)
+	c.reply(env.ID, ws.TypeAck, ws.MessageEventData{Message: msg})
+	if !created {
+		// Повтор той же пересылки: сообщение уже разослано, второй раз не
+		// надо. Клиент ретраит при каждом обрыве связи.
+		return
+	}
+
+	members, err := c.hub.store.MemberIDs(ctx, target)
+	if err != nil {
+		c.log.Error("не получены адресаты", "err", err, "chat", target)
+		return
+	}
+	c.hub.Publish(ctx, members, c.id, ws.EventMessageNew, ws.MessageEventData{Message: msg})
+	c.hub.notifyOffline(ctx, msg, members)
 }
 
 // handleRemoveMember исключает участника из группы.

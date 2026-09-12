@@ -48,6 +48,18 @@ type MessageDeleteData struct {
 	MessageID uuid.UUID `json:"message_id"`
 }
 
+// MessageForwardData — пересылка сообщения в другой чат.
+//
+// Адресат, как и у message.send, задаётся чатом или собеседником: переслать
+// человеку, с которым ещё не переписывался, — обычное дело.
+type MessageForwardData struct {
+	FromChatID  uuid.UUID `json:"from_chat_id"`
+	MessageID   uuid.UUID `json:"message_id"`
+	ToChatID    uuid.UUID `json:"to_chat_id,omitempty"`
+	ToPeerID    uuid.UUID `json:"to_peer_id,omitempty"`
+	ClientMsgID uuid.UUID `json:"client_msg_id"`
+}
+
 type ReadData struct {
 	ChatID  uuid.UUID `json:"chat_id"`
 	UpToSeq int64     `json:"up_to_seq"`

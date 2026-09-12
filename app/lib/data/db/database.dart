@@ -79,6 +79,13 @@ class Messages extends Table {
   /// экран ради двух-трёх строк.
   TextColumn get attachmentsJson => text().nullable()();
 
+  /// Автор оригинала у пересланного сообщения. Подпись над пузырём: чужой
+  /// текст не должен выглядеть своим.
+  TextColumn get forwardedFrom => text().nullable()();
+
+  /// Имя автора оригинала снимком: получатель может быть незнаком с ним.
+  TextColumn get forwardedName => text().nullable()();
+
   /// Служебная запись вместо сообщения: пока только след звонка.
   /// Пусто у обычных — так же, как на сервере.
   TextColumn get kind => text().withDefault(const Constant('text'))();
@@ -195,14 +202,16 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 6;
 
   /// Пересоздавать базу нельзя: в ней лежит вся переписка, и обновление
   /// приложения не повод её потерять. Поэтому каждая версия добавляет своё.
   ///
   ///   2 — таблица настроек, признаки контакта и избранного;
   ///   3 — закрепление и беззвучный режим чата;
-  ///   4 — служебные записи в ленте: след звонка.
+  ///   4 — служебные записи в ленте: след звонка;
+  ///   5 — пересланные сообщения помнят автора оригинала;
+  ///   6 — и его имя: получатель может быть с ним незнаком.
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
@@ -219,6 +228,12 @@ class AppDatabase extends _$AppDatabase {
       if (from < 4) {
         await m.addColumn(messages, messages.kind);
         await m.addColumn(messages, messages.payloadJson);
+      }
+      if (from < 5) {
+        await m.addColumn(messages, messages.forwardedFrom);
+      }
+      if (from < 6) {
+        await m.addColumn(messages, messages.forwardedName);
       }
     },
   );

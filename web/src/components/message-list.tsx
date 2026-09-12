@@ -5,6 +5,7 @@ import {
   CheckCheck,
   Copy,
   Languages,
+  Forward,
   Pencil,
   PhoneIncoming,
   PhoneMissed,
@@ -14,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AttachmentView } from "@/components/attachment";
+import { ForwardDialog } from "@/components/forward-dialog";
 import { UserAvatar } from "@/components/user-avatar";
 import { dayKey, formatBubbleTime, formatDayLabel } from "@/lib/format";
 import { t, targetLangNames } from "@/lib/i18n";
@@ -37,6 +39,10 @@ export function MessageList({ chatId }: { chatId: string }) {
   const translateMessage = useMessenger((s) => s.translateMessage);
   const toggleOriginal = useMessenger((s) => s.toggleOriginal);
   const [activeId, setActiveId] = useState<string | null>(null);
+
+  /// Какое сообщение пересылаем. Окно выбора чата открывается поверх ленты
+  /// и закрывается само, когда пересылка ушла.
+  const [forwarding, setForwarding] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const chat = chats.find((c) => c.id === chatId);
@@ -47,20 +53,31 @@ export function MessageList({ chatId }: { chatId: string }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [list.length, typingChatId, chatId]);
 
-  const items: Array<{ type: "day"; key: string; label: string } | { type: "msg"; key: string; message: Message }> =
-    [];
+  const items: Array<
+    | { type: "day"; key: string; label: string }
+    | { type: "msg"; key: string; message: Message }
+  > = [];
   let lastDay = "";
   for (const message of list) {
     const key = dayKey(message.createdAt);
     if (key !== lastDay) {
-      items.push({ type: "day", key: `d-${key}`, label: formatDayLabel(message.createdAt, uiLang) });
+      items.push({
+        type: "day",
+        key: `d-${key}`,
+        label: formatDayLabel(message.createdAt, uiLang),
+      });
       lastDay = key;
     }
     items.push({ type: "msg", key: message.id, message });
   }
 
+  const dialog = forwarding ? (
+    <ForwardDialog messageId={forwarding} onClose={() => setForwarding(null)} />
+  ) : null;
+
   return (
     <div className="scroll-thin flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-4">
+      {dialog}
       <div className="mt-auto flex flex-col gap-1.5">
         {items.map((item) => {
           if (item.type === "day") {
@@ -102,7 +119,10 @@ export function MessageList({ chatId }: { chatId: string }) {
           return (
             <div
               key={message.id}
-              className={cn("group flex gap-2", mine ? "flex-row-reverse" : "flex-row")}
+              className={cn(
+                "group flex gap-2",
+                mine ? "flex-row-reverse" : "flex-row",
+              )}
             >
               {showNames && !mine ? (
                 <UserAvatar
@@ -114,7 +134,12 @@ export function MessageList({ chatId }: { chatId: string }) {
                 />
               ) : null}
 
-              <div className={cn("flex max-w-bubble flex-col", mine ? "items-end" : "items-start")}>
+              <div
+                className={cn(
+                  "flex max-w-bubble flex-col",
+                  mine ? "items-end" : "items-start",
+                )}
+              >
                 {showNames && !mine ? (
                   <span className="mb-0.5 px-1 text-xs font-medium text-accent">
                     {sender?.name}
@@ -128,12 +153,29 @@ export function MessageList({ chatId }: { chatId: string }) {
                       ? "rounded-lg rounded-br-xs bg-bubble-out"
                       : "rounded-lg rounded-bl-xs bg-bubble-in",
                   )}
-                  onClick={() => setActiveId((id) => (id === message.id ? null : message.id))}
+                  onClick={() =>
+                    setActiveId((id) => (id === message.id ? null : message.id))
+                  }
                 >
+                  {/* Переслано: чужой текст не должен выглядеть своим. */}
+                  {message.forwardedFrom ? (
+                    <div className="mb-1 flex items-center gap-1 text-xs text-accent">
+                      <Forward className="size-3" />
+                      {t(uiLang, "forwardedFrom")}{" "}
+                      {message.forwardedFrom === me.id
+                        ? t(uiLang, "you")
+                        : (contacts[message.forwardedFrom]?.name ??
+                          message.forwardedName ??
+                          "…")}
+                    </div>
+                  ) : null}
+
                   {reply ? (
                     <div className="mb-1.5 border-l-2 border-accent pl-2 text-xs text-muted">
                       <span className="block font-medium text-accent">
-                        {reply.senderId === me.id ? t(uiLang, "you") : contacts[reply.senderId]?.name}
+                        {reply.senderId === me.id
+                          ? t(uiLang, "you")
+                          : contacts[reply.senderId]?.name}
                       </span>
                       <span className="line-clamp-2">{reply.text}</span>
                     </div>
@@ -186,7 +228,9 @@ export function MessageList({ chatId }: { chatId: string }) {
                     className="mt-0.5 px-1 text-xs text-subtle hover:text-muted"
                     onClick={() => toggleOriginal(message.id)}
                   >
-                    {showOriginal ? t(uiLang, "showTranslation") : t(uiLang, "showOriginal")}
+                    {showOriginal
+                      ? t(uiLang, "showTranslation")
+                      : t(uiLang, "showOriginal")}
                     {tr.from && tr.from !== "und"
                       ? ` · ${targetLangNames[targetLang][uiLang]}`
                       : ""}
@@ -197,7 +241,9 @@ export function MessageList({ chatId }: { chatId: string }) {
                   className={cn(
                     "mt-0.5 gap-0.5",
                     mine ? "flex-row-reverse" : "flex-row",
-                    activeId === message.id ? "flex" : "hidden group-hover:flex",
+                    activeId === message.id
+                      ? "flex"
+                      : "hidden group-hover:flex",
                   )}
                 >
                   <IconAction
@@ -205,6 +251,12 @@ export function MessageList({ chatId }: { chatId: string }) {
                     onClick={() => setReplyTo(message.id)}
                   >
                     <Reply className="size-3.5" />
+                  </IconAction>
+                  <IconAction
+                    label={t(uiLang, "forward")}
+                    onClick={() => setForwarding(message.id)}
+                  >
+                    <Forward className="size-3.5" />
                   </IconAction>
                   <IconAction
                     label={t(uiLang, "copy")}
@@ -236,7 +288,8 @@ export function MessageList({ chatId }: { chatId: string }) {
                       <IconAction
                         label={t(uiLang, "delete")}
                         onClick={() => {
-                          if (!window.confirm(t(uiLang, "deleteConfirm"))) return;
+                          if (!window.confirm(t(uiLang, "deleteConfirm")))
+                            return;
                           void deleteMessage(chatId, message.id).catch(() =>
                             toast(t(uiLang, "deleteFailed")),
                           );
@@ -263,7 +316,9 @@ export function MessageList({ chatId }: { chatId: string }) {
         ) : null}
 
         {translatingChatId === chatId ? (
-          <p className="px-1 text-center text-xs text-muted">{t(uiLang, "translating")}</p>
+          <p className="px-1 text-center text-xs text-muted">
+            {t(uiLang, "translating")}
+          </p>
         ) : null}
 
         <div ref={bottomRef} />
@@ -306,7 +361,11 @@ function CallRow({
   );
 }
 
-function callLabel(record: CallRecord, outgoing: boolean, lang: UiLang): string {
+function callLabel(
+  record: CallRecord,
+  outgoing: boolean,
+  lang: UiLang,
+): string {
   if (record.reason === "declined") {
     return t(lang, outgoing ? "callDeclinedOut" : "callDeclinedIn");
   }

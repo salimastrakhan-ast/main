@@ -22,6 +22,7 @@ import '../../ui/state_view.dart';
 import '../../ui/theme.dart';
 import '../../ui/tokens.dart';
 import 'emoji_sheet.dart';
+import 'forward_sheet.dart';
 import '../../ui/voice.dart';
 import '../chat_info/chat_info_screen.dart';
 
@@ -905,6 +906,15 @@ class _Feed extends ConsumerWidget {
               quotedAuthor: message.replyToId == null
                   ? ''
                   : _quotedAuthor(message, list, users, myUserId),
+              forwardedName: message.forwardedFrom == null
+                  ? ''
+                  : message.forwardedFrom == myUserId
+                  ? 'вас'
+                  // Имя из самого сообщения, если человек не в контактах:
+                  // получатель может быть незнаком с автором оригинала.
+                  : users[message.forwardedFrom]?.displayName ??
+                        message.forwardedName ??
+                        '',
             );
           },
         );
@@ -1122,6 +1132,7 @@ class _Bubble extends ConsumerWidget {
     this.onReply,
     this.quoted,
     this.quotedAuthor = '',
+    this.forwardedName = '',
     super.key,
   });
 
@@ -1135,6 +1146,10 @@ class _Bubble extends ConsumerWidget {
 
   /// Взяться отвечать: над полем встанет цитата.
   final ValueChanged<Message>? onReply;
+
+  /// Имя автора оригинала у пересланного. Пусто — имени нет: человека
+  /// может не быть в загруженных контактах.
+  final String forwardedName;
 
   /// Сообщение, на которое отвечали, и его автор. null — ответа не было.
   /// Может быть null и при заполненном replyToId: цитируемое могло не
@@ -1160,6 +1175,11 @@ class _Bubble extends ConsumerWidget {
               leading: const Icon(TitoIcons.reply),
               title: const Text('Ответить'),
               onTap: () => Navigator.pop(context, 'reply'),
+            ),
+            ListTile(
+              leading: const Icon(TitoIcons.forwardMessage),
+              title: const Text('Переслать'),
+              onTap: () => Navigator.pop(context, 'forward'),
             ),
             ListTile(
               leading: const Icon(TitoIcons.copy),
@@ -1193,6 +1213,19 @@ class _Bubble extends ConsumerWidget {
     switch (choice) {
       case 'reply':
         onReply?.call(message);
+      case 'forward':
+        final target = await showForwardSheet(context);
+        if (target == null || !context.mounted) return;
+        try {
+          await ref.read(repositoryProvider)?.forward(
+            fromChatId: message.chatId,
+            messageId: message.id,
+            toChatId: target,
+          );
+          if (context.mounted) showMessage(context, 'Переслано');
+        } on ProtocolException catch (error) {
+          if (context.mounted) showMessage(context, error.message);
+        }
       case 'copy':
         await Clipboard.setData(ClipboardData(text: message.body));
         if (context.mounted) showMessage(context, 'Скопировано');
@@ -1274,6 +1307,33 @@ class _Bubble extends ConsumerWidget {
                       ),
                     ),
                   ),
+                // Переслано: чужой текст не должен выглядеть своим.
+                if (message.forwardedFrom != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          TitoIcons.forwardMessage,
+                          size: 12,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            'Переслано от ${forwardedName.isEmpty ? '…' : forwardedName}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 // Цитата: на что отвечали. Без неё ответ в живой переписке
                 // теряется — через десяток сообщений непонятно, к чему он.
                 if (quoted != null)

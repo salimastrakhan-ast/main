@@ -795,6 +795,28 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _forwardedFromMeta = const VerificationMeta(
+    'forwardedFrom',
+  );
+  @override
+  late final GeneratedColumn<String> forwardedFrom = GeneratedColumn<String>(
+    'forwarded_from',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _forwardedNameMeta = const VerificationMeta(
+    'forwardedName',
+  );
+  @override
+  late final GeneratedColumn<String> forwardedName = GeneratedColumn<String>(
+    'forwarded_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _kindMeta = const VerificationMeta('kind');
   @override
   late final GeneratedColumn<String> kind = GeneratedColumn<String>(
@@ -840,6 +862,8 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     editedAt,
     deletedAt,
     attachmentsJson,
+    forwardedFrom,
+    forwardedName,
     kind,
     payloadJson,
     sendState,
@@ -941,6 +965,24 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         ),
       );
     }
+    if (data.containsKey('forwarded_from')) {
+      context.handle(
+        _forwardedFromMeta,
+        forwardedFrom.isAcceptableOrUnknown(
+          data['forwarded_from']!,
+          _forwardedFromMeta,
+        ),
+      );
+    }
+    if (data.containsKey('forwarded_name')) {
+      context.handle(
+        _forwardedNameMeta,
+        forwardedName.isAcceptableOrUnknown(
+          data['forwarded_name']!,
+          _forwardedNameMeta,
+        ),
+      );
+    }
     if (data.containsKey('kind')) {
       context.handle(
         _kindMeta,
@@ -1013,6 +1055,14 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         DriftSqlType.string,
         data['${effectivePrefix}attachments_json'],
       ),
+      forwardedFrom: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}forwarded_from'],
+      ),
+      forwardedName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}forwarded_name'],
+      ),
       kind: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}kind'],
@@ -1063,6 +1113,13 @@ class Message extends DataClass implements Insertable<Message> {
   /// экран ради двух-трёх строк.
   final String? attachmentsJson;
 
+  /// Автор оригинала у пересланного сообщения. Подпись над пузырём: чужой
+  /// текст не должен выглядеть своим.
+  final String? forwardedFrom;
+
+  /// Имя автора оригинала снимком: получатель может быть незнаком с ним.
+  final String? forwardedName;
+
   /// Служебная запись вместо сообщения: пока только след звонка.
   /// Пусто у обычных — так же, как на сервере.
   final String kind;
@@ -1085,6 +1142,8 @@ class Message extends DataClass implements Insertable<Message> {
     this.editedAt,
     this.deletedAt,
     this.attachmentsJson,
+    this.forwardedFrom,
+    this.forwardedName,
     required this.kind,
     this.payloadJson,
     required this.sendState,
@@ -1111,6 +1170,12 @@ class Message extends DataClass implements Insertable<Message> {
     }
     if (!nullToAbsent || attachmentsJson != null) {
       map['attachments_json'] = Variable<String>(attachmentsJson);
+    }
+    if (!nullToAbsent || forwardedFrom != null) {
+      map['forwarded_from'] = Variable<String>(forwardedFrom);
+    }
+    if (!nullToAbsent || forwardedName != null) {
+      map['forwarded_name'] = Variable<String>(forwardedName);
     }
     map['kind'] = Variable<String>(kind);
     if (!nullToAbsent || payloadJson != null) {
@@ -1146,6 +1211,12 @@ class Message extends DataClass implements Insertable<Message> {
       attachmentsJson: attachmentsJson == null && nullToAbsent
           ? const Value.absent()
           : Value(attachmentsJson),
+      forwardedFrom: forwardedFrom == null && nullToAbsent
+          ? const Value.absent()
+          : Value(forwardedFrom),
+      forwardedName: forwardedName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(forwardedName),
       kind: Value(kind),
       payloadJson: payloadJson == null && nullToAbsent
           ? const Value.absent()
@@ -1172,6 +1243,8 @@ class Message extends DataClass implements Insertable<Message> {
       editedAt: serializer.fromJson<DateTime?>(json['editedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       attachmentsJson: serializer.fromJson<String?>(json['attachmentsJson']),
+      forwardedFrom: serializer.fromJson<String?>(json['forwardedFrom']),
+      forwardedName: serializer.fromJson<String?>(json['forwardedName']),
       kind: serializer.fromJson<String>(json['kind']),
       payloadJson: serializer.fromJson<String?>(json['payloadJson']),
       sendState: $MessagesTable.$convertersendState.fromJson(
@@ -1195,6 +1268,8 @@ class Message extends DataClass implements Insertable<Message> {
       'editedAt': serializer.toJson<DateTime?>(editedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'attachmentsJson': serializer.toJson<String?>(attachmentsJson),
+      'forwardedFrom': serializer.toJson<String?>(forwardedFrom),
+      'forwardedName': serializer.toJson<String?>(forwardedName),
       'kind': serializer.toJson<String>(kind),
       'payloadJson': serializer.toJson<String?>(payloadJson),
       'sendState': serializer.toJson<int>(
@@ -1216,6 +1291,8 @@ class Message extends DataClass implements Insertable<Message> {
     Value<DateTime?> editedAt = const Value.absent(),
     Value<DateTime?> deletedAt = const Value.absent(),
     Value<String?> attachmentsJson = const Value.absent(),
+    Value<String?> forwardedFrom = const Value.absent(),
+    Value<String?> forwardedName = const Value.absent(),
     String? kind,
     Value<String?> payloadJson = const Value.absent(),
     SendState? sendState,
@@ -1234,6 +1311,12 @@ class Message extends DataClass implements Insertable<Message> {
     attachmentsJson: attachmentsJson.present
         ? attachmentsJson.value
         : this.attachmentsJson,
+    forwardedFrom: forwardedFrom.present
+        ? forwardedFrom.value
+        : this.forwardedFrom,
+    forwardedName: forwardedName.present
+        ? forwardedName.value
+        : this.forwardedName,
     kind: kind ?? this.kind,
     payloadJson: payloadJson.present ? payloadJson.value : this.payloadJson,
     sendState: sendState ?? this.sendState,
@@ -1258,6 +1341,12 @@ class Message extends DataClass implements Insertable<Message> {
       attachmentsJson: data.attachmentsJson.present
           ? data.attachmentsJson.value
           : this.attachmentsJson,
+      forwardedFrom: data.forwardedFrom.present
+          ? data.forwardedFrom.value
+          : this.forwardedFrom,
+      forwardedName: data.forwardedName.present
+          ? data.forwardedName.value
+          : this.forwardedName,
       kind: data.kind.present ? data.kind.value : this.kind,
       payloadJson: data.payloadJson.present
           ? data.payloadJson.value
@@ -1281,6 +1370,8 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('editedAt: $editedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('attachmentsJson: $attachmentsJson, ')
+          ..write('forwardedFrom: $forwardedFrom, ')
+          ..write('forwardedName: $forwardedName, ')
           ..write('kind: $kind, ')
           ..write('payloadJson: $payloadJson, ')
           ..write('sendState: $sendState')
@@ -1302,6 +1393,8 @@ class Message extends DataClass implements Insertable<Message> {
     editedAt,
     deletedAt,
     attachmentsJson,
+    forwardedFrom,
+    forwardedName,
     kind,
     payloadJson,
     sendState,
@@ -1322,6 +1415,8 @@ class Message extends DataClass implements Insertable<Message> {
           other.editedAt == this.editedAt &&
           other.deletedAt == this.deletedAt &&
           other.attachmentsJson == this.attachmentsJson &&
+          other.forwardedFrom == this.forwardedFrom &&
+          other.forwardedName == this.forwardedName &&
           other.kind == this.kind &&
           other.payloadJson == this.payloadJson &&
           other.sendState == this.sendState);
@@ -1340,6 +1435,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<DateTime?> editedAt;
   final Value<DateTime?> deletedAt;
   final Value<String?> attachmentsJson;
+  final Value<String?> forwardedFrom;
+  final Value<String?> forwardedName;
   final Value<String> kind;
   final Value<String?> payloadJson;
   final Value<SendState> sendState;
@@ -1357,6 +1454,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.editedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.attachmentsJson = const Value.absent(),
+    this.forwardedFrom = const Value.absent(),
+    this.forwardedName = const Value.absent(),
     this.kind = const Value.absent(),
     this.payloadJson = const Value.absent(),
     this.sendState = const Value.absent(),
@@ -1375,6 +1474,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.editedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.attachmentsJson = const Value.absent(),
+    this.forwardedFrom = const Value.absent(),
+    this.forwardedName = const Value.absent(),
     this.kind = const Value.absent(),
     this.payloadJson = const Value.absent(),
     this.sendState = const Value.absent(),
@@ -1397,6 +1498,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<DateTime>? editedAt,
     Expression<DateTime>? deletedAt,
     Expression<String>? attachmentsJson,
+    Expression<String>? forwardedFrom,
+    Expression<String>? forwardedName,
     Expression<String>? kind,
     Expression<String>? payloadJson,
     Expression<int>? sendState,
@@ -1415,6 +1518,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (editedAt != null) 'edited_at': editedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (attachmentsJson != null) 'attachments_json': attachmentsJson,
+      if (forwardedFrom != null) 'forwarded_from': forwardedFrom,
+      if (forwardedName != null) 'forwarded_name': forwardedName,
       if (kind != null) 'kind': kind,
       if (payloadJson != null) 'payload_json': payloadJson,
       if (sendState != null) 'send_state': sendState,
@@ -1435,6 +1540,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Value<DateTime?>? editedAt,
     Value<DateTime?>? deletedAt,
     Value<String?>? attachmentsJson,
+    Value<String?>? forwardedFrom,
+    Value<String?>? forwardedName,
     Value<String>? kind,
     Value<String?>? payloadJson,
     Value<SendState>? sendState,
@@ -1453,6 +1560,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       editedAt: editedAt ?? this.editedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       attachmentsJson: attachmentsJson ?? this.attachmentsJson,
+      forwardedFrom: forwardedFrom ?? this.forwardedFrom,
+      forwardedName: forwardedName ?? this.forwardedName,
       kind: kind ?? this.kind,
       payloadJson: payloadJson ?? this.payloadJson,
       sendState: sendState ?? this.sendState,
@@ -1499,6 +1608,12 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (attachmentsJson.present) {
       map['attachments_json'] = Variable<String>(attachmentsJson.value);
     }
+    if (forwardedFrom.present) {
+      map['forwarded_from'] = Variable<String>(forwardedFrom.value);
+    }
+    if (forwardedName.present) {
+      map['forwarded_name'] = Variable<String>(forwardedName.value);
+    }
     if (kind.present) {
       map['kind'] = Variable<String>(kind.value);
     }
@@ -1531,6 +1646,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('editedAt: $editedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('attachmentsJson: $attachmentsJson, ')
+          ..write('forwardedFrom: $forwardedFrom, ')
+          ..write('forwardedName: $forwardedName, ')
           ..write('kind: $kind, ')
           ..write('payloadJson: $payloadJson, ')
           ..write('sendState: $sendState, ')
@@ -3510,6 +3627,8 @@ typedef $$MessagesTableCreateCompanionBuilder =
       Value<DateTime?> editedAt,
       Value<DateTime?> deletedAt,
       Value<String?> attachmentsJson,
+      Value<String?> forwardedFrom,
+      Value<String?> forwardedName,
       Value<String> kind,
       Value<String?> payloadJson,
       Value<SendState> sendState,
@@ -3529,6 +3648,8 @@ typedef $$MessagesTableUpdateCompanionBuilder =
       Value<DateTime?> editedAt,
       Value<DateTime?> deletedAt,
       Value<String?> attachmentsJson,
+      Value<String?> forwardedFrom,
+      Value<String?> forwardedName,
       Value<String> kind,
       Value<String?> payloadJson,
       Value<SendState> sendState,
@@ -3601,6 +3722,16 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<String> get attachmentsJson => $composableBuilder(
     column: $table.attachmentsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get forwardedFrom => $composableBuilder(
+    column: $table.forwardedFrom,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get forwardedName => $composableBuilder(
+    column: $table.forwardedName,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3690,6 +3821,16 @@ class $$MessagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get forwardedFrom => $composableBuilder(
+    column: $table.forwardedFrom,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get forwardedName => $composableBuilder(
+    column: $table.forwardedName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get kind => $composableBuilder(
     column: $table.kind,
     builder: (column) => ColumnOrderings(column),
@@ -3757,6 +3898,16 @@ class $$MessagesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get forwardedFrom => $composableBuilder(
+    column: $table.forwardedFrom,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get forwardedName => $composableBuilder(
+    column: $table.forwardedName,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get kind =>
       $composableBuilder(column: $table.kind, builder: (column) => column);
 
@@ -3809,6 +3960,8 @@ class $$MessagesTableTableManager
                 Value<DateTime?> editedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String?> attachmentsJson = const Value.absent(),
+                Value<String?> forwardedFrom = const Value.absent(),
+                Value<String?> forwardedName = const Value.absent(),
                 Value<String> kind = const Value.absent(),
                 Value<String?> payloadJson = const Value.absent(),
                 Value<SendState> sendState = const Value.absent(),
@@ -3826,6 +3979,8 @@ class $$MessagesTableTableManager
                 editedAt: editedAt,
                 deletedAt: deletedAt,
                 attachmentsJson: attachmentsJson,
+                forwardedFrom: forwardedFrom,
+                forwardedName: forwardedName,
                 kind: kind,
                 payloadJson: payloadJson,
                 sendState: sendState,
@@ -3845,6 +4000,8 @@ class $$MessagesTableTableManager
                 Value<DateTime?> editedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String?> attachmentsJson = const Value.absent(),
+                Value<String?> forwardedFrom = const Value.absent(),
+                Value<String?> forwardedName = const Value.absent(),
                 Value<String> kind = const Value.absent(),
                 Value<String?> payloadJson = const Value.absent(),
                 Value<SendState> sendState = const Value.absent(),
@@ -3862,6 +4019,8 @@ class $$MessagesTableTableManager
                 editedAt: editedAt,
                 deletedAt: deletedAt,
                 attachmentsJson: attachmentsJson,
+                forwardedFrom: forwardedFrom,
+                forwardedName: forwardedName,
                 kind: kind,
                 payloadJson: payloadJson,
                 sendState: sendState,

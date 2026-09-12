@@ -38,6 +38,7 @@ abstract final class Cmd {
   static const messageSend = 'message.send';
   static const messageEdit = 'message.edit';
   static const messageDelete = 'message.delete';
+  static const messageForward = 'message.forward';
   static const read = 'read';
   static const typing = 'typing';
   static const chatCreate = 'chat.create';

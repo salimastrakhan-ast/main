@@ -18,7 +18,8 @@ import (
 var errDuplicate = errors.New("сообщение уже существует")
 
 const messageColumns = `id, chat_id, seq, updated_seq, COALESCE(sender_id, '00000000-0000-0000-0000-000000000000'::uuid),
-	text, reply_to_id, client_msg_id, created_at, edited_at, deleted_at, kind, payload`
+	text, reply_to_id, client_msg_id, created_at, edited_at, deleted_at, kind, payload,
+	forwarded_from, COALESCE(forwarded_name, '')`
 
 type scannedMessage struct {
 	domain.Message
@@ -30,7 +31,7 @@ func scanMessage(row pgx.Row) (scannedMessage, error) {
 	var payload []byte
 	err := row.Scan(&m.ID, &m.ChatID, &m.Seq, &m.UpdatedSeq, &m.SenderID,
 		&m.Text, &m.ReplyToID, &m.ClientMsgID, &m.CreatedAt, &m.EditedAt, &m.DeletedAt,
-		&m.Kind, &payload)
+		&m.Kind, &payload, &m.ForwardedFrom, &m.ForwardedName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return scannedMessage{}, ErrNotFound
 	}
@@ -524,4 +525,123 @@ func (s *Store) UnreadCount(ctx context.Context, chatID, userID uuid.UUID) (int6
 		return 0, fmt.Errorf("подсчёт непрочитанного: %w", err)
 	}
 	return n, nil
+}
+
+// ForwardMessage кладёт копию сообщения в другой чат.
+//
+// Именно копию, а не ссылку: оригинал могут удалить, и пересланное не должно
+// исчезать следом — человек переслал то, что видел, и это его сообщение в
+// его переписке.
+//
+// Вложения копируются строками, а не файлами: object_key тот же, повторной
+// загрузки нет. Из-за этого один объект в хранилище может принадлежать
+// нескольким сообщениям — будущая уборка осиротевших файлов обязана считать
+// ссылки, а не удалять объект вместе с первым же сообщением.
+func (s *Store) ForwardMessage(
+	ctx context.Context,
+	sourceChatID, messageID, targetChatID, senderID uuid.UUID,
+	clientMsgID uuid.UUID,
+) (domain.Message, bool, error) {
+	var msg scannedMessage
+
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		// Читать можно только там, где состоишь, и писать тоже: две разные
+		// проверки, и обе обязательны. Иначе по одному идентификатору
+		// вытаскивалась бы чужая переписка в свою.
+		for _, chat := range []uuid.UUID{sourceChatID, targetChatID} {
+			var member bool
+			if err := tx.QueryRow(ctx,
+				`SELECT EXISTS (SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2)`,
+				chat, senderID).Scan(&member); err != nil {
+				return fmt.Errorf("проверка участия: %w", err)
+			}
+			if !member {
+				return ErrForbidden
+			}
+		}
+
+		var (
+			text       string
+			origin     uuid.UUID
+			originName string
+			kind       string
+			source     *uuid.UUID
+			sourceName string
+		)
+		err := tx.QueryRow(ctx, `
+			SELECT m.text, COALESCE(m.sender_id, '00000000-0000-0000-0000-000000000000'::uuid),
+			       COALESCE(u.display_name, ''), m.kind, m.forwarded_from,
+			       COALESCE(m.forwarded_name, '')
+			FROM messages m
+			LEFT JOIN users u ON u.id = m.sender_id
+			WHERE m.chat_id = $1 AND m.id = $2 AND m.deleted_at IS NULL`,
+			sourceChatID, messageID).Scan(&text, &origin, &originName, &kind, &source, &sourceName)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("чтение оригинала: %w", err)
+		}
+		if kind != string(domain.MessageText) {
+			// Служебную запись пересылать нечего: «исходящий звонок» в
+			// чужой переписке не значит ничего.
+			return fmt.Errorf("%w: пересылать можно только сообщения", ErrForbidden)
+		}
+
+		// Пересылка пересланного сохраняет первого автора, а не
+		// предыдущего: цепочка «переслал того, кто переслал» никому не
+		// нужна, а имя первого — то самое, что человек и ищет.
+		author, authorName := origin, originName
+		if source != nil {
+			author, authorName = *source, sourceName
+		}
+
+		seq, err := nextSeq(ctx, tx, targetChatID)
+		if err != nil {
+			return err
+		}
+
+		row := tx.QueryRow(ctx, `
+			INSERT INTO messages (chat_id, seq, updated_seq, sender_id, text,
+			                      client_msg_id, forwarded_from, forwarded_name)
+			VALUES ($1, $2, $2, $3, $4, $5, $6, $7)
+			ON CONFLICT (chat_id, sender_id, client_msg_id) DO NOTHING
+			RETURNING `+messageColumns,
+			targetChatID, seq, senderID, text, clientMsgID, author, authorName)
+
+		msg, err = scanMessage(row)
+		if errors.Is(err, ErrNotFound) {
+			return errDuplicate
+		}
+		if err != nil {
+			return err
+		}
+
+		// Копии вложений: тот же объект в хранилище, новая строка на нового
+		// владельца. Повторной загрузки файла нет.
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO attachments (message_id, owner_id, kind, object_key,
+			                         file_name, mime, size, width, height, duration)
+			SELECT $1, $2, kind, object_key, file_name, mime, size, width, height, duration
+			FROM attachments WHERE message_id = $3`,
+			msg.ID, senderID, messageID); err != nil {
+			return fmt.Errorf("копирование вложений: %w", err)
+		}
+		return nil
+	})
+
+	switch {
+	case errors.Is(err, errDuplicate):
+		existing, err := s.messageByClientID(ctx, targetChatID, senderID, clientMsgID)
+		return existing, false, err
+	case err != nil:
+		return domain.Message{}, false, err
+	}
+
+	attachments, err := s.attachmentsFor(ctx, []uuid.UUID{msg.ID})
+	if err != nil {
+		return domain.Message{}, false, err
+	}
+	msg.Attachments = attachments
+	return msg.Message, true, nil
 }

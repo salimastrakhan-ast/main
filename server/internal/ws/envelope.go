@@ -31,21 +31,22 @@ type Envelope struct {
 
 // Команды клиента.
 const (
-	CmdAuth          = "auth"
-	CmdSync          = "sync"
-	CmdMessageSend   = "message.send"
-	CmdMessageEdit   = "message.edit"
-	CmdMessageDelete = "message.delete"
-	CmdRead          = "read"
-	CmdTyping        = "typing"
-	CmdChatCreate    = "chat.create"
-	CmdChatAddMember = "chat.addMember"
-	CmdChatLeave     = "chat.leave"
-	CmdChatRemoveMem = "chat.removeMember"
-	CmdChatDelete    = "chat.delete"
-	CmdChatPin       = "chat.pin"
-	CmdChatMute      = "chat.mute"
-	CmdPing          = "ping"
+	CmdAuth           = "auth"
+	CmdSync           = "sync"
+	CmdMessageSend    = "message.send"
+	CmdMessageEdit    = "message.edit"
+	CmdMessageDelete  = "message.delete"
+	CmdMessageForward = "message.forward"
+	CmdRead           = "read"
+	CmdTyping         = "typing"
+	CmdChatCreate     = "chat.create"
+	CmdChatAddMember  = "chat.addMember"
+	CmdChatLeave      = "chat.leave"
+	CmdChatRemoveMem  = "chat.removeMember"
+	CmdChatDelete     = "chat.delete"
+	CmdChatPin        = "chat.pin"
+	CmdChatMute       = "chat.mute"
+	CmdPing           = "ping"
 
 	// Звонки. Сервер в них — только посредник: он сводит две стороны и
 	// пересылает им описания соединения, а сам разговор идёт мимо него,

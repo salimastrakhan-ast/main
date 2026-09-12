@@ -107,19 +107,28 @@ type CallPayload struct {
 }
 
 type Message struct {
-	ID          uuid.UUID    `json:"id"`
-	ChatID      uuid.UUID    `json:"chat_id"`
-	Seq         int64        `json:"seq"`
-	SenderID    uuid.UUID    `json:"sender_id"`
-	Kind        MessageKind  `json:"kind,omitempty"`
-	Payload     *CallPayload `json:"payload,omitempty"`
-	Text        string       `json:"text"`
-	ReplyToID   *uuid.UUID   `json:"reply_to_id,omitempty"`
-	ClientMsgID uuid.UUID    `json:"client_msg_id"`
-	CreatedAt   time.Time    `json:"created_at"`
-	EditedAt    *time.Time   `json:"edited_at,omitempty"`
-	DeletedAt   *time.Time   `json:"deleted_at,omitempty"`
-	Attachments []Attachment `json:"attachments,omitempty"`
+	ID       uuid.UUID   `json:"id"`
+	ChatID   uuid.UUID   `json:"chat_id"`
+	Seq      int64       `json:"seq"`
+	SenderID uuid.UUID   `json:"sender_id"`
+	Kind     MessageKind `json:"kind,omitempty"`
+
+	// ForwardedFrom — автор оригинала у пересланного сообщения. Клиент
+	// подписывает им пузырь: чужой текст не должен выглядеть своим.
+	ForwardedFrom *uuid.UUID `json:"forwarded_from,omitempty"`
+	// Имя автора рядом — снимком: получатель может быть незнаком с ним, и
+	// разрешить идентификатор ему нечем. Снимок ещё и честнее ссылки:
+	// позднее переименование чужого профиля не должно менять чужую
+	// переписку.
+	ForwardedName string       `json:"forwarded_name,omitempty"`
+	Payload       *CallPayload `json:"payload,omitempty"`
+	Text          string       `json:"text"`
+	ReplyToID     *uuid.UUID   `json:"reply_to_id,omitempty"`
+	ClientMsgID   uuid.UUID    `json:"client_msg_id"`
+	CreatedAt     time.Time    `json:"created_at"`
+	EditedAt      *time.Time   `json:"edited_at,omitempty"`
+	DeletedAt     *time.Time   `json:"deleted_at,omitempty"`
+	Attachments   []Attachment `json:"attachments,omitempty"`
 }
 
 type Attachment struct {
