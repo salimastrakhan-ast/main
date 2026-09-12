@@ -214,6 +214,11 @@ void main() {
   });
 
   test('входящее событие кладёт сообщение в базу и двигает курсор', () async {
+    // Клиент в курсе всего до одиннадцатого — пришло двенадцатое.
+    await (db.update(db.chats)..where((t) => t.id.equals(chatId))).write(
+      const ChatsCompanion(syncedSeq: Value(11)),
+    );
+
     transport.emit(Envelope(
       type: Ev.messageNew,
       data: serverMessage(
@@ -233,6 +238,29 @@ void main() {
     // Курсор обязан подтянуться: иначе после перезапуска клиент запросил бы
     // то, что уже показывает.
     expect(await db.syncCursors(), {chatId: 12});
+  });
+
+  test('событие через пропуск курсор не двигает', () async {
+    // Курсор на нуле, а пришло двенадцатое: с первого по одиннадцатое
+    // клиент не видел. Подвинуть курсор сюда значит потерять их навсегда —
+    // синхронизация больше о них не спросит, а история грузится только
+    // вглубь, от самого старого известного.
+    transport.emit(Envelope(
+      type: Ev.messageNew,
+      data: serverMessage(
+        chatId: chatId,
+        clientMsgId: 'c-2',
+        senderId: 'user-other',
+        seq: 12,
+        text: 'после долгого офлайна',
+      ),
+    ));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    final messages = await db.watchMessages(chatId).first;
+    expect(messages, hasLength(1), reason: 'само сообщение показать надо');
+    expect(await db.syncCursors(), {chatId: 0},
+        reason: 'пропущенное дочитает ближайшая синхронизация');
   });
 
   test('новое сообщение поднимает чат наверх списка', () async {
