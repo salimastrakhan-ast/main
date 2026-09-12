@@ -31,6 +31,8 @@ export const Cmd = {
   chatCreate: "chat.create",
   chatAddMember: "chat.addMember",
   chatLeave: "chat.leave",
+  chatRemoveMember: "chat.removeMember",
+  chatDelete: "chat.delete",
   chatPin: "chat.pin",
   chatMute: "chat.mute",
   ping: "ping",
@@ -187,9 +189,15 @@ export class WsClient {
         this.pending.delete(envelope.id);
         window.clearTimeout(waiting.timer);
         if (envelope.t === Ev.error) {
-          const error = (envelope.d ?? {}) as { code?: string; message?: string };
+          const error = (envelope.d ?? {}) as {
+            code?: string;
+            message?: string;
+          };
           waiting.reject(
-            new ProtocolError(error.code ?? "unknown", error.message ?? "Отказ"),
+            new ProtocolError(
+              error.code ?? "unknown",
+              error.message ?? "Отказ",
+            ),
           );
         } else {
           waiting.resolve(envelope.d ?? {});
@@ -225,7 +233,10 @@ export class WsClient {
     this.attempt += 1;
 
     window.clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = window.setTimeout(() => void this.open(), backoff + jitter);
+    this.reconnectTimer = window.setTimeout(
+      () => void this.open(),
+      backoff + jitter,
+    );
   }
 
   private failPending() {
@@ -242,7 +253,10 @@ export class WsClient {
 
   /// Команда с ответом. Отказ приходит тем же идентификатором, поэтому
   /// ожидание всегда завершается — либо ответом, либо таймаутом.
-  call(type: string, data: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+  call(
+    type: string,
+    data: Record<string, unknown> = {},
+  ): Promise<Record<string, unknown>> {
     if (this.status !== "online" || !this.socket) {
       return Promise.reject(new ProtocolError("offline", "Нет соединения"));
     }

@@ -252,6 +252,9 @@ type Actions = {
   startChatWith: (userId: string) => void;
   createGroup: (title: string, memberIds: string[]) => Promise<void>;
   leaveChat: (chatId: string) => Promise<void>;
+  deleteChat: (chatId: string, forEveryone?: boolean) => Promise<void>;
+  removeMember: (chatId: string, userId: string) => Promise<void>;
+  addMembers: (chatId: string, userIds: string[]) => Promise<void>;
   findPeople: (query: string) => Promise<Contact[]>;
   startCall: (chatId: string) => Promise<void>;
   acceptCall: () => Promise<void>;
@@ -312,10 +315,15 @@ function summaryToChat(summary: ServerSummary, myId: string): Chat {
     id: summary.chat.id,
     kind: isGroup ? "group" : summary.users.length === 1 ? "saved" : "dm",
     title,
-    peerId: peer?.id,
+    // Только в личной переписке. В группе «собеседник» — это первый
+    // попавшийся участник, и по нему выходило, что группе можно позвонить,
+    // хотя сервер такой звонок отклоняет: групповым нужен отдельный сервер
+    // сведения потоков.
+    peerId: isGroup ? undefined : peer?.id,
     memberIds: summary.members
       .map((m) => m.user_id)
       .filter((id) => id !== myId),
+    ownerId: summary.members.find((m) => m.role === "owner")?.user_id,
     avatar: isGroup ? summary.chat.avatar_url : peer?.avatar_url,
     initials: initialsOf(title),
     pinned: summary.pinned ?? false,
@@ -365,6 +373,13 @@ export const useMessenger = create<MessengerStore>()(
 
         const me = (await api.me()) as unknown as { user: ServerUser };
         const user = me.user ?? (me as unknown as ServerUser);
+        set((s) => {
+          // Себя из книги вычищаем: у тех, кто заходил до этой правки, своя
+          // запись уже лежит в кэше и будет мозолить глаза в «новом чате».
+          const contacts = { ...s.contacts };
+          delete contacts[user.id];
+          return { contacts };
+        });
         set({
           me: {
             id: user.id,
@@ -606,6 +621,32 @@ export const useMessenger = create<MessengerStore>()(
         set((s) => ({
           selectedChatId: s.selectedChatId === chatId ? null : s.selectedChatId,
         }));
+      },
+
+      deleteChat: async (chatId, forEveryone = false) => {
+        await ws.call(Cmd.chatDelete, {
+          chat_id: chatId,
+          ...(forEveryone ? { for_everyone: true } : {}),
+        });
+        // Событие chat.update с gone:true придёт следом и уберёт чат из
+        // списка вместе с его сообщениями.
+        set((s) => ({
+          selectedChatId: s.selectedChatId === chatId ? null : s.selectedChatId,
+        }));
+      },
+
+      removeMember: async (chatId, userId) => {
+        await ws.call(Cmd.chatRemoveMember, {
+          chat_id: chatId,
+          user_id: userId,
+        });
+      },
+
+      addMembers: async (chatId, userIds) => {
+        await ws.call(Cmd.chatAddMember, {
+          chat_id: chatId,
+          user_ids: userIds,
+        });
       },
 
       findPeople: async (query) => {
@@ -1041,10 +1082,13 @@ function applyOwnAvatar(avatar: string) {
 async function refreshContacts() {
   try {
     const list = (await api.contacts()) as ServerUser[];
+    const mine = get().me?.id;
     set((s) => ({
       contacts: {
         ...s.contacts,
-        ...Object.fromEntries(list.map((u) => [u.id, toContact(u, false)])),
+        ...Object.fromEntries(
+          list.filter((u) => u.id !== mine).map((u) => [u.id, toContact(u, false)]),
+        ),
       },
     }));
   } catch {
@@ -1068,6 +1112,10 @@ async function syncAll() {
 
     for (const summary of summaries) {
       for (const user of summary.users) {
+        // Себя в собственную книгу класть нельзя: иначе человек находит
+        // себя в «новом чате» и может добавить себя же в группу, которую
+        // создаёт.
+        if (user.id === me.id) continue;
         contacts[user.id] ??= toContact(user, false);
       }
       chats = upsertChat(
@@ -1281,6 +1329,16 @@ function handleEvent(envelope: Envelope) {
         set((s) => ({
           chats: s.chats.filter((c) => c.id !== summary.chat.id),
           messages: s.messages.filter((m) => m.chatId !== summary.chat.id),
+          // Снимаем выбор, если открыт был именно он: иначе человек
+          // смотрит на пустое место там, где секунду назад была переписка,
+          // и не понимает, что произошло.
+          selectedChatId:
+            s.selectedChatId === summary.chat.id ? null : s.selectedChatId,
+          sidebarView:
+            s.selectedChatId === summary.chat.id &&
+            (s.sidebarView === "info" || s.sidebarView === "search")
+              ? "chats"
+              : s.sidebarView,
         }));
         return;
       }
@@ -1291,11 +1349,11 @@ function handleEvent(envelope: Envelope) {
         ),
         contacts: {
           ...s.contacts,
+          // См. syncAll: себя в книгу не кладём.
           ...Object.fromEntries(
-            summary.users.map((u) => [
-              u.id,
-              toContact(u, s.contacts[u.id]?.online ?? false),
-            ]),
+            summary.users
+              .filter((u) => u.id !== me.id)
+              .map((u) => [u.id, toContact(u, s.contacts[u.id]?.online ?? false)]),
           ),
         },
       }));

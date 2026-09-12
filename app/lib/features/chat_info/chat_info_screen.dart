@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../data/db/database.dart';
+import '../../data/ws/envelope.dart';
 import '../../ui/glass.dart';
 import '../../ui/icons.dart';
 import '../../ui/parts.dart';
@@ -27,6 +28,14 @@ class ChatInfoScreen extends ConsumerWidget {
         ref.watch(chatAttachmentsProvider(chatId)).value ?? const <Message>[];
 
     final isGroup = chat?.type == 'group';
+    final myUserId = ref.watch(sessionProvider).value?.userId ?? '';
+
+    // Владелец группы — тот, кто её создал: только он удаляет её у всех и
+    // исключает участников. Право проверяет сервер; здесь мы лишь не
+    // показываем заведомый отказ.
+    final iOwn =
+        isGroup &&
+        members.any((e) => e.user.id == myUserId && e.member.role == 'owner');
     final title = isGroup
         ? (chat?.title.isNotEmpty ?? false ? chat!.title : 'Группа')
         : peer?.displayName ?? 'Чат';
@@ -102,11 +111,12 @@ class ChatInfoScreen extends ConsumerWidget {
                   onTap: () => showNotReady(context, 'Настройки уведомлений'),
                 ),
                 const SizedBox(width: Tokens.space2),
-                _Action(
-                  icon: TitoIcons.addPerson,
-                  label: 'Добавить',
-                  onTap: () => showNotReady(context, 'Добавление участников'),
-                ),
+                if (isGroup)
+                  _Action(
+                    icon: TitoIcons.addPerson,
+                    label: 'Добавить',
+                    onTap: () => _addMembers(context, ref, members),
+                  ),
               ],
             ),
           ),
@@ -127,7 +137,9 @@ class ChatInfoScreen extends ConsumerWidget {
                   style: theme.textTheme.bodyLarge,
                 ),
                 subtitle: Text(
-                  entry.member.role == 'owner' || entry.member.role == 'admin'
+                  entry.member.role == 'owner'
+                      ? 'Владелец'
+                      : entry.member.role == 'admin'
                       ? 'Администратор'
                       : entry.user.online
                       ? 'в сети'
@@ -138,6 +150,27 @@ class ChatInfoScreen extends ConsumerWidget {
                         : theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
+                // Исключать может владелец, и не себя и не владельца. Право
+                // проверяет сервер; здесь мы лишь не показываем заведомый
+                // отказ.
+                trailing: iOwn &&
+                        entry.user.id != myUserId &&
+                        entry.member.role != 'owner'
+                    ? IconButton(
+                        icon: Icon(
+                          TitoIcons.removePerson,
+                          size: 18,
+                          color: theme.colorScheme.outline,
+                        ),
+                        tooltip: 'Исключить',
+                        onPressed: () => _confirmRemove(
+                          context,
+                          ref,
+                          entry.user.id,
+                          entry.user.displayName,
+                        ),
+                      )
+                    : null,
               ),
             if (sorted.length > 6)
               TextButton(
@@ -185,10 +218,188 @@ class ChatInfoScreen extends ConsumerWidget {
               danger: true,
               onTap: () => _confirmLeave(context, ref),
             ),
+          if (isGroup && iOwn)
+            SettingsRow(
+              icon: TitoIcons.delete,
+              title: 'Удалить группу у всех',
+              danger: true,
+              onTap: () => _confirmDelete(context, ref, forEveryone: true),
+            ),
+          if (!isGroup)
+            SettingsRow(
+              icon: TitoIcons.delete,
+              title: 'Удалить переписку',
+              danger: true,
+              onTap: () => _confirmDelete(context, ref),
+            ),
           const SizedBox(height: Tokens.space6),
         ],
       ),
     );
+  }
+
+  /// Добавление участников: выбор из тех, кого ещё нет в группе.
+  ///
+  /// Берём контакты, а не весь сервер: добавляют знакомых, а искать по
+  /// номеру ради группы — редкий случай, ради которого не стоит городить
+  /// второй поиск внутри шторки.
+  Future<void> _addMembers(
+    BuildContext context,
+    WidgetRef ref,
+    List<({ChatMember member, User user})> members,
+  ) async {
+    final present = members.map((e) => e.user.id).toSet();
+    final contacts = (ref.read(contactsProvider).value ?? const <User>[])
+        .where((u) => !present.contains(u.id))
+        .toList();
+
+    if (contacts.isEmpty) {
+      showMessage(context, 'Некого добавить: все уже в группе');
+      return;
+    }
+
+    final chosen = <String>{};
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: Tokens.space3),
+              Text(
+                'Кого добавить',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: contacts.length,
+                  itemBuilder: (context, index) {
+                    final person = contacts[index];
+                    final picked = chosen.contains(person.id);
+                    return CheckboxListTile(
+                      value: picked,
+                      title: Text(person.displayName),
+                      secondary: PersonAvatar(
+                        id: person.id,
+                        name: person.displayName,
+                        radius: 18,
+                        photo: person.avatarUrl,
+                      ),
+                      onChanged: (_) => setSheetState(() {
+                        if (picked) {
+                          chosen.remove(person.id);
+                        } else {
+                          chosen.add(person.id);
+                        }
+                      }),
+                    );
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(Tokens.space4),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: chosen.isEmpty
+                        ? null
+                        : () => Navigator.of(sheetContext).pop(true),
+                    child: const Text('Добавить'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (ok != true || chosen.isEmpty || !context.mounted) return;
+    try {
+      await ref.read(repositoryProvider)?.addMembers(chatId, chosen.toList());
+    } on ProtocolException catch (error) {
+      if (context.mounted) showMessage(context, error.message);
+    }
+  }
+
+  /// Удаление чата. «У всех» доступно только владельцу группы: стереть
+  /// историю у собеседника без его ведома — не то, что человек вправе
+  /// сделать чужими руками, и сервер такого не принимает.
+  Future<void> _confirmDelete(
+    BuildContext context,
+    WidgetRef ref, {
+    bool forEveryone = false,
+  }) async {
+    final ok = await _ask(
+      context,
+      title: forEveryone ? 'Удалить группу у всех?' : 'Удалить переписку?',
+      body: forEveryone
+          ? 'Она исчезнет у всех участников. Это нельзя отменить.'
+          : 'Она исчезнет только у вас. У собеседника останется.',
+      action: 'Удалить',
+    );
+    if (!ok || !context.mounted) return;
+
+    try {
+      await ref
+          .read(repositoryProvider)
+          ?.deleteChat(chatId, forEveryone: forEveryone);
+    } on ProtocolException catch (error) {
+      if (context.mounted) showMessage(context, error.message);
+      return;
+    }
+    if (context.mounted) Navigator.of(context).popUntil((r) => r.isFirst);
+  }
+
+  Future<void> _confirmRemove(
+    BuildContext context,
+    WidgetRef ref,
+    String userId,
+    String name,
+  ) async {
+    final ok = await _ask(
+      context,
+      title: 'Исключить из группы?',
+      body: '$name перестанет видеть переписку.',
+      action: 'Исключить',
+    );
+    if (!ok || !context.mounted) return;
+    try {
+      await ref.read(repositoryProvider)?.removeMember(chatId, userId);
+    } on ProtocolException catch (error) {
+      if (context.mounted) showMessage(context, error.message);
+    }
+  }
+
+  /// Общий вопрос «точно?». Один на все опасные действия: три копии одного
+  /// диалога разошлись бы при первой правке.
+  Future<bool> _ask(
+    BuildContext context, {
+    required String title,
+    required String body,
+    required String action,
+  }) async {
+    final answer = await showGlassDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(action),
+          ),
+        ],
+      ),
+    );
+    return answer == true;
   }
 
   Future<void> _confirmLeave(BuildContext context, WidgetRef ref) async {

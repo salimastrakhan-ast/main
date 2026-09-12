@@ -63,6 +63,10 @@ func (c *Conn) handle(ctx context.Context, env ws.Envelope) {
 		c.handleAddMember(ctx, env)
 	case ws.CmdChatLeave:
 		c.handleLeave(ctx, env)
+	case ws.CmdChatRemoveMem:
+		c.handleRemoveMember(ctx, env)
+	case ws.CmdChatDelete:
+		c.handleChatDelete(ctx, env)
 	case ws.CmdChatPin:
 		c.handlePin(ctx, env)
 	case ws.CmdChatMute:
@@ -357,6 +361,120 @@ func (c *Conn) handleLeave(ctx context.Context, env ws.Envelope) {
 	c.reply(env.ID, ws.TypeAck, struct{}{})
 
 	c.hub.Publish(ctx, members, uuid.Nil, ws.EventChatUpdate, ws.ChatUpdateData{
+		Chat: domain.ChatSummary{Chat: domain.Chat{ID: payload.ChatID}},
+		Gone: true,
+	})
+}
+
+// handleRemoveMember исключает участника из группы.
+func (c *Conn) handleRemoveMember(ctx context.Context, env ws.Envelope) {
+	var payload ws.ChatRemoveMemberData
+	if err := decodeData(env, &payload); err != nil {
+		c.replyError(env.ID, ws.ErrCodeBadRequest, err.Error())
+		return
+	}
+	if payload.UserID == c.userID {
+		// Выйти самому — это chat.leave. Разные команды не по формальности:
+		// уход и исключение читаются по-разному и правами отличаются.
+		c.replyError(env.ID, ws.ErrCodeBadRequest, "Чтобы выйти, используйте chat.leave")
+		return
+	}
+
+	me, err := c.hub.store.Membership(ctx, payload.ChatID, c.userID)
+	if err != nil {
+		c.fail(env.ID, err)
+		return
+	}
+	if me.Role == domain.RoleMember {
+		c.replyError(env.ID, ws.ErrCodeForbidden, "Исключать участников может владелец или админ")
+		return
+	}
+
+	// Владельца не исключает никто: иначе админ выставил бы из группы того,
+	// кто её создал, и вернуть его было бы некому.
+	target, err := c.hub.store.Membership(ctx, payload.ChatID, payload.UserID)
+	if err != nil {
+		c.fail(env.ID, err)
+		return
+	}
+	if target.Role == domain.RoleOwner {
+		c.replyError(env.ID, ws.ErrCodeForbidden, "Владельца группы исключить нельзя")
+		return
+	}
+
+	if err := c.hub.store.RemoveMember(ctx, payload.ChatID, payload.UserID); err != nil {
+		c.fail(env.ID, err)
+		return
+	}
+	c.reply(env.ID, ws.TypeAck, struct{}{})
+
+	// Исключённому — «чата больше нет», остальным — новый состав. Порядок
+	// важен: announceChat рассылает уже по оставшимся, и исключённый в этот
+	// список не попадёт.
+	c.hub.Publish(ctx, []uuid.UUID{payload.UserID}, uuid.Nil, ws.EventChatUpdate,
+		ws.ChatUpdateData{
+			Chat: domain.ChatSummary{Chat: domain.Chat{ID: payload.ChatID}},
+			Gone: true,
+		})
+	c.announceChat(ctx, payload.ChatID)
+}
+
+// handleChatDelete убирает чат — у себя или у всех.
+//
+// «У всех» доступно только владельцу группы. В личной переписке такого нет
+// вовсе: стереть историю у собеседника без его ведома — не то, что человек
+// вправе сделать чужими руками.
+func (c *Conn) handleChatDelete(ctx context.Context, env ws.Envelope) {
+	var payload ws.ChatDeleteData
+	if err := decodeData(env, &payload); err != nil {
+		c.replyError(env.ID, ws.ErrCodeBadRequest, err.Error())
+		return
+	}
+
+	me, err := c.hub.store.Membership(ctx, payload.ChatID, c.userID)
+	if err != nil {
+		c.fail(env.ID, err)
+		return
+	}
+	chat, err := c.hub.store.ChatByID(ctx, payload.ChatID)
+	if err != nil {
+		c.fail(env.ID, err)
+		return
+	}
+
+	members, err := c.hub.store.MemberIDs(ctx, payload.ChatID)
+	if err != nil {
+		c.fail(env.ID, err)
+		return
+	}
+
+	forEveryone := payload.ForEveryone &&
+		chat.Type == domain.ChatGroup &&
+		me.Role == domain.RoleOwner
+	if payload.ForEveryone && !forEveryone {
+		c.replyError(env.ID, ws.ErrCodeForbidden,
+			"Удалить у всех может только владелец группы")
+		return
+	}
+
+	if forEveryone {
+		if err := c.hub.store.DeleteChat(ctx, payload.ChatID); err != nil {
+			c.fail(env.ID, err)
+			return
+		}
+	} else if err := c.hub.store.RemoveMember(ctx, payload.ChatID, c.userID); err != nil {
+		c.fail(env.ID, err)
+		return
+	}
+	c.reply(env.ID, ws.TypeAck, struct{}{})
+
+	// Кому сказать «чата больше нет»: при удалении у всех — всем, при
+	// удалении у себя — только себе.
+	targets := members
+	if !forEveryone {
+		targets = []uuid.UUID{c.userID}
+	}
+	c.hub.Publish(ctx, targets, uuid.Nil, ws.EventChatUpdate, ws.ChatUpdateData{
 		Chat: domain.ChatSummary{Chat: domain.Chat{ID: payload.ChatID}},
 		Gone: true,
 	})

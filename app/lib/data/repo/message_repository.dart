@@ -267,6 +267,21 @@ class MessageRepository {
   Future<void> leaveChat(String chatId) =>
       ws.call(Cmd.chatLeave, {'chat_id': chatId});
 
+  /// Удаляет чат: у себя или, если это своя группа, у всех.
+  Future<void> deleteChat(String chatId, {bool forEveryone = false}) =>
+      ws.call(Cmd.chatDelete, {
+        'chat_id': chatId,
+        if (forEveryone) 'for_everyone': true,
+      });
+
+  /// Исключает участника из группы. Право проверяет сервер.
+  Future<void> removeMember(String chatId, String userId) =>
+      ws.call(Cmd.chatRemoveMember, {'chat_id': chatId, 'user_id': userId});
+
+  /// Добавляет участников в группу.
+  Future<void> addMembers(String chatId, List<String> userIds) =>
+      ws.call(Cmd.chatAddMember, {'chat_id': chatId, 'user_ids': userIds});
+
   /// Догружает страницу истории вверх от самого старого известного сообщения.
   Future<int> loadOlder(String chatId) async {
     final oldest =

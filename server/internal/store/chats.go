@@ -220,6 +220,22 @@ func (s *Store) RemoveMember(ctx context.Context, chatID, userID uuid.UUID) erro
 	return nil
 }
 
+// DeleteChat удаляет чат целиком — вместе с сообщениями и вложениями.
+//
+// Каскад объявлен в схеме: messages и chat_members уходят следом за строкой
+// чата. Объекты в хранилище остаются: их чистка — отдельная забота, иначе
+// удаление чата держало бы транзакцию на время обхода MinIO.
+func (s *Store) DeleteChat(ctx context.Context, chatID uuid.UUID) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM chats WHERE id = $1`, chatID)
+	if err != nil {
+		return fmt.Errorf("удаление чата: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // MarkRead двигает курсор прочитанного только вперёд: сообщение, помеченное
 // прочитанным, не должно становиться непрочитанным из-за приехавшего не в том
 // порядке события.

@@ -89,6 +89,10 @@ e2e-call:
 e2e-call-app:
 	cd e2e && npm install --silent && xvfb-run -a node call-app.mjs
 
+# Состав группы и удаление чатов: что видит владелец и чего не видит участник.
+e2e-groups:
+	cd e2e && npm install --silent && xvfb-run -a node groups.mjs
+
 # Все экраны обоих клиентов одной картинкой. Нужны поднятые сервер,
 # веб-клиент на 4173 и сборка Flutter web на 8090 — см. e2e/README.md.
 #

@@ -41,6 +41,8 @@ const (
 	CmdChatCreate    = "chat.create"
 	CmdChatAddMember = "chat.addMember"
 	CmdChatLeave     = "chat.leave"
+	CmdChatRemoveMem = "chat.removeMember"
+	CmdChatDelete    = "chat.delete"
 	CmdChatPin       = "chat.pin"
 	CmdChatMute      = "chat.mute"
 	CmdPing          = "ping"

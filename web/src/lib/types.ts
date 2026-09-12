@@ -35,6 +35,11 @@ export type Chat = {
   titleKey?: "saved" | "ai";
   peerId?: string;
   memberIds?: string[];
+
+  /// Кто завёл группу. Только он удаляет её у всех и исключает участников —
+  /// это проверяет сервер, а клиент по тому же признаку не показывает
+  /// заведомый отказ.
+  ownerId?: string;
   avatar?: string;
   initials: string;
   pinned: boolean;

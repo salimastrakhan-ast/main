@@ -82,6 +82,23 @@ type ChatAddMemberData struct {
 	UserIDs []uuid.UUID `json:"user_ids"`
 }
 
+// ChatRemoveMemberData — исключение участника владельцем или админом.
+type ChatRemoveMemberData struct {
+	ChatID uuid.UUID `json:"chat_id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+// ChatDeleteData — удаление чата.
+//
+// ForEveryone доступно только владельцу группы; в личной переписке оно
+// означало бы стереть историю у собеседника без его ведома, и потому там
+// не принимается. Без него удаление — это выход из чата: переписка
+// остаётся у второй стороны.
+type ChatDeleteData struct {
+	ChatID      uuid.UUID `json:"chat_id"`
+	ForEveryone bool      `json:"for_everyone,omitempty"`
+}
+
 type ChatLeaveData struct {
 	ChatID uuid.UUID `json:"chat_id"`
 }

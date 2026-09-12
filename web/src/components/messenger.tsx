@@ -69,10 +69,21 @@ export function Messenger() {
             <Sidebar />
           ) : sidebarView === "new" ? (
             <NewChatView />
-          ) : sidebarView === "info" && openChat ? (
-            <ChatInfoView chat={openChat} />
-          ) : sidebarView === "search" && openChat ? (
-            <ChatSearchView chat={openChat} />
+          ) : sidebarView === "info" ? (
+            // Чат мог исчезнуть, пока панель открыта — его удалил владелец.
+            // Тогда назад к списку, а не в настройки: в настройки человек
+            // не собирался.
+            openChat ? (
+              <ChatInfoView chat={openChat} />
+            ) : (
+              <Sidebar />
+            )
+          ) : sidebarView === "search" ? (
+            openChat ? (
+              <ChatSearchView chat={openChat} />
+            ) : (
+              <Sidebar />
+            )
           ) : (
             <SettingsView />
           )}
