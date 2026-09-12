@@ -1,0 +1,138 @@
+name: tito
+description: Мессенджер Tito — клиент для iOS, Android и веба.
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Русские подписи у системных виджетов Material и разбор дат по-русски.
+  # Без делегатов «Cancel» и «Paste» остались бы английскими посреди
+  # русского интерфейса.
+  flutter_localizations:
+    sdk: flutter
+
+  # Состояние. Riverpod, а не Bloc: меньше обвязки на единицу логики, а
+  # логика здесь и так в репозиториях, а не в контроллерах.
+  flutter_riverpod: ^2.6.1
+
+  # Локальная база — источник правды для интерфейса. UI подписан на её
+  # стримы, а не на сокет: отсюда мгновенный запуск и работа офлайн.
+  drift: ^2.20.3
+  sqlite3_flutter_libs: ^0.5.24
+  path_provider: ^2.1.4
+  path: ^1.9.0
+
+  # Сеть
+  web_socket_channel: ^3.0.1
+  http: ^1.2.2
+  # Тип содержимого для загружаемого файла. Приходит с http, но зависимость
+  # объявлена явно: от неё зависит, покажет клиент плеер или безымянный файл.
+  http_parser: ^4.1.2
+
+  # Токены — в защищённом хранилище устройства, не в SharedPreferences.
+  flutter_secure_storage: ^9.2.2
+
+  uuid: ^4.5.1
+  intl: ^0.20.2
+
+  # Выбор файлов.
+  #
+  # image_picker — для фотографий: он открывает галерею, где снимок искать
+  # привычнее, чем в файловом менеджере. file_picker — для всего
+  # остального. Один вместо двух не выходит: галерея и файлы на телефоне
+  # это разные места, и подсовывать вместо галереи дерево папок значит
+  # заставлять человека искать вчерашнее фото по датам в имени.
+  image_picker: ^1.1.2
+  file_picker: ^8.1.4
+
+  # Голосовые сообщения: запись и проигрывание.
+  #
+  # Два пакета, потому что это две разные задачи, и пакета, который делает
+  # обе хорошо, нет. record пишет в opus там, где платформа умеет, — тот же
+  # формат, что и в браузере, так что голосовое из приложения слушается в
+  # вебе и наоборот.
+  record: ^6.2.1
+  just_audio: ^0.9.42
+
+  # Адресная книга телефона.
+  #
+  # Без неё список знакомых пуст, пока кто-то не напишет первым: именно по
+  # книге мессенджер понимает, кто из ваших контактов уже зарегистрирован.
+  # Наружу уходят только номера — имена остаются на устройстве.
+  flutter_contacts: ^1.1.9
+  flutter_webrtc: ^1.6.2+hotfix.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_launcher_icons: ^0.14.4
+  flutter_lints: ^5.0.0
+  drift_dev: ^2.20.3
+  build_runner: ^2.4.13
+
+flutter:
+  uses-material-design: true
+
+  # Шрифты лежат в сборке, а не тянутся с fonts.gstatic.com.
+  #
+  # По умолчанию Flutter в вебе качает Roboto с чужого CDN и до его ответа
+  # держит первый кадр. Если CDN недоступен — а для приложения, рассчитанного
+  # на Россию, это рабочее предположение, — человек пятнадцать секунд смотрит
+  # на белый экран. Проверено: именно так и происходит.
+  fonts:
+    # Текст интерфейса. Тот же Manrope, что в веб-клиенте: два клиента
+    # должны быть набраны одинаково, иначе одно и то же приложение читается
+    # по-разному на телефоне и в браузере.
+    #
+    # Кириллица в файлах проверена по таблице cmap — все 66 букв на месте.
+    #
+    # Цифры одной ширины даёт сам Manrope через fontFeatures — отдельный
+    # моноширинный шрифт не нужен.
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Manrope-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Manrope-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Manrope-Bold.ttf
+          weight: 700
+
+    # Название приложения и крупные заголовки — Unbounded, как в веб-клиенте.
+    # Одно начертание: больше ему взять негде, он стоит только под словом
+    # «Tito» и парой заголовков.
+    - family: Unbounded
+      fonts:
+        - asset: assets/fonts/Unbounded-SemiBold.ttf
+          weight: 600
+
+    # Иконки: шрифт из набора Lucide, объявлен одним семейством. Пакет
+    # lucide_icons_flutter не подключён намеренно — он тянет в сборку шесть
+    # неиспользуемых начертаний на 2.7 МБ.
+    - family: Lucide
+      fonts:
+        - asset: assets/fonts/Lucide.ttf
+
+# Знак приложения. Исходник рисует tool/generate_icon.py — тем же акцентом
+# и тем же Manrope, что в интерфейсе.
+#
+#   make app-icon   — перерисовать знак и разложить по платформам
+flutter_launcher_icons:
+  image_path: assets/icon/app_icon.png
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  web:
+    generate: true
+    image_path: assets/icon/app_icon.png
+    background_color: "#0b1117"
+    theme_color: "#3db8b4"
+  # Адаптивная иконка Android: фон рисует лаунчер, наш слой — только буква.
+  adaptive_icon_background: "#3db8b4"
+  adaptive_icon_foreground: assets/icon/app_icon_foreground.png

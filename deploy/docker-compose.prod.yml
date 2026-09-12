@@ -1,0 +1,169 @@
+# Боевой контур: база, кэш, хранилище, сервер и обратный прокси.
+#
+# Отличия от deploy/docker-compose.yml, который только для разработки:
+# наружу смотрит один Caddy, пароли приходят из окружения, тома именованные,
+# контейнеры перезапускаются сами.
+#
+#   cp deploy/env.example deploy/.env   — и заполнить
+#   make deploy-up
+#
+# Подробности и список переменных — docs/deploy.md.
+
+name: tito
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${TITO_PG_USER:?нужен TITO_PG_USER}
+      POSTGRES_PASSWORD: ${TITO_PG_PASSWORD:?нужен TITO_PG_PASSWORD}
+      POSTGRES_DB: ${TITO_PG_DB:-tito}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Без сохранения на диск намеренно: в Redis живут только присутствие,
+    # лимиты и рассылка событий. Всё это восстанавливается само, а коды
+    # подтверждения и переписка лежат в Postgres.
+    command: ["redis-server", "--appendonly", "no", "--save", ""]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:RELEASE.2024-09-13T20-26-02Z
+    restart: unless-stopped
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: ${TITO_S3_ACCESS_KEY:?нужен TITO_S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${TITO_S3_SECRET_KEY:?нужен TITO_S3_SECRET_KEY}
+      # Обязательно и обязательно совпадает с доменом в Caddyfile.
+      # Подпись ссылки покрывает имя хоста: разойдутся — вложения перестанут
+      # открываться с ошибкой о неверной подписи, а выглядеть это будет как
+      # «файлы пропали».
+      MINIO_SERVER_URL: https://media.${TITO_DOMAIN:?нужен TITO_DOMAIN}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    environment:
+      TITO_ENV: prod
+      TITO_HTTP_ADDR: ":8080"
+      TITO_PUBLIC_URL: https://api.${TITO_DOMAIN}
+      # За Caddy настоящий адрес клиента приходит в X-Forwarded-For. Без
+      # доверия к нему все лимиты считались бы на один адрес прокси — то
+      # есть на всех сразу.
+      TITO_TRUST_PROXY: "true"
+      TITO_CORS_ORIGINS: https://${TITO_DOMAIN}
+      TITO_DATABASE_URL: postgres://${TITO_PG_USER}:${TITO_PG_PASSWORD}@postgres:5432/${TITO_PG_DB:-tito}?sslmode=disable
+      TITO_REDIS_URL: redis://redis:6379/0
+      TITO_JWT_SECRET: ${TITO_JWT_SECRET:?нужен TITO_JWT_SECRET}
+      TITO_SMSRU_API_KEY: ${TITO_SMSRU_API_KEY:-}
+      TITO_SMSRU_FROM: ${TITO_SMSRU_FROM:-}
+      # Тот же публичный адрес, что у MINIO_SERVER_URL: клиент подписывает
+      # ссылку для него.
+      TITO_S3_ENDPOINT: media.${TITO_DOMAIN}
+      TITO_S3_USE_SSL: "true"
+      TITO_S3_ACCESS_KEY: ${TITO_S3_ACCESS_KEY}
+      TITO_S3_SECRET_KEY: ${TITO_S3_SECRET_KEY}
+      TITO_S3_BUCKET: ${TITO_S3_BUCKET:-tito-media}
+      TITO_MAX_UPLOAD_MB: ${TITO_MAX_UPLOAD_MB:-50}
+      # Звонки. Адреса те же, что слушает coturn ниже; секрет общий с ним —
+      # по нему сервер выписывает временный пароль на несколько часов.
+      TITO_STUN_URL: stun:${TITO_DOMAIN}:3478
+      TITO_TURN_URL: turn:${TITO_DOMAIN}:3478?transport=udp,turn:${TITO_DOMAIN}:3478?transport=tcp
+      TITO_TURN_SECRET: ${TITO_TURN_SECRET:-}
+      TITO_TURN_TTL: ${TITO_TURN_TTL:-12h}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      caddy:
+        condition: service_started
+
+  # Пересылка звука для тех, у кого прямое соединение не встаёт: мобильные
+  # операторы, корпоративные сети, строгие фаерволы. Без него звонки
+  # работают «через раз», и объяснить человеку почему невозможно.
+  #
+  # network_mode: host не прихоть: coturn раздаёт клиентам адреса своих
+  # релейных портов, и внутри докерной сети он раздавал бы недостижимые
+  # снаружи. Пробросить диапазон в несколько тысяч портов по одному тоже не
+  # выйдет — docker поднимает на каждый отдельный процесс проксирования.
+  #
+  # Трафик через TURN идёт целиком через ваш сервер и оплачивается как
+  # обычный исходящий: разговор двоих — порядка 30 КБ/с в каждую сторону.
+  coturn:
+    image: coturn/coturn:4.6-alpine
+    restart: unless-stopped
+    network_mode: host
+    # Профиль: без секрета coturn поднимать незачем, звонки обойдутся одним
+    # STUN там, где сеть не мешает. `--profile calls` включает его.
+    profiles: ["calls"]
+    volumes:
+      - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
+    command:
+      - --config=/etc/coturn/turnserver.conf
+      - --static-auth-secret=${TITO_TURN_SECRET:?нужен TITO_TURN_SECRET}
+      - --realm=${TITO_DOMAIN}
+      - --external-ip=${TITO_PUBLIC_IP:?нужен TITO_PUBLIC_IP}
+
+  caddy:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+      args:
+        VITE_API_BASE: https://api.${TITO_DOMAIN}
+    restart: unless-stopped
+    environment:
+      TITO_DOMAIN: ${TITO_DOMAIN}
+      TITO_ACME_EMAIL: ${TITO_ACME_EMAIL:?нужен TITO_ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Сертификаты переживают пересоздание контейнера. Без этого тома
+      # каждый выпуск заново просит Let's Encrypt, а у того недельный лимит
+      # на домен — и на пятом обновлении сайт останется без сертификата.
+      - caddydata:/data
+      - caddyconfig:/config
+    networks:
+      default:
+        # Сервер обращается к хранилищу по публичному имени — иначе подпись
+        # ссылки не сойдётся с тем, что проверит MinIO. Псевдонимы
+        # заворачивают это обращение внутрь сети, вместо того чтобы гнать
+        # его наружу и заводить обратно.
+        aliases:
+          - api.${TITO_DOMAIN}
+          - media.${TITO_DOMAIN}
+
+networks:
+  default:
+    name: tito
+
+volumes:
+  pgdata:
+  miniodata:
+  caddydata:
+  caddyconfig:

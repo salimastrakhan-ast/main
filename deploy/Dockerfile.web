@@ -1,0 +1,26 @@
+# Веб-клиент и обратный прокси одним образом.
+#
+# Две роли в одном контейнере намеренно: Caddy и так стоит перед сервером
+# ради TLS, а отдавать рядом лежащую статику ему ничего не стоит. Отдельный
+# nginx добавил бы третий контейнер и ещё один конфиг ради того же самого.
+FROM node:22-alpine AS build
+
+WORKDIR /app
+
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+
+COPY web/ ./
+
+# Адрес API зашивается в сборку: у Vite это не переменная окружения, а
+# подстановка на этапе сборки. Поменялся домен — пересобрать образ.
+ARG VITE_API_BASE
+RUN test -n "$VITE_API_BASE" || (echo "нужен --build-arg VITE_API_BASE=https://api.домен" && exit 1)
+RUN npm run build
+
+# --- Готовый образ ---
+
+FROM caddy:2-alpine
+
+COPY --from=build /app/dist /srv
+COPY deploy/Caddyfile /etc/caddy/Caddyfile

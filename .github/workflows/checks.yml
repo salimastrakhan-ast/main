@@ -1,0 +1,81 @@
+name: Проверки стенда
+
+# Общий CI запускается на main и на пул-реквестах, а работа над стендом идёт
+# в ветке. Без этого правки сервера и веб-клиента уезжали бы на стенд
+# непроверенными: ни Go, ни зависимостей веба на машине выкладки нет.
+on:
+  push:
+    branches: [claude/tito-apk-build]
+  workflow_dispatch:
+
+jobs:
+  server:
+    name: Бэкенд
+    runs-on: ubuntu-latest
+
+    # Тесты идут против настоящих Postgres и Redis: на заглушках то, что
+    # делает база, прошло бы в сломанном виде.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tito
+          POSTGRES_PASSWORD: tito
+          POSTGRES_DB: tito
+        ports: ['5433:5432']
+        options: >-
+          --health-cmd "pg_isready -U tito -d tito"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+      redis:
+        image: redis:7-alpine
+        ports: ['6380:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: server/go.sum
+
+      - name: Форматирование
+        working-directory: server
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Не отформатировано: $unformatted"
+            exit 1
+          fi
+
+      - name: Статический анализ
+        working-directory: server
+        run: go vet ./...
+
+      - name: Тесты
+        working-directory: server
+        run: go test ./... -count=1 -race
+
+  web:
+    name: Веб-клиент
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Зависимости
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+
+      # npm run build — это tsc --noEmit и следом vite build: проверка типов
+      # и сборка одним шагом, ровно как на выкладке.
+      - name: Сборка
+        working-directory: web
+        run: npm run build

@@ -1,0 +1,30 @@
+# Go
+server/bin/
+
+# Flutter
+app/.dart_tool/
+app/build/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/ios/Pods/
+app/android/.gradle/
+
+# Локальное окружение
+.env
+*.log
+
+# Сквозные проверки
+e2e/node_modules/
+e2e/*.png
+e2e/*.log
+e2e/shots/
+
+# Снимки экранов: это вывод make shots, а не исходник.
+docs/shots/
+
+# Боевые настройки: в них пароли.
+deploy/.env
+
+# Снимок Redis: его пишет сам redis-server в рабочей папке, это состояние,
+# а не исходник.
+dump.rdb

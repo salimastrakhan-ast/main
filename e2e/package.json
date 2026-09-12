@@ -1,0 +1,11 @@
+{
+  "name": "tito-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node chat.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.48.0"
+  }
+}
